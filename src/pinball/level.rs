@@ -38,7 +38,6 @@ pub fn spawn_level(
     level_assets: Res<LevelAssets>,
     table_assets: Res<TableAssets>,
     ball_assets: Res<BallAssets>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     commands.spawn((
         Name::new("Level"),

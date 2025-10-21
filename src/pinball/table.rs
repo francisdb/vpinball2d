@@ -1,20 +1,10 @@
 //! Table-specific behavior.
 
-use crate::{
-    AppSystems, PausableSystems,
-    asset_tracking::LoadResource,
-    pinball::{
-        animation::PlayerAnimation,
-        movement::{MovementController, ScreenWrap},
-    },
-};
+use crate::asset_tracking::LoadResource;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
+use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
-use bevy::{
-    image::{ImageLoaderSettings, ImageSampler},
-    prelude::*,
-};
 
 // The vpinball demo table is 2162mm deep and 952mm wide.
 // TODO: get that info from the vpx file directly.

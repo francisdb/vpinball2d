@@ -1,17 +1,8 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
-
-use crate::{
-    AppSystems, PausableSystems,
-    asset_tracking::LoadResource,
-    pinball::{
-        animation::PlayerAnimation,
-        movement::{MovementController, ScreenWrap},
-    },
-};
-
-use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+
+use crate::{AppSystems, PausableSystems, asset_tracking::LoadResource};
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
@@ -38,7 +29,7 @@ pub(super) fn plugin(app: &mut App) {
 pub(crate) fn ball(
     ball_assets: &BallAssets,
     meshes: &mut ResMut<Assets<Mesh>>,
-    mut materials: &mut ResMut<Assets<ColorMaterial>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> impl Bundle {
     let ball_material = materials.add(ColorMaterial {
         texture: Some(ball_assets.image.clone()),
@@ -59,16 +50,12 @@ pub(crate) fn ball(
 }
 
 fn mouse_ball_control(
-    // input: Res<ButtonInput<KeyCode>>,
-    // mut controller_query: Query<&mut MovementController, With<Table>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     gravity: Res<Gravity>,
     mut ball_query: Query<(&Transform, &mut LinearVelocity, &mut ConstantForce), With<Ball>>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
 ) {
-    // when left mouse button is held down, give the ball a force towards the mouse position
-
     // TODO get rid of the ugly unwrap
     let (camera, camera_transform) = camera_query.single().unwrap();
 
@@ -85,14 +72,15 @@ fn mouse_ball_control(
                 let direction = (world_position - ball_pos).normalize_or_zero();
                 let distance = world_position.distance(ball_pos);
                 // adjust ball velocity towards the mouse position
-                let strength = 5.0; // adjust this value to change the strength of the
+                let strength = 8.0;
                 velocity.0 = direction * distance * strength;
-                // cancel gravity effect
+                // cancel gravity
                 constant_force.0 = -gravity.0 * BALL_MASS_KG;
             }
         }
     } else {
-        for (_transform, mut velocity, mut constant_force) in ball_query.iter_mut() {
+        for (_transform, _velocity, mut constant_force) in ball_query.iter_mut() {
+            // keep velocity so we can sling the ball around but cancel the anti-gravity force
             constant_force.0 = Vec2::ZERO;
         }
     }
