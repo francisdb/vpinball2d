@@ -65,7 +65,7 @@ fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), Wit
         if velocity.0.length() > MINIMAL_VELOCITY {
             sink.play();
             let volume = vol(speed);
-            println!("Volume: {}", volume);
+            //println!("Volume: {}", volume);
             sink.set_volume(Volume::Linear(volume));
             // TODO setting pitch seems to mess with the panning of the spatial audio
             //   not sure if this is a bevy bug or something else
@@ -80,7 +80,7 @@ fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), Wit
 
 /// Calculates the Volume of the sound based on the ball speed
 fn vol(ball_speed: f32) -> f32 {
-    (ball_speed * ball_speed * 3.0).clamp(0.0, 50.0)
+    (ball_speed * 5.0).clamp(0.0, 40.0)
 }
 
 // /// Calculates the pitch of the sound based on the ball speed
