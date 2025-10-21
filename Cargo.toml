@@ -5,8 +5,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.17", features = ["webp"] }
-rand = "0.9"
+bevy = { version = "0.17", features = ["webp", "wav"] }
+#bevy-inspector-egui = "0.34.0"
 avian2d = "0.4"
 
 # Compile out low-severity logs to improve performance.

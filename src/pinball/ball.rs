@@ -1,8 +1,10 @@
+use crate::asset_tracking::LoadResource;
+use crate::{AppSystems, PausableSystems};
 use avian2d::prelude::*;
+use bevy::audio::Volume;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 
-use crate::{AppSystems, PausableSystems, asset_tracking::LoadResource};
+use crate::screens::Screen;
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
@@ -20,9 +22,10 @@ pub(super) fn plugin(app: &mut App) {
     // Mouse ball control for development purposes
     app.add_systems(
         Update,
-        mouse_ball_control
+        ball_roll
             .in_set(AppSystems::RecordInput)
-            .in_set(PausableSystems),
+            .in_set(PausableSystems)
+            .run_if(in_state(Screen::Gameplay)),
     );
 }
 
@@ -36,63 +39,62 @@ pub(crate) fn ball(
         ..default()
     });
     (
+        Name::from("Ball"),
         Ball,
         Mesh2d::from(meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)))),
         MeshMaterial2d::from(ball_material),
+        // physics components
         RigidBody::Dynamic,
         Mass::from(BALL_MASS_KG),
         Restitution::new(0.4),
         Friction::from(0.2),
         Collider::circle(BALL_RADIUS_M),
         SleepingDisabled,
-        ConstantForce::default(),
+        // sound component
+        AudioPlayer::new(ball_assets.sound_roll.clone()),
+        PlaybackSettings::LOOP.with_spatial(true),
     )
 }
 
-fn mouse_ball_control(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    window: Single<&Window, With<PrimaryWindow>>,
-    gravity: Res<Gravity>,
-    mut ball_query: Query<(&Transform, &mut LinearVelocity, &mut ConstantForce), With<Ball>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-) {
-    // TODO get rid of the ugly unwrap
-    let (camera, camera_transform) = camera_query.single().unwrap();
-
-    if mouse_buttons.pressed(MouseButton::Left) {
-        // check if the cursor is inside the window and get its position
-        // then, ask bevy to convert into world coordinates, and truncate to discard Z
-        if let Some(world_position) = window
-            .cursor_position()
-            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-            .map(|ray| ray.origin.truncate())
-        {
-            for (transform, mut velocity, mut constant_force) in ball_query.iter_mut() {
-                let ball_pos = transform.translation.truncate();
-                let direction = (world_position - ball_pos).normalize_or_zero();
-                let distance = world_position.distance(ball_pos);
-                // adjust ball velocity towards the mouse position
-                let strength = 8.0;
-                velocity.0 = direction * distance * strength;
-                // cancel gravity
-                constant_force.0 = -gravity.0 * BALL_MASS_KG;
-            }
-        }
-    } else {
-        for (_transform, _velocity, mut constant_force) in ball_query.iter_mut() {
-            // keep velocity so we can sling the ball around but cancel the anti-gravity force
-            constant_force.0 = Vec2::ZERO;
+fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), With<Ball>>) {
+    // for non-spatial audio, use AudioSink instead of SpatialAudioSink
+    const MINIMAL_VELOCITY: f32 = 0.005;
+    for (velocity, mut sink) in ball_query.iter_mut() {
+        let speed = velocity.0.length();
+        //println!("Speed: {}", speed);
+        if velocity.0.length() > MINIMAL_VELOCITY {
+            sink.play();
+            let volume = vol(speed);
+            // println!("Volume: {}", volume);
+            sink.set_volume(Volume::Linear(volume));
+            // TODO setting pitch seems to mess with the panning of the spatial audio
+            //   not sure if this is a bevy bug or something else
+            //let pitch = pitch(speed);
+            //println!("Pitch: {}", pitch);
+            //sink.set_speed(pitch);
+        } else {
+            sink.pause();
         }
     }
 }
+
+/// Calculates the Volume of the sound based on the ball speed
+fn vol(ball_speed: f32) -> f32 {
+    (ball_speed * ball_speed / 10.0).clamp(0.0, 1.0)
+}
+
+// /// Calculates the pitch of the sound based on the ball speed
+// fn pitch(ball_speed: f32) -> f32 {
+//     (ball_speed * 0.6).clamp(0.5, 1.5)
+// }
 
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct BallAssets {
     #[dependency]
     image: Handle<Image>,
-    // #[dependency]
-    // pub steps: Vec<Handle<AudioSource>>,
+    #[dependency]
+    sound_roll: Handle<AudioSource>,
 }
 
 impl FromWorld for BallAssets {
@@ -100,15 +102,8 @@ impl FromWorld for BallAssets {
         let assets = world.resource::<AssetServer>();
         Self {
             image: assets.load("images/JPBall-Dark2.png"),
-            // TODO add ball rolling sound effects
-            // TODO add ball collection sound effects
-
-            // steps: vec![
-            //     assets.load("audio/sound_effects/step1.ogg"),
-            //     assets.load("audio/sound_effects/step2.ogg"),
-            //     assets.load("audio/sound_effects/step3.ogg"),
-            //     assets.load("audio/sound_effects/step4.ogg"),
-            // ],
+            sound_roll: assets.load("audio/sound_effects/fx_ballrolling0.wav"),
+            // TODO add ball collision sound effects
         }
     }
 }

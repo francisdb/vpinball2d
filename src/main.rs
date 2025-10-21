@@ -16,7 +16,15 @@ use crate::pinball::table::{FULL_DEPTH_M, FULL_WIDTH_M};
 use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
+use bevy::audio::{AudioPlugin, SpatialScale};
 use bevy::{asset::AssetMetaCheck, prelude::*};
+// use bevy_inspector_egui::bevy_egui::EguiPlugin;
+// use bevy_inspector_egui::quick::WorldInspectorPlugin;
+
+/// Spatial audio uses the distance to attenuate the sound volume. In 2D with the default camera,
+/// 1 pixel is 1 unit of distance, so we use a scale so that 100 pixels is 1 unit of distance for
+/// audio.
+const AUDIO_SCALE: f32 = 1.0;
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -44,6 +52,10 @@ impl Plugin for AppPlugin {
                     }
                     .into(),
                     ..default()
+                })
+                .set(AudioPlugin {
+                    default_spatial_scale: SpatialScale::new_2d(AUDIO_SCALE),
+                    ..default()
                 }),
             // one unit in bevy is one meter
             PhysicsPlugins::default().with_length_unit(1.0),
@@ -52,6 +64,9 @@ impl Plugin for AppPlugin {
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
         // to improve physics stability
         app.insert_resource(SubstepCount(8));
+
+        // #[cfg(feature = "dev")]
+        // app.add_plugins((EguiPlugin::default(), WorldInspectorPlugin::new()));
 
         // Add other plugins.
         app.add_plugins((

@@ -6,9 +6,15 @@
 use bevy::prelude::*;
 
 mod ball;
+mod ballcontrol;
 pub mod level;
 pub mod table;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_plugins((level::plugin, table::plugin, ball::plugin));
+    app.add_plugins((
+        level::plugin,
+        table::plugin,
+        ball::plugin,
+        ballcontrol::plugin,
+    ));
 }
