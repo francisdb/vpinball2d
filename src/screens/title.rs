@@ -13,7 +13,7 @@ pub(super) fn plugin(app: &mut App) {
 }
 
 fn skip_to_gameplay(mut next_screen: ResMut<NextState<Screen>>) {
-    next_screen.set(Screen::Gameplay);
+    next_screen.set(Screen::Loading);
 }
 
 fn open_main_menu(mut next_menu: ResMut<NextState<Menu>>) {
