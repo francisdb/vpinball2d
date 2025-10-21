@@ -8,6 +8,9 @@ edition = "2024"
 bevy = { version = "0.17", features = ["webp", "wav"] }
 #bevy-inspector-egui = "0.34.0"
 avian2d = "0.4"
+#vpin = "0.18.2"
+vpin = { path = "../vpin" }
+thiserror = "2.0.17"
 
 # Compile out low-severity logs to improve performance.
 # Remove these features if you want to profile your game with tracy.
@@ -16,6 +19,7 @@ tracing = { version = "0.1", features = [
     "max_level_debug",
     "release_max_level_warn",
 ] }
+serde = { version = "1.0.228", features = ["derive"] }
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

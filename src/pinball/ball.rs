@@ -1,10 +1,10 @@
 use crate::asset_tracking::LoadResource;
+use crate::pinball::table::TableAssets;
+use crate::screens::Screen;
 use crate::{AppSystems, PausableSystems};
 use avian2d::prelude::*;
 use bevy::audio::Volume;
 use bevy::prelude::*;
-
-use crate::screens::Screen;
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
@@ -31,11 +31,12 @@ pub(super) fn plugin(app: &mut App) {
 
 pub(crate) fn ball(
     ball_assets: &BallAssets,
+    table_assets: &TableAssets,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> impl Bundle {
     let ball_material = materials.add(ColorMaterial {
-        texture: Some(ball_assets.image.clone()),
+        texture: Some(table_assets.ball_image.clone()),
         ..default()
     });
     (
@@ -92,8 +93,6 @@ fn vol(ball_speed: f32) -> f32 {
 #[reflect(Resource)]
 pub struct BallAssets {
     #[dependency]
-    image: Handle<Image>,
-    #[dependency]
     sound_roll: Handle<AudioSource>,
 }
 
@@ -101,7 +100,6 @@ impl FromWorld for BallAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            image: assets.load("images/JPBall-Dark2.png"),
             sound_roll: assets.load("audio/sound_effects/fx_ballrolling0.wav"),
             // TODO add ball collision sound effects
         }

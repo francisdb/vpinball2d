@@ -1,11 +1,11 @@
 //! Table-specific behavior.
 
 use crate::asset_tracking::LoadResource;
+use crate::vpxloader::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
-
 // The vpinball demo table is 2162mm deep and 952mm wide.
 // TODO: get that info from the vpx file directly.
 
@@ -42,7 +42,7 @@ pub(crate) fn table(
     let material = materials.add(ColorMaterial {
         //color: css::WHITE.into(),
         alpha_mode: AlphaMode2d::Opaque,
-        texture: Some(table_assets.floor.clone()),
+        texture: Some(table_assets.playfield_image.clone()),
         ..default()
     });
     let wall_material = materials.add(ColorMaterial {
@@ -158,22 +158,28 @@ struct Table;
 #[reflect(Resource)]
 pub struct TableAssets {
     #[dependency]
-    floor: Handle<Image>,
-    #[dependency]
     pub steps: Vec<Handle<AudioSource>>,
+    #[dependency]
+    pub(crate) vpx: Handle<VpxAsset>,
+    #[dependency]
+    pub(crate) ball_image: Handle<Image>,
+    #[dependency]
+    pub(crate) playfield_image: Handle<Image>,
 }
 
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            floor: assets.load("images/p1-beachwood.webp"),
             steps: vec![
-                assets.load("audio/sound_effects/step1.ogg"),
-                assets.load("audio/sound_effects/step2.ogg"),
-                assets.load("audio/sound_effects/step3.ogg"),
-                assets.load("audio/sound_effects/step4.ogg"),
+                // assets.load("audio/sound_effects/step1.ogg"),
+                // assets.load("audio/sound_effects/step2.ogg"),
+                // assets.load("audio/sound_effects/step3.ogg"),
+                // assets.load("audio/sound_effects/step4.ogg"),
             ],
+            vpx: assets.load("exampleTable.vpx"),
+            ball_image: assets.load("exampleTable.vpx#ballimage"),
+            playfield_image: assets.load("exampleTable.vpx#playfieldimage"),
         }
     }
 }

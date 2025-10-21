@@ -11,6 +11,7 @@ mod menus;
 mod pinball;
 mod screens;
 mod theme;
+mod vpxloader;
 
 use crate::pinball::table::{FULL_DEPTH_M, FULL_WIDTH_M};
 use avian2d::PhysicsPlugins;
@@ -70,6 +71,7 @@ impl Plugin for AppPlugin {
 
         // Add other plugins.
         app.add_plugins((
+            vpxloader::plugin,
             asset_tracking::plugin,
             audio::plugin,
             pinball::plugin,

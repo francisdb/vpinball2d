@@ -2,3 +2,7 @@
 /target
 # This file contains environment-specific configuration like linker settings
 .cargo/config.toml
+
+# We don't want this binary file in the repository
+# In te future users will be able to select a table from a list generated from an external directory
+/assets/exampleTable.vpx
