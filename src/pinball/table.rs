@@ -178,8 +178,8 @@ impl FromWorld for TableAssets {
                 // assets.load("audio/sound_effects/step4.ogg"),
             ],
             vpx: assets.load("exampleTable.vpx"),
-            ball_image: assets.load("exampleTable.vpx#ballimage"),
-            playfield_image: assets.load("exampleTable.vpx#playfieldimage"),
+            ball_image: assets.load("exampleTable.vpx#images/ballimage"),
+            playfield_image: assets.load("exampleTable.vpx#images/playfieldimage"),
         }
     }
 }

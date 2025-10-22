@@ -100,7 +100,7 @@ impl FromWorld for BallAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            sound_roll: assets.load("audio/sound_effects/fx_ballrolling0.wav"),
+            sound_roll: assets.load("exampleTable.vpx#sounds/fx_ballrolling0"),
             // TODO add ball collision sound effects
         }
     }

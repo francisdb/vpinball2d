@@ -8,6 +8,7 @@ use bevy::{
 use std::path::Path;
 use thiserror::Error;
 use vpin::vpx::image::ImageData;
+use vpin::vpx::sound::write_sound;
 
 pub(super) fn plugin(app: &mut App) {
     // vpx loading
@@ -68,7 +69,8 @@ impl AssetLoader for VpxAssetLoader {
             .unwrap();
         // how do we avoid the clone here?
         let bytes = ball_image.jpeg.clone().unwrap().data;
-        let ball_image = load_image("ballimage".into(), load_context, &ball_image, bytes).await?;
+        let ball_image =
+            load_image("images/ballimage".into(), load_context, &ball_image, bytes).await?;
 
         let playfield_image = vpx
             .images
@@ -78,12 +80,21 @@ impl AssetLoader for VpxAssetLoader {
         // how do we avoid the clone here?
         let bytes = playfield_image.jpeg.clone().unwrap().data;
         let playfield_image = load_image(
-            "playfieldimage".into(),
+            "images/playfieldimage".into(),
             load_context,
             &playfield_image,
             bytes,
         )
         .await?;
+
+        // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
+        let rolling_sound = vpx
+            .sounds
+            .iter()
+            .find(|sfx| sfx.name == "fx_ballrolling0")
+            .unwrap();
+        let rolling_sound_handle =
+            load_sound("sounds/fx_ballrolling0".into(), load_context, rolling_sound).await?;
 
         let custom_asset = VpxAsset {
             _gravity: vpx.gamedata.gravity,
@@ -135,5 +146,22 @@ async fn load_image(
         .await?;
     let loaded = labeled.finish(image);
     let handle = load_context.add_loaded_labeled_asset(label, loaded);
+    Ok(handle)
+}
+
+async fn load_sound(
+    label: String,
+    load_context: &mut LoadContext<'_>,
+    sound: &vpin::vpx::sound::SoundData,
+) -> Result<Handle<AudioSource>, <VpxAssetLoader as AssetLoader>::Error> {
+    let bytes = write_sound(sound);
+    let mut reader = bevy::asset::io::VecReader::new(bytes);
+    let audio_loader = bevy::audio::AudioLoader;
+    let settings = ();
+    let mut labeled = load_context.begin_labeled_asset();
+    let audio_source = audio_loader
+        .load(&mut reader, &settings, &mut labeled)
+        .await?;
+    let handle = load_context.add_loaded_labeled_asset(label, audio_source.into());
     Ok(handle)
 }

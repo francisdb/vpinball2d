@@ -5,4 +5,4 @@
 
 # We don't want this binary file in the repository
 # In te future users will be able to select a table from a list generated from an external directory
-/assets/exampleTable.vpx
+/assets/*.vpx
