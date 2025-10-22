@@ -46,7 +46,8 @@ pub fn spawn_level(
         DespawnOnExit(Screen::Gameplay),
         children![
             table(&table_assets, &mut meshes, &mut materials, &assets_vpx),
-            ball(&table_assets, &mut meshes, &mut materials, &assets_vpx),
+            ball(1, &table_assets, &mut meshes, &mut materials, &assets_vpx),
+            ball(2, &table_assets, &mut meshes, &mut materials, &assets_vpx),
             // (
             //     Name::new("Gameplay Music"),
             //     music(level_assets.music.clone())
