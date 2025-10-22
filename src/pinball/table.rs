@@ -6,11 +6,11 @@ use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
+
 // The vpinball demo table is 2162mm deep and 952mm wide.
 // TODO: get that info from the vpx file directly.
-
-const TABLE_WIDTH_M: f32 = 0.952;
-const TABLE_DEPTH_M: f32 = 2.162;
+pub const TABLE_WIDTH_M: f32 = 0.952;
+pub const TABLE_DEPTH_M: f32 = 2.162;
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
 
@@ -44,21 +44,18 @@ pub(crate) fn table(
         .get(vpx_asset.raw.gamedata.image.as_str())
         .unwrap();
 
-    let material = materials.add(ColorMaterial {
+    let playfield_material = materials.add(ColorMaterial {
         //color: css::WHITE.into(),
         alpha_mode: AlphaMode2d::Opaque,
         texture: Some(playfield_image.clone()),
         ..default()
     });
-    let wall_material = materials.add(ColorMaterial {
+    let default_wall_material = materials.add(ColorMaterial {
         color: css::BLACK.into(),
         alpha_mode: AlphaMode2d::Opaque,
         texture: None,
         ..default()
     });
-
-    // TODO look into using a compound collider for better performance
-    // Collider::compound(vec![
 
     (
         Table,
@@ -75,7 +72,7 @@ pub(crate) fn table(
             (
                 Name::from("Table Floor"),
                 Mesh2d(meshes.add(Rectangle::new(TABLE_WIDTH_M, TABLE_DEPTH_M))),
-                MeshMaterial2d(material),
+                MeshMaterial2d(playfield_material),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ),
             (
@@ -84,7 +81,7 @@ pub(crate) fn table(
                     TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M,
                     WALL_THICKNESS_M,
                 ))),
-                MeshMaterial2d(wall_material.clone()),
+                MeshMaterial2d(default_wall_material.clone()),
                 Transform::from_xyz(0.0, -TABLE_DEPTH_M / 2.0 - WALL_THICKNESS_M / 2.0, 0.1),
                 RigidBody::Static,
                 Collider::rectangle(TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
@@ -95,7 +92,7 @@ pub(crate) fn table(
                     TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M,
                     WALL_THICKNESS_M,
                 ))),
-                MeshMaterial2d(wall_material.clone()),
+                MeshMaterial2d(default_wall_material.clone()),
                 Transform::from_xyz(0.0, TABLE_DEPTH_M / 2.0 + WALL_THICKNESS_M / 2.0, 0.1),
                 RigidBody::Static,
                 Collider::rectangle(TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
@@ -106,7 +103,7 @@ pub(crate) fn table(
                     WALL_THICKNESS_M,
                     TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M,
                 ))),
-                MeshMaterial2d(wall_material.clone()),
+                MeshMaterial2d(default_wall_material.clone()),
                 Transform::from_xyz(-TABLE_WIDTH_M / 2.0 - WALL_THICKNESS_M / 2.0, 0.0, 0.1),
                 RigidBody::Static,
                 Collider::rectangle(WALL_THICKNESS_M, TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M),
@@ -117,7 +114,7 @@ pub(crate) fn table(
                     WALL_THICKNESS_M,
                     TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M,
                 ))),
-                MeshMaterial2d(wall_material),
+                MeshMaterial2d(default_wall_material.clone()),
                 Transform::from_xyz(TABLE_WIDTH_M / 2.0 + WALL_THICKNESS_M / 2.0, 0.0, 0.1),
                 RigidBody::Static,
                 Collider::rectangle(WALL_THICKNESS_M, TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M),

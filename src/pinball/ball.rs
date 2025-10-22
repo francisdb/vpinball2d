@@ -102,7 +102,7 @@ fn vol(ball_speed: f32) -> f32 {
 }
 
 fn collision_vol(collision_speed: f32) -> f32 {
-    (collision_speed * 4.0).clamp(0.0, 10.0)
+    (collision_speed * 5.0).clamp(0.0, 10.0)
 }
 
 // /// Calculates the pitch of the sound based on the ball speed
