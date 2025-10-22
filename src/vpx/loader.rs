@@ -1,35 +1,20 @@
+use crate::vpx::VpxAsset;
 use bevy::asset::LoadDirectError;
 use bevy::image::{CompressedImageFormats, ImageLoader, ImageLoaderError};
 use bevy::{
     asset::{AssetLoader, LoadContext, io::Reader},
     prelude::*,
-    reflect::TypePath,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
 use vpin::vpx::image::ImageData;
 use vpin::vpx::sound::write_sound;
 
-pub(super) fn plugin(app: &mut App) {
-    // vpx loading
-    app.init_asset::<VpxAsset>()
-        .init_asset_loader::<VpxAssetLoader>();
-}
-
-#[derive(Asset, TypePath, Debug /*Deserialize*/)]
-pub(crate) struct VpxAsset {
-    _gravity: f32,
-    pub(crate) _ball_image: Handle<Image>,
-    pub(crate) _playfield_image: Handle<Image>,
-}
-
-#[derive(Default)]
-struct VpxAssetLoader;
-
-/// Possible errors that can be produced by [`VpxAssetLoader`]
-#[non_exhaustive]
-#[derive(Debug, Error)]
-enum CustomAssetLoaderError {
+/// An error that occurs when loading a vpx file.
+#[derive(Error, Debug)]
+pub enum VpxError {
     /// An [IO](std::io) Error
     #[error("Could not load asset: {0}")]
     Io(#[from] std::io::Error),
@@ -41,68 +26,39 @@ enum CustomAssetLoaderError {
     ImageLoaderError(#[from] ImageLoaderError),
 }
 
-impl AssetLoader for VpxAssetLoader {
+#[derive(Serialize, Deserialize)]
+pub struct VpxLoaderSettings {
+    pub load_images: bool,
+    pub load_sounds: bool,
+}
+
+impl Default for VpxLoaderSettings {
+    fn default() -> Self {
+        Self {
+            load_images: true,
+            load_sounds: true,
+        }
+    }
+}
+
+/// Loads vpx files with all of their data as their corresponding bevy representations.
+pub struct VpxLoader {}
+
+impl AssetLoader for VpxLoader {
     type Asset = VpxAsset;
-    type Settings = ();
-    type Error = CustomAssetLoaderError;
+    type Settings = VpxLoaderSettings;
+    type Error = VpxError;
+
     async fn load(
         &self,
         reader: &mut dyn Reader,
-        _settings: &(),
+        settings: &VpxLoaderSettings,
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        info!("Loading VPX file...");
+        info!("Loading VPX {}", load_context.path().display());
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        let vpx = vpin::vpx::from_bytes(&bytes).map_err(|e| {
-            CustomAssetLoaderError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to parse VPX file: {}", e),
-            ))
-        })?;
-        info!("Loaded VPX file named: {:?}", vpx.info.table_name);
-
-        let ball_image = vpx
-            .images
-            .iter()
-            .find(|img| img.name == vpx.gamedata.ball_image)
-            .unwrap();
-        // how do we avoid the clone here?
-        let bytes = ball_image.jpeg.clone().unwrap().data;
-        let ball_image =
-            load_image("images/ballimage".into(), load_context, &ball_image, bytes).await?;
-
-        let playfield_image = vpx
-            .images
-            .iter()
-            .find(|img| img.name == vpx.gamedata.image)
-            .unwrap();
-        // how do we avoid the clone here?
-        let bytes = playfield_image.jpeg.clone().unwrap().data;
-        let playfield_image = load_image(
-            "images/playfieldimage".into(),
-            load_context,
-            &playfield_image,
-            bytes,
-        )
-        .await?;
-
-        // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
-        let rolling_sound = vpx
-            .sounds
-            .iter()
-            .find(|sfx| sfx.name == "fx_ballrolling0")
-            .unwrap();
-        let rolling_sound_handle =
-            load_sound("sounds/fx_ballrolling0".into(), load_context, rolling_sound).await?;
-
-        let custom_asset = VpxAsset {
-            _gravity: vpx.gamedata.gravity,
-            _ball_image: ball_image,
-            _playfield_image: playfield_image,
-        };
-
-        Ok(custom_asset)
+        Self::load_vpx(self, &bytes, load_context, settings).await
     }
 
     fn extensions(&self) -> &[&str] {
@@ -110,12 +66,71 @@ impl AssetLoader for VpxAssetLoader {
     }
 }
 
+impl VpxLoader {
+    async fn load_vpx(
+        &self,
+        bytes: &[u8],
+        load_context: &mut LoadContext<'_>,
+        settings: &VpxLoaderSettings,
+    ) -> Result<VpxAsset, VpxError> {
+        let vpx = vpin::vpx::from_bytes(bytes).map_err(|e| {
+            VpxError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse VPX file: {}", e),
+            ))
+        })?;
+
+        let mut image_handles = Vec::new();
+        let mut named_image_handles = HashMap::new();
+        if settings.load_images {
+            for image in &vpx.images {
+                if let Some(jpeg) = &image.jpeg {
+                    let bytes = jpeg.data.clone();
+                    let handle =
+                        load_image(format!("images/{}", image.name), load_context, image, bytes)
+                            .await?;
+                    if !image.name.is_empty() {
+                        named_image_handles
+                            .insert(image.name.clone().into_boxed_str(), handle.clone());
+                    }
+                    image_handles.push(handle);
+                } else {
+                    warn!("Image: {} Path: {} No JPEG data", image.name, image.path);
+                }
+            }
+        }
+
+        let mut sound_handles = Vec::new();
+        let mut named_sound_handles = HashMap::new();
+        if settings.load_sounds {
+            for sound in &vpx.sounds {
+                let handle =
+                    load_sound(format!("sounds/{}", sound.name), load_context, sound).await?;
+                if !sound.name.is_empty() {
+                    named_sound_handles.insert(sound.name.clone().into_boxed_str(), handle.clone());
+                }
+                sound_handles.push(handle);
+            }
+        }
+
+        let custom_asset = VpxAsset {
+            images: image_handles,
+            named_images: named_image_handles,
+            sounds: sound_handles,
+            named_sounds: named_sound_handles,
+            raw: vpx,
+        };
+
+        Ok(custom_asset)
+    }
+}
+
 async fn load_image(
     label: String,
     load_context: &mut LoadContext<'_>,
-    ball_image: &&ImageData,
+    ball_image: &ImageData,
     bytes: Vec<u8>,
-) -> Result<Handle<Image>, <VpxAssetLoader as AssetLoader>::Error> {
+) -> Result<Handle<Image>, <VpxLoader as AssetLoader>::Error> {
     let mut reader = bevy::asset::io::VecReader::new(bytes);
     // TODO how do we properly delegate here to an Image AssetLoader?
     // // use the load context to load the image data from bytes
@@ -153,7 +168,7 @@ async fn load_sound(
     label: String,
     load_context: &mut LoadContext<'_>,
     sound: &vpin::vpx::sound::SoundData,
-) -> Result<Handle<AudioSource>, <VpxAssetLoader as AssetLoader>::Error> {
+) -> Result<Handle<AudioSource>, <VpxLoader as AssetLoader>::Error> {
     let bytes = write_sound(sound);
     let mut reader = bevy::asset::io::VecReader::new(bytes);
     let audio_loader = bevy::audio::AudioLoader;

@@ -1,7 +1,7 @@
 //! Table-specific behavior.
 
 use crate::asset_tracking::LoadResource;
-use crate::vpxloader::VpxAsset;
+use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -36,13 +36,18 @@ pub(crate) fn table(
     // texture_atlas_layouts: &mut Assets<TextureAtlasLayout>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    assets_vpx: &Res<Assets<VpxAsset>>,
 ) -> impl Bundle {
-    // add a wood color floor + 4 black walls using Mesh2d + Collider
+    let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
+    let playfield_image = vpx_asset
+        .named_images
+        .get(vpx_asset.raw.gamedata.image.as_str())
+        .unwrap();
 
     let material = materials.add(ColorMaterial {
         //color: css::WHITE.into(),
         alpha_mode: AlphaMode2d::Opaque,
-        texture: Some(table_assets.playfield_image.clone()),
+        texture: Some(playfield_image.clone()),
         ..default()
     });
     let wall_material = materials.add(ColorMaterial {
@@ -125,61 +130,18 @@ pub(crate) fn table(
 #[reflect(Component)]
 struct Table;
 
-// fn record_player_directional_input(
-//     input: Res<ButtonInput<KeyCode>>,
-//     mut controller_query: Query<&mut MovementController, With<Table>>,
-// ) {
-//     // Collect directional input.
-//     let mut intent = Vec2::ZERO;
-//     if input.pressed(KeyCode::KeyW) || input.pressed(KeyCode::ArrowUp) {
-//         intent.y += 1.0;
-//     }
-//     if input.pressed(KeyCode::KeyS) || input.pressed(KeyCode::ArrowDown) {
-//         intent.y -= 1.0;
-//     }
-//     if input.pressed(KeyCode::KeyA) || input.pressed(KeyCode::ArrowLeft) {
-//         intent.x -= 1.0;
-//     }
-//     if input.pressed(KeyCode::KeyD) || input.pressed(KeyCode::ArrowRight) {
-//         intent.x += 1.0;
-//     }
-//
-//     // Normalize intent so that diagonal movement is the same speed as horizontal / vertical.
-//     // This should be omitted if the input comes from an analog stick instead.
-//     let intent = intent.normalize_or_zero();
-//
-//     // Apply movement intent to controllers.
-//     for mut controller in &mut controller_query {
-//         controller.intent = intent;
-//     }
-// }
-
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct TableAssets {
     #[dependency]
-    pub steps: Vec<Handle<AudioSource>>,
-    #[dependency]
     pub(crate) vpx: Handle<VpxAsset>,
-    #[dependency]
-    pub(crate) ball_image: Handle<Image>,
-    #[dependency]
-    pub(crate) playfield_image: Handle<Image>,
 }
 
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            steps: vec![
-                // assets.load("audio/sound_effects/step1.ogg"),
-                // assets.load("audio/sound_effects/step2.ogg"),
-                // assets.load("audio/sound_effects/step3.ogg"),
-                // assets.load("audio/sound_effects/step4.ogg"),
-            ],
             vpx: assets.load("exampleTable.vpx"),
-            ball_image: assets.load("exampleTable.vpx#images/ballimage"),
-            playfield_image: assets.load("exampleTable.vpx#images/playfieldimage"),
         }
     }
 }

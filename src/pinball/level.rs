@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::pinball::ball::{BallAssets, ball};
+use crate::pinball::ball::ball;
+use crate::vpx::VpxAsset;
 use crate::{
     asset_tracking::LoadResource,
     //audio::music,
@@ -35,9 +36,8 @@ pub fn spawn_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    //level_assets: Res<LevelAssets>,
     table_assets: Res<TableAssets>,
-    ball_assets: Res<BallAssets>,
+    assets_vpx: Res<Assets<VpxAsset>>,
 ) {
     commands.spawn((
         Name::new("Level"),
@@ -45,8 +45,8 @@ pub fn spawn_level(
         Visibility::default(),
         DespawnOnExit(Screen::Gameplay),
         children![
-            table(&table_assets, &mut meshes, &mut materials),
-            ball(&ball_assets, &table_assets, &mut meshes, &mut materials),
+            table(&table_assets, &mut meshes, &mut materials, &assets_vpx),
+            ball(&table_assets, &mut meshes, &mut materials, &assets_vpx),
             // (
             //     Name::new("Gameplay Music"),
             //     music(level_assets.music.clone())

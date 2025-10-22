@@ -1,6 +1,6 @@
-use crate::asset_tracking::LoadResource;
 use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
+use crate::vpx::VpxAsset;
 use crate::{AppSystems, PausableSystems};
 use avian2d::prelude::*;
 use bevy::audio::Volume;
@@ -17,8 +17,6 @@ const BALL_MASS_KG: f32 = 0.08;
 pub struct Ball;
 
 pub(super) fn plugin(app: &mut App) {
-    app.load_resource::<BallAssets>();
-
     // Mouse ball control for development purposes
     app.add_systems(
         Update,
@@ -30,15 +28,25 @@ pub(super) fn plugin(app: &mut App) {
 }
 
 pub(crate) fn ball(
-    ball_assets: &BallAssets,
     table_assets: &TableAssets,
+    // vpx_assets: &VpxAssets,
+    // vpx_assets_res: Res<Assets<VpxAsset>>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    assets_vpx: &Res<Assets<VpxAsset>>,
 ) -> impl Bundle {
+    let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
+    let ball_image = vpx_asset
+        .named_images
+        .get(vpx_asset.raw.gamedata.ball_image.as_str())
+        .unwrap();
     let ball_material = materials.add(ColorMaterial {
-        texture: Some(table_assets.ball_image.clone()),
+        texture: Some(ball_image.clone()),
         ..default()
     });
+    // TODO add ball collision sound effects
+    // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
+    let sound_roll = vpx_asset.named_sounds.get("fx_ballrolling0").unwrap();
     (
         Name::from("Ball"),
         Ball,
@@ -52,7 +60,7 @@ pub(crate) fn ball(
         Collider::circle(BALL_RADIUS_M),
         SleepingDisabled,
         // sound component
-        AudioPlayer::new(ball_assets.sound_roll.clone()),
+        AudioPlayer::new(sound_roll.clone()),
         PlaybackSettings::LOOP.with_spatial(true),
     )
 }
@@ -88,20 +96,3 @@ fn vol(ball_speed: f32) -> f32 {
 // fn pitch(ball_speed: f32) -> f32 {
 //     (ball_speed * 0.6).clamp(0.5, 1.5)
 // }
-
-#[derive(Resource, Asset, Clone, Reflect)]
-#[reflect(Resource)]
-pub struct BallAssets {
-    #[dependency]
-    sound_roll: Handle<AudioSource>,
-}
-
-impl FromWorld for BallAssets {
-    fn from_world(world: &mut World) -> Self {
-        let assets = world.resource::<AssetServer>();
-        Self {
-            sound_roll: assets.load("exampleTable.vpx#sounds/fx_ballrolling0"),
-            // TODO add ball collision sound effects
-        }
-    }
-}

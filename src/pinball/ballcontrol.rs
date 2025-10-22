@@ -1,6 +1,6 @@
 //! Mouse ball control for development purposes
 
-use crate::pinball::ball::{Ball, BallAssets};
+use crate::pinball::ball::Ball;
 use crate::{AppSystems, PausableSystems};
 
 use avian2d::prelude::*;
@@ -10,13 +10,9 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::asset_tracking::LoadResource;
-
 const BALL_CONTROL_STRENGTH: f32 = 8.0;
 
 pub(super) fn plugin(app: &mut App) {
-    app.load_resource::<BallAssets>();
-
     app.add_systems(
         Update,
         mouse_ball_control
