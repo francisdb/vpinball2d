@@ -1,7 +1,7 @@
 use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
-use crate::{AppSystems, PausableSystems};
+use crate::{AppSystems, PausableSystems, Pause};
 use avian2d::prelude::*;
 use bevy::audio::Volume;
 use bevy::prelude::*;
@@ -15,6 +15,7 @@ const BALL_MASS_KG: f32 = 0.08;
 
 #[derive(Component, Debug)]
 pub struct Ball {
+    #[allow(unused)]
     id: u32,
 }
 
@@ -27,6 +28,7 @@ pub(super) fn plugin(app: &mut App) {
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
+    app.add_systems(Update, mute_rolling.run_if(in_state(Pause(true))));
 }
 
 pub(crate) fn ball(
@@ -76,7 +78,6 @@ fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), Wit
         if velocity.0.length() > MINIMAL_VELOCITY {
             sink.play();
             let volume = vol(speed);
-            //println!("Volume: {}", volume);
             sink.set_volume(Volume::Linear(volume));
             // TODO setting pitch seems to mess with the panning of the spatial audio
             //   not sure if this is a bevy bug or something else
@@ -86,6 +87,12 @@ fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), Wit
         } else {
             sink.pause();
         }
+    }
+}
+
+fn mute_rolling(ball_query: Query<&mut SpatialAudioSink, With<Ball>>) {
+    for sink in ball_query.iter() {
+        sink.pause();
     }
 }
 
@@ -106,6 +113,7 @@ fn collision_vol(collision_speed: f32) -> f32 {
 /// when 2 balls collide, play a sound based on their combined speed
 fn ball_collision_sounds(
     mut collision_reader: MessageReader<CollisionStart>,
+    collisions: Collisions,
     ball_query: Query<(&Ball, &LinearVelocity, &Transform), With<Ball>>,
     mut commands: Commands,
     table_assets: Res<TableAssets>,
@@ -116,17 +124,19 @@ fn ball_collision_sounds(
             && ball_query.contains(entity1)
             && ball_query.contains(entity2)
         {
-            // TODO the case where 2 balls simultaneously collide with each other and another object (like a vertical drop)
-            //   gives us no sound which is incorrect
             let (ball1, vel1, transform1) = ball_query.get(entity1).unwrap();
             let (ball2, vel2, transform2) = ball_query.get(entity2).unwrap();
-            debug!("Ball collision event between {:?} and {:?}", ball1, ball2);
             let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
             let sound_ball_collision = vpx_asset.named_sounds.get("fx_collide").unwrap();
-
-            let distance_vec = vel1.0 - vel2.0;
-            let combined_speed = distance_vec.length();
-            let volume = collision_vol(combined_speed);
+            let Some(collision) = collisions.get(entity1, entity2) else {
+                warn!(
+                    "No collision info found for entities {:?} and {:?}",
+                    entity1, entity2
+                );
+                continue;
+            };
+            let impulse = collision.total_normal_impulse_magnitude();
+            let volume = collision_vol(impulse);
             let center_pos = (transform1.translation + transform2.translation) / 2.0;
             commands.spawn((
                 AudioPlayer::new(sound_ball_collision.clone()),
