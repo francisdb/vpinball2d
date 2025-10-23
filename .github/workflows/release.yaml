@@ -312,7 +312,7 @@ jobs:
 
       - name: Upload web bundle to workflow artifacts for GitHub Pages (Web)
         if: ${{ env.is_platform_enabled == 'true' && matrix.platform == 'web' && inputs.deploy_to_github_pages }}
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ${{ env.app }}/${{ env.cargo_build_binary_name }}
 
