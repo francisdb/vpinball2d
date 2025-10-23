@@ -76,7 +76,7 @@ impl VpxLoader {
         let vpx = vpin::vpx::from_bytes(bytes).map_err(|e| {
             VpxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Failed to parse VPX file: {}", e),
+                format!("Failed to parse VPX file: {e}"),
             ))
         })?;
 

@@ -51,7 +51,7 @@ pub(crate) fn ball(
     // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
     let sound_roll = vpx_asset.named_sounds.get("fx_ballrolling0").unwrap();
     (
-        Name::from(format!("Ball {}", id)),
+        Name::from(format!("Ball {id}")),
         Ball { id },
         Mesh2d::from(meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)))),
         MeshMaterial2d::from(ball_material),
