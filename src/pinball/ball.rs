@@ -1,11 +1,10 @@
-use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU, TableAssets};
+use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use crate::{AppSystems, PausableSystems, Pause};
 use avian2d::prelude::*;
 use bevy::audio::Volume;
 use bevy::prelude::*;
-use vpin::vpx::vpu_to_m;
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
@@ -48,9 +47,7 @@ pub(crate) fn ball(
         texture: Some(ball_image.clone()),
         ..default()
     });
-    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
-    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
-    // TODO add ball collision sound effects
+    // TODO add ball wall collision sound effects
     // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
     let sound_roll = vpx_asset.named_sounds.get("fx_ballrolling0").unwrap();
     (
@@ -118,7 +115,7 @@ fn collision_vol(collision_speed: f32) -> f32 {
 fn ball_collision_sounds(
     mut collision_reader: MessageReader<CollisionStart>,
     collisions: Collisions,
-    ball_query: Query<(&Ball, &LinearVelocity, &Transform), With<Ball>>,
+    ball_query: Query<&Transform, With<Ball>>,
     mut commands: Commands,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
@@ -128,8 +125,8 @@ fn ball_collision_sounds(
             && ball_query.contains(entity1)
             && ball_query.contains(entity2)
         {
-            let (ball1, vel1, transform1) = ball_query.get(entity1).unwrap();
-            let (ball2, vel2, transform2) = ball_query.get(entity2).unwrap();
+            let transform1 = ball_query.get(entity1).unwrap();
+            let transform2 = ball_query.get(entity2).unwrap();
             let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
             let sound_ball_collision = vpx_asset.named_sounds.get("fx_collide").unwrap();
             let Some(collision) = collisions.get(entity1, entity2) else {

@@ -10,9 +10,8 @@ use crate::{
     pinball::table::{TableAssets, table},
     screens::Screen,
 };
-use avian2d::prelude::RigidBody;
+
 use bevy::asset::RenderAssetUsages;
-use bevy::color::Color::Srgba;
 use bevy::color::palettes::css;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -135,7 +134,6 @@ pub fn spawn_level(
 // TODO move the mesh loading to the vpx asset loader
 fn wall_to_mesh(wall: &Wall) -> Mesh {
     let top_height = vpu_to_m(wall.height_top);
-    let bottom_height = vpu_to_m(wall.height_bottom);
 
     // Generate vertices for top face (all with the same height)
     let num_points = wall.drag_points.len();

@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use vpin::vpx::gameitem::dragpoint::DragPoint;
 
 pub(crate) fn triangulate_polygon(vertices: &[Vec2]) -> Vec<u32> {
     if vertices.len() < 3 {
@@ -28,10 +27,6 @@ pub(crate) fn triangulate_polygon(vertices: &[Vec2]) -> Vec<u32> {
             let prev_idx = remaining[prev];
             let curr_idx = remaining[curr];
             let next_idx = remaining[next];
-
-            let p0 = vertices[prev_idx];
-            let p1 = vertices[curr_idx];
-            let p2 = vertices[next_idx];
 
             // Check if vertex forms an ear (internal angle < 180°)
             if is_ear(vertices, &remaining, prev, curr, next) {
