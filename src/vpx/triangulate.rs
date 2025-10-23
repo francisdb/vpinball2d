@@ -1,6 +1,6 @@
 //! Creating polygons from a list of vertices
-//!
-//! TODO have a look at https://github.com/bevy-procedural/modelling
+
+// TODO have a look at https://github.com/bevy-procedural/modelling
 
 use bevy::prelude::*;
 
@@ -9,7 +9,6 @@ pub(crate) fn triangulate_polygon(vertices: &[Vec2]) -> Vec<u32> {
         return vec![];
     }
 
-    // Initialize the list of indices
     let mut indices = Vec::new();
 
     // Create a mutable array of available vertices
