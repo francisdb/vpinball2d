@@ -1,6 +1,8 @@
 use crate::vpx::VpxAsset;
-use bevy::asset::LoadDirectError;
+use crate::vpx::triangulate::triangulate_polygon;
+use bevy::asset::{LoadDirectError, RenderAssetUsages};
 use bevy::image::{CompressedImageFormats, ImageLoader, ImageLoaderError};
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::{
     asset::{AssetLoader, LoadContext, io::Reader},
     prelude::*,
@@ -9,8 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::image::ImageData;
 use vpin::vpx::sound::write_sound;
+use vpin::vpx::vpu_to_m;
 
 /// An error that occurs when loading a vpx file.
 #[derive(Error, Debug)]
@@ -30,6 +34,7 @@ pub enum VpxError {
 pub struct VpxLoaderSettings {
     pub load_images: bool,
     pub load_sounds: bool,
+    pub load_meshes: bool,
 }
 
 impl Default for VpxLoaderSettings {
@@ -37,6 +42,7 @@ impl Default for VpxLoaderSettings {
         Self {
             load_images: true,
             load_sounds: true,
+            load_meshes: true,
         }
     }
 }
@@ -113,11 +119,34 @@ impl VpxLoader {
             }
         }
 
+        let mut mesh_handles = Vec::new();
+        let mut named_mesh_handles = HashMap::new();
+        if settings.load_meshes {
+            for item in &vpx.gameitems {
+                if let vpin::vpx::gameitem::GameItemEnum::Wall(wall) = item {
+                    let top_height = vpu_to_m(wall.height_top);
+                    let handle = load_mesh_2d_from_drag_points(
+                        VpxAsset::wall_mesh_sub_path(&wall.name),
+                        &wall.drag_points,
+                        top_height,
+                        load_context,
+                    );
+                    named_mesh_handles.insert(
+                        VpxAsset::wall_mesh_sub_path(&wall.name).into_boxed_str(),
+                        handle.clone(),
+                    );
+                    mesh_handles.push(handle);
+                }
+            }
+        }
+
         let custom_asset = VpxAsset {
             images: image_handles,
             named_images: named_image_handles,
             sounds: sound_handles,
             named_sounds: named_sound_handles,
+            meshes: mesh_handles,
+            named_meshes: named_mesh_handles,
             raw: vpx,
         };
 
@@ -179,4 +208,48 @@ async fn load_sound(
         .await?;
     let handle = load_context.add_loaded_labeled_asset(label, audio_source.into());
     Ok(handle)
+}
+
+/// Generates a flat 2D polygon mesh from the given drag points at the specified top height.
+fn load_mesh_2d_from_drag_points(
+    label: String,
+    drag_points: &Vec<DragPoint>,
+    top_height: f32,
+    load_context: &mut LoadContext<'_>,
+) -> Handle<Mesh> {
+    // Generate vertices for top face (all with the same height)
+    let num_points = drag_points.len();
+    let mut positions = Vec::with_capacity(num_points);
+    let mut normals = Vec::with_capacity(num_points);
+    let mut uvs = Vec::with_capacity(num_points);
+
+    for point in drag_points {
+        // Position (x, top_height, y) -> Bevy uses y-up
+        positions.push([vpu_to_m(point.x), -vpu_to_m(point.y), top_height]);
+        // Normal points up for the top face
+        normals.push([0.0, 0.0, 1.0]);
+        // Simple UV mapping (could be improved)
+        uvs.push([point.x, point.y]);
+    }
+
+    // Triangulate the polygon using ear clipping (works for any polygon)
+    // points should be counter-clockwise but this is already ensured by vpx
+    let positions_2d: Vec<Vec2> = positions
+        .iter()
+        .map(|p| Vec2::new(p[0], p[1])) // Use x,y as 2D coordinates
+        .collect();
+
+    let indices = triangulate_polygon(&positions_2d);
+
+    // let mesh = Mesh::from(Polyline2d::new(vertices));
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    let labeled = load_context.begin_labeled_asset();
+    load_context.add_loaded_labeled_asset(label, labeled.finish(mesh))
 }

@@ -17,5 +17,17 @@ pub struct VpxAsset {
     pub sounds: Vec<Handle<AudioSource>>,
     /// Named sounds loaded from the vpx file.
     pub named_sounds: HashMap<Box<str>, Handle<AudioSource>>,
+    /// All meshes loaded from the vpx file.
+    #[allow(dead_code)]
+    pub meshes: Vec<Handle<Mesh>>,
+    /// Named meshes loaded from the vpx file.
+    pub named_meshes: HashMap<Box<str>, Handle<Mesh>>,
+    /// The raw VPX data structure.
     pub raw: VPX,
+}
+
+impl VpxAsset {
+    pub fn wall_mesh_sub_path(name: &str) -> String {
+        format!("meshes/wall/{name}")
+    }
 }

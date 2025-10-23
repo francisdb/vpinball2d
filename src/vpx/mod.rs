@@ -3,6 +3,8 @@ use loader::VpxLoader;
 
 pub mod assets;
 mod loader;
+// TODO make this private again after the code has been moved
+pub mod triangulate;
 
 pub use assets::*;
 

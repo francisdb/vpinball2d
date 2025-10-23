@@ -2,7 +2,6 @@
 
 use crate::pinball::ball::ball;
 use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
-use crate::pinball::triangulate::triangulate_polygon;
 use crate::vpx::VpxAsset;
 use crate::{
     asset_tracking::LoadResource,
@@ -11,12 +10,9 @@ use crate::{
     screens::Screen,
 };
 
-use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css;
-use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
-use vpin::vpx::gameitem::wall::Wall;
 use vpin::vpx::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
@@ -60,7 +56,10 @@ pub fn spawn_level(
         })
         //.filter(|w| w.name.contains("Wall350"))
         .map(|wall| {
-            let mesh = wall_to_mesh(wall);
+            let mesh = vpx_asset
+                .named_meshes
+                .get(VpxAsset::wall_mesh_sub_path(&wall.name).as_str())
+                .unwrap();
             //let color = css::PINK;
             let top_material = vpx_asset
                 .raw
@@ -70,7 +69,7 @@ pub fn spawn_level(
                 .flatten()
                 .find(|m| m.name == wall.top_material);
             let color = if let Some(mat) = top_material {
-                bevy::color::Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
+                Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
             } else {
                 css::PINK
             };
@@ -82,7 +81,7 @@ pub fn spawn_level(
             });
             (
                 Name::from(format!("Wall {}", wall.name)),
-                Mesh2d(meshes.add(mesh)),
+                Mesh2d(mesh.clone()),
                 MeshMaterial2d(material.clone()),
                 // The origin for vpinball is the top-left corner with y pointing downwards
                 // We have y pointing upwards and origin at center of table
@@ -129,44 +128,4 @@ pub fn spawn_level(
                 parent.spawn(wall_bundle);
             }
         });
-}
-
-// TODO move the mesh loading to the vpx asset loader
-fn wall_to_mesh(wall: &Wall) -> Mesh {
-    let top_height = vpu_to_m(wall.height_top);
-
-    // Generate vertices for top face (all with the same height)
-    let num_points = wall.drag_points.len();
-    let mut positions = Vec::with_capacity(num_points);
-    let mut normals = Vec::with_capacity(num_points);
-    let mut uvs = Vec::with_capacity(num_points);
-
-    for point in &wall.drag_points {
-        // Position (x, top_height, y) -> Bevy uses y-up
-        positions.push([vpu_to_m(point.x), -vpu_to_m(point.y), top_height]);
-        // Normal points up for the top face
-        normals.push([0.0, 0.0, 1.0]);
-        // Simple UV mapping (could be improved)
-        uvs.push([point.x, point.y]);
-    }
-
-    // Triangulate the polygon using ear clipping (works for any polygon)
-    // points should be counter-clockwise but this is already ensured by vpx
-    let positions_2d: Vec<Vec2> = positions
-        .iter()
-        .map(|p| Vec2::new(p[0], p[1])) // Use x,y as 2D coordinates
-        .collect();
-
-    let indices = triangulate_polygon(&positions_2d);
-
-    // let mesh = Mesh::from(Polyline2d::new(vertices));
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    mesh.insert_indices(Indices::U32(indices));
-    mesh
 }
