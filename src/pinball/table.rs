@@ -6,16 +6,14 @@ use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
+use vpin::vpx::vpu_to_m;
 
-// The vpinball demo table is 2162mm deep and 952mm wide.
+// The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
 // TODO: get that info from the vpx file directly.
-pub const TABLE_WIDTH_M: f32 = 0.952;
-pub const TABLE_DEPTH_M: f32 = 2.162;
+pub const TABLE_WIDTH_VPU: f32 = 952.0;
+pub const TABLE_DEPTH_VPU: f32 = 2162.0;
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
-
-pub(crate) const FULL_WIDTH_M: f32 = TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M;
-pub(crate) const FULL_DEPTH_M: f32 = TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M;
 
 pub(super) fn plugin(app: &mut App) {
     app.load_resource::<TableAssets>();
@@ -57,6 +55,9 @@ pub(crate) fn table(
         ..default()
     });
 
+    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
+    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
+
     (
         Table,
         Name::from("Table"),
@@ -71,53 +72,53 @@ pub(crate) fn table(
             ),
             (
                 Name::from("Table Floor"),
-                Mesh2d(meshes.add(Rectangle::new(TABLE_WIDTH_M, TABLE_DEPTH_M))),
+                Mesh2d(meshes.add(Rectangle::new(table_width_m, table_depth_m))),
                 MeshMaterial2d(playfield_material),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ),
             (
                 Name::from("Bottom Wall"),
                 Mesh2d(meshes.add(Rectangle::new(
-                    TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M,
+                    table_width_m + 2.0 * WALL_THICKNESS_M,
                     WALL_THICKNESS_M,
                 ))),
                 MeshMaterial2d(default_wall_material.clone()),
-                Transform::from_xyz(0.0, -TABLE_DEPTH_M / 2.0 - WALL_THICKNESS_M / 2.0, 0.1),
+                Transform::from_xyz(0.0, -table_depth_m / 2.0 - WALL_THICKNESS_M / 2.0, 0.1),
                 RigidBody::Static,
-                Collider::rectangle(TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
+                Collider::rectangle(table_width_m + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
             ),
             (
                 Name::from("Top Wall"),
                 Mesh2d(meshes.add(Rectangle::new(
-                    TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M,
+                    table_width_m + 2.0 * WALL_THICKNESS_M,
                     WALL_THICKNESS_M,
                 ))),
                 MeshMaterial2d(default_wall_material.clone()),
-                Transform::from_xyz(0.0, TABLE_DEPTH_M / 2.0 + WALL_THICKNESS_M / 2.0, 0.1),
+                Transform::from_xyz(0.0, table_depth_m / 2.0 + WALL_THICKNESS_M / 2.0, 0.1),
                 RigidBody::Static,
-                Collider::rectangle(TABLE_WIDTH_M + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
+                Collider::rectangle(table_width_m + 2.0 * WALL_THICKNESS_M, WALL_THICKNESS_M),
             ),
             (
                 Name::from("Left Wall"),
                 Mesh2d(meshes.add(Rectangle::new(
                     WALL_THICKNESS_M,
-                    TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M,
+                    table_depth_m + 2.0 * WALL_THICKNESS_M,
                 ))),
                 MeshMaterial2d(default_wall_material.clone()),
-                Transform::from_xyz(-TABLE_WIDTH_M / 2.0 - WALL_THICKNESS_M / 2.0, 0.0, 0.1),
+                Transform::from_xyz(-table_width_m / 2.0 - WALL_THICKNESS_M / 2.0, 0.0, 0.1),
                 RigidBody::Static,
-                Collider::rectangle(WALL_THICKNESS_M, TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M),
+                Collider::rectangle(WALL_THICKNESS_M, table_depth_m + 2.0 * WALL_THICKNESS_M),
             ),
             (
                 Name::from("Right Wall"),
                 Mesh2d(meshes.add(Rectangle::new(
                     WALL_THICKNESS_M,
-                    TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M,
+                    table_depth_m + 2.0 * WALL_THICKNESS_M,
                 ))),
                 MeshMaterial2d(default_wall_material.clone()),
-                Transform::from_xyz(TABLE_WIDTH_M / 2.0 + WALL_THICKNESS_M / 2.0, 0.0, 0.1),
+                Transform::from_xyz(table_width_m / 2.0 + WALL_THICKNESS_M / 2.0, 0.0, 0.1),
                 RigidBody::Static,
-                Collider::rectangle(WALL_THICKNESS_M, TABLE_DEPTH_M + 2.0 * WALL_THICKNESS_M),
+                Collider::rectangle(WALL_THICKNESS_M, table_depth_m + 2.0 * WALL_THICKNESS_M),
             ),
         ],
     )

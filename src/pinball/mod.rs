@@ -9,6 +9,7 @@ mod ball;
 mod ballcontrol;
 pub mod level;
 pub mod table;
+mod triangulate;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((

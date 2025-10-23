@@ -1,14 +1,15 @@
-use crate::pinball::table::TableAssets;
+use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU, TableAssets};
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use crate::{AppSystems, PausableSystems, Pause};
 use avian2d::prelude::*;
 use bevy::audio::Volume;
 use bevy::prelude::*;
+use vpin::vpx::vpu_to_m;
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
-const BALL_RADIUS_M: f32 = 0.027;
+const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 
 // A typical pinball ball mass is around 80 grams
 const BALL_MASS_KG: f32 = 0.08;
@@ -47,6 +48,8 @@ pub(crate) fn ball(
         texture: Some(ball_image.clone()),
         ..default()
     });
+    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
+    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
     // TODO add ball collision sound effects
     // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
     let sound_roll = vpx_asset.named_sounds.get("fx_ballrolling0").unwrap();
@@ -55,6 +58,7 @@ pub(crate) fn ball(
         Ball { id },
         Mesh2d::from(meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)))),
         MeshMaterial2d::from(ball_material),
+        Transform::from_xyz(0.0, 0.0, 0.1),
         // physics components
         RigidBody::Dynamic,
         Mass::from(BALL_MASS_KG),
@@ -102,7 +106,7 @@ fn vol(ball_speed: f32) -> f32 {
 }
 
 fn collision_vol(collision_speed: f32) -> f32 {
-    (collision_speed * 5.0).clamp(0.0, 10.0)
+    (collision_speed * 10.0).clamp(0.0, 10.0)
 }
 
 // /// Calculates the pitch of the sound based on the ball speed

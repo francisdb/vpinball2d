@@ -13,13 +13,14 @@ mod screens;
 mod theme;
 mod vpx;
 
-use crate::pinball::table::{FULL_DEPTH_M, FULL_WIDTH_M};
+use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::audio::{AudioPlugin, SpatialScale};
 use bevy::{asset::AssetMetaCheck, prelude::*};
+use vpin::vpx::vpu_to_m;
 // use bevy_inspector_egui::bevy_egui::EguiPlugin;
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
@@ -124,17 +125,24 @@ struct Pause(pub bool);
 #[derive(SystemSet, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 struct PausableSystems;
 
+/// Spawn the main 2D camera with orthographic projection that fits the table.
+///
+/// This does not match the original VPinball coordinate system as there the Y axis is
+/// inverted compared to Bevy's coordinate system.
+/// Further the origin is at the top-left of the table in VPinball, while we use the
+/// center of the table as origin in Bevy.
 fn spawn_camera(mut commands: Commands) {
+    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
+    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
     commands.spawn((
         Name::new("Camera"),
         Camera2d,
         Projection::Orthographic(OrthographicProjection {
             scaling_mode: bevy::camera::ScalingMode::AutoMin {
-                min_height: FULL_DEPTH_M,
-                min_width: FULL_WIDTH_M,
+                min_height: table_depth_m,
+                min_width: table_width_m,
             },
             ..OrthographicProjection::default_2d()
         }),
-        //Transform::from_xyz(100.0, 200.0, 0.0),
     ));
 }
