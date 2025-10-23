@@ -1,6 +1,7 @@
 //! Creating polygons from a list of vertices
 
 // TODO have a look at https://github.com/bevy-procedural/modelling
+//   see https://github.com/bevy-procedural/modelling/issues/6
 
 use bevy::prelude::*;
 
