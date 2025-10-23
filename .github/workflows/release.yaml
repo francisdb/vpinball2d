@@ -193,7 +193,7 @@ jobs:
 
       - name: Checkout repository
         if: ${{ env.is_platform_enabled == 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: ${{ env.git_lfs }}
 
