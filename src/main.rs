@@ -13,9 +13,8 @@ mod screens;
 mod theme;
 mod vpx;
 
-mod diagnostics;
+// mod diagnostics;
 
-use crate::diagnostics::DiagnosticsPlugin;
 use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
