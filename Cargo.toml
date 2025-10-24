@@ -19,6 +19,7 @@ tracing = { version = "0.1", features = [
     "release_max_level_warn",
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
+rand = "0.9.2"
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

@@ -10,7 +10,7 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-const BALL_CONTROL_STRENGTH: f32 = 8.0;
+const BALL_CONTROL_STRENGTH: f32 = 5.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
