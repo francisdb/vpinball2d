@@ -7,8 +7,10 @@ use bevy::prelude::*;
 
 mod ball;
 mod ballcontrol;
+mod bumper;
 pub mod level;
 pub mod table;
+mod wall;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((
@@ -16,5 +18,6 @@ pub(super) fn plugin(app: &mut App) {
         table::plugin,
         ball::plugin,
         ballcontrol::plugin,
+        bumper::plugin,
     ));
 }
