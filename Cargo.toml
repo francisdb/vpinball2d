@@ -7,7 +7,7 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.17", features = ["webp", "wav", "jpeg"] }
 #bevy-inspector-egui = "0.34.0"
-avian2d = "0.4"
+avian2d = { version = "0.4.0", features = ["diagnostic_ui"] }
 vpin = "0.18.3"
 thiserror = "2.0.17"
 

@@ -67,7 +67,7 @@ impl Plugin for AppPlugin {
             // However I have the impression that this should be adjusted to the average object size
             // in the scene? So we set it to 0.1 to have more reasonable values for debug rendering
             PhysicsPlugins::default().with_length_unit(0.1),
-            // DiagnosticsPlugin,
+            // crate::diagnostics::DiagnosticsPlugin,
         ));
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
