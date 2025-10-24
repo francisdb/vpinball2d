@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 // A typical pinball ball is
 // 1-1/16 inches (27 mm) in diameter
-const BALL_RADIUS_M: f32 = 0.027 / 2.0;
+pub const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 
 // A typical pinball ball mass is around 80 grams
 const BALL_MASS_KG: f32 = 0.08;
@@ -64,6 +64,8 @@ pub(crate) fn ball(
         Collider::circle(BALL_RADIUS_M),
         SleepingDisabled,
         CollisionEventsEnabled,
+        // continuous collision detection to prevent tunneling at high speeds
+        SweptCcd::default(),
         // sound component
         AudioPlayer::new(sound_roll.clone()),
         PlaybackSettings::LOOP.with_spatial(true),
