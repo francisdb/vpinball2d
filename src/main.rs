@@ -13,6 +13,8 @@ mod screens;
 mod theme;
 mod vpx;
 
+// mod diagnostics;
+
 use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
@@ -60,13 +62,16 @@ impl Plugin for AppPlugin {
                     default_spatial_scale: SpatialScale::new_2d(AUDIO_SCALE),
                     ..default()
                 }),
-            // one unit in bevy is one meter
-            PhysicsPlugins::default().with_length_unit(1.0),
+            // One unit in bevy is one meter
+            // However I have the impression that this should be adjusted to the average object size
+            // in the scene? So we set it to 0.1 to have more reasonable values for debug rendering
+            PhysicsPlugins::default().with_length_unit(0.1),
+            // crate::diagnostics::DiagnosticsPlugin,
         ));
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
         // to improve physics stability
-        app.insert_resource(SubstepCount(8));
+        app.insert_resource(SubstepCount(50));
 
         // #[cfg(feature = "dev")]
         // app.add_plugins((EguiPlugin::default(), WorldInspectorPlugin::new()));
