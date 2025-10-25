@@ -10,6 +10,7 @@ mod ballcontrol;
 mod bumper;
 pub mod level;
 pub mod table;
+mod trigger;
 mod wall;
 
 pub(super) fn plugin(app: &mut App) {

@@ -10,7 +10,8 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-const BALL_CONTROL_STRENGTH: f32 = 5.0;
+const BALL_CONTROL_STRENGTH: f32 = 8.0;
+const MAX_BALL_CONTROL_SPEED: f32 = 2.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -41,7 +42,8 @@ fn mouse_ball_control(
                 let direction = (world_position - ball_pos).normalize_or_zero();
                 let distance = world_position.distance(ball_pos);
                 // adjust ball velocity towards the mouse position
-                velocity.0 = direction * distance * BALL_CONTROL_STRENGTH;
+                let speed = (distance * BALL_CONTROL_STRENGTH).min(MAX_BALL_CONTROL_SPEED);
+                velocity.0 = direction * speed;
                 // cancel gravity
                 commands
                     .entity(entity)
