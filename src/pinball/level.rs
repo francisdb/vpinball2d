@@ -1,7 +1,9 @@
 //! Spawn the main level.
 
 use crate::pinball::ball::ball;
+use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
+use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
 use crate::vpx::VpxAsset;
 use crate::{
@@ -9,8 +11,6 @@ use crate::{
     pinball::table::{TableAssets, table},
     screens::Screen,
 };
-
-use crate::pinball::bumper::spawn_bumper;
 use bevy::prelude::*;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::vpu_to_m;
@@ -96,6 +96,15 @@ pub fn spawn_level(
                         vpx_asset,
                         vpx_to_bevy_transform,
                         bumper,
+                    );
+                }
+                GameItemEnum::Trigger(trigger) => {
+                    spawn_trigger(
+                        &mut meshes,
+                        &mut materials,
+                        vpx_to_bevy_transform,
+                        parent,
+                        trigger,
                     );
                 }
                 _ => (),

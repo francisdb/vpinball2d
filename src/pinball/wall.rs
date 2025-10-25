@@ -6,7 +6,6 @@ use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::math::Affine2;
-use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem::wall::Wall;
@@ -20,7 +19,7 @@ pub(super) fn spawn_wall(
     wall: &Wall,
 ) {
     let name = Name::from(format!("Wall {}", wall.name));
-    let mesh = vpx_asset
+    let mesh_handle = vpx_asset
         .named_meshes
         .get(VpxAsset::wall_mesh_sub_path(&wall.name).as_str())
         .unwrap();
@@ -55,11 +54,11 @@ pub(super) fn spawn_wall(
     }
     let material = materials.add(mat);
     if wall.is_collidable && wall.height_bottom < BALL_RADIUS_M * 2.0 {
-        let mesh_mesh = meshes.get(mesh).unwrap();
-        let collider = mesh_collider(wall, mesh_mesh);
+        let mesh = meshes.get(mesh_handle).unwrap();
+        let collider = mesh_collider(mesh);
         parent.spawn((
             name,
-            Mesh2d(mesh.clone()),
+            Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             vpx_to_bevy_transform,
             RigidBody::Static,
@@ -70,15 +69,16 @@ pub(super) fn spawn_wall(
     } else {
         parent.spawn((
             name,
-            Mesh2d(mesh.clone()),
+            Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             vpx_to_bevy_transform,
         ));
     }
 }
 
-fn mesh_collider(wall: &Wall, mesh_mesh: &Mesh) -> Collider {
-    let vertices: Vec<Vector> = mesh_mesh
+/// Create a polyline collider from the 2D mesh vertices
+fn mesh_collider(mesh: &Mesh) -> Collider {
+    let vertices: Vec<Vector> = mesh
         .attribute(Mesh::ATTRIBUTE_POSITION)
         .unwrap()
         .as_float3()
@@ -86,19 +86,6 @@ fn mesh_collider(wall: &Wall, mesh_mesh: &Mesh) -> Collider {
         .iter()
         .map(|v| Vector::new(v[0], v[1]))
         .collect();
-    let indices: Vec<[u32; 2]> = match mesh_mesh.indices().unwrap() {
-        Indices::U16(idx) => idx
-            .chunks_exact(3)
-            .map(|i| [i[0] as u32, i[1] as u32])
-            .collect(),
-        Indices::U32(idx) => idx.chunks_exact(3).map(|i| [i[0], i[1]]).collect(),
-    };
-    println!(
-        "Wall {}: creating collider with {} vertices and {} indices",
-        wall.name,
-        vertices.len(),
-        indices.len()
-    );
     // we have to duplicate the first vertex at the end to close the loop
     let mut vertices = vertices;
     vertices.push(vertices[0]);

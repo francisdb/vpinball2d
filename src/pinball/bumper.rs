@@ -36,7 +36,9 @@ pub(super) fn spawn_bumper(
     bumper: &gameitem::bumper::Bumper,
 ) {
     // TODO we might want to create the mesh in the asset loader instead
-    let radius = vpx::vpu_to_m(bumper.radius);
+    let base_radius = vpx::vpu_to_m(bumper.radius);
+    // TODO check how big the default cap is in vpinball
+    let cap_radius = base_radius + 0.015;
     let mesh = Mesh::from(Circle {
         radius: vpx::vpu_to_m(bumper.radius),
     });
@@ -48,18 +50,41 @@ pub(super) fn spawn_bumper(
         .flatten()
         .find(|m| m.name == bumper.cap_material)
         .unwrap();
+    let vpx_base_material = vpx_asset
+        .raw
+        .gamedata
+        .materials
+        .iter()
+        .flatten()
+        .find(|m| m.name == bumper.base_material)
+        .unwrap();
 
-    let material = materials.add(ColorMaterial {
+    let base_material = materials.add(ColorMaterial {
         color: Srgba::rgb_u8(
-            vpx_cap_material.base_color.r,
-            vpx_cap_material.base_color.g,
-            vpx_cap_material.base_color.b,
+            vpx_base_material.base_color.r,
+            vpx_base_material.base_color.g,
+            vpx_base_material.base_color.b,
         )
         .into(),
         alpha_mode: AlphaMode2d::Opaque,
         texture: None,
         ..default()
     });
+    let cap_material = materials.add(ColorMaterial {
+        color: Srgba::rgba_u8(
+            vpx_cap_material.base_color.r,
+            vpx_cap_material.base_color.g,
+            vpx_cap_material.base_color.b,
+            210, // slightly transparent
+        )
+        //.darker(0.2)
+        .into(),
+        // TODO we want to create a proper transparent plastic material type
+        alpha_mode: AlphaMode2d::Blend,
+        texture: None,
+        ..default()
+    });
+
     // use bumper.center to modify the transform
     let transform = Transform::from_xyz(
         vpx::vpu_to_m(bumper.center.x) + vpx_to_bevy_transform.translation.x,
@@ -70,14 +95,19 @@ pub(super) fn spawn_bumper(
     let force = bumper.force * 0.008;
     parent.spawn((
         Bumper { force },
-        Name::from(format!("Bumper {}", bumper.name)),
+        Name::from(format!("Bumper{}", bumper.name)),
         Mesh2d(meshes.add(mesh)),
-        MeshMaterial2d(material),
+        MeshMaterial2d(base_material),
         transform,
         CollisionEventsEnabled,
         RigidBody::Static,
-        Collider::circle(radius),
-        // TODO make this bigger but keep the collider the same size and add a base mesh on top that has the current radius
+        Collider::circle(base_radius),
+        children![(
+            Name::from(format!("Bumper Cap {}", bumper.name)),
+            Mesh2d(meshes.add(Mesh::from(Circle { radius: cap_radius }))),
+            MeshMaterial2d(cap_material),
+            Transform::from_xyz(0.0, 0.0, 0.01),
+        ),],
     ));
 }
 
@@ -96,6 +126,7 @@ fn handle_bumper_collisions(
             {
                 let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
                 // random sound number between 1 and 4
+                // TODO we might want to store these handles in a resource to avoid looking them up every time
                 let sound_index = rand::rng().random_range(1..=4);
                 let sound_ball_collision = vpx_asset
                     .named_sounds
