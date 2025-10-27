@@ -9,6 +9,7 @@ mod ball;
 mod ballcontrol;
 mod bumper;
 pub mod level;
+mod scripts;
 pub mod table;
 mod trigger;
 mod wall;
