@@ -5,9 +5,9 @@
 
 use bevy::app::App;
 
-mod exampletable;
+mod example_table;
 
 pub(super) fn plugin(app: &mut App) {
     // depending on the TableFile resource we can choose which table script to load
-    app.add_plugins((exampletable::plugin,));
+    app.add_plugins((example_table::plugin,));
 }

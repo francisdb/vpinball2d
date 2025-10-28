@@ -16,14 +16,14 @@ const BALL_MASS_KG: f32 = 0.08;
 #[derive(Component, Debug)]
 pub struct Ball {
     #[allow(unused)]
-    id: u32,
+    pub(crate) id: u32,
 }
 
 pub(super) fn plugin(app: &mut App) {
     // Mouse ball control for development purposes
     app.add_systems(
         Update,
-        (ball_roll, ball_collision_sounds)
+        (ball_roll, ball_collision_sounds) //
             .in_set(AppSystems::RecordInput)
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
@@ -37,6 +37,7 @@ pub(crate) fn ball(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     assets_vpx: &Res<Assets<VpxAsset>>,
+    location: Vec2,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let ball_image = vpx_asset
@@ -47,15 +48,16 @@ pub(crate) fn ball(
         texture: Some(ball_image.clone()),
         ..default()
     });
+    let ball_mesh = meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)));
     // TODO add ball wall collision sound effects
     // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
     let sound_roll = vpx_asset.named_sounds.get("fx_ballrolling0").unwrap();
     (
         Name::from(format!("Ball {id}")),
         Ball { id },
-        Mesh2d::from(meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)))),
+        Mesh2d::from(ball_mesh),
         MeshMaterial2d::from(ball_material),
-        Transform::from_xyz(0.0, 0.0, 0.1),
+        Transform::from_xyz(location.x, location.y, BALL_RADIUS_M),
         // physics components
         RigidBody::Dynamic,
         Mass::from(BALL_MASS_KG),

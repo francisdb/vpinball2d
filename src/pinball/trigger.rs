@@ -1,12 +1,19 @@
 use avian2d::prelude::{Collider, CollisionEventsEnabled, RigidBody, Sensor};
-use bevy::asset::Assets;
 use bevy::color::Color;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
+use bevy::prelude::*;
 use bevy::prelude::{Annulus, ChildOf, ColorMaterial, MeshMaterial2d, Name, ResMut, Transform};
 use vpin::vpx;
 use vpin::vpx::vpu_to_m;
+
+#[derive(Component)]
+pub struct Trigger {
+    pub name: String,
+}
+
+const TRIGGER_COLOR: Srgba = css::YELLOW;
 
 pub(super) fn spawn_trigger(
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -21,6 +28,9 @@ pub(super) fn spawn_trigger(
     // we also want to draw the wire, the button or the star shape depending on the trigger type
     let radius = vpu_to_m(trigger.radius);
     parent.spawn((
+        Trigger {
+            name: trigger.name.clone(),
+        },
         Name::from(format!("Trigger {}", trigger.name)),
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x + vpu_to_m(trigger.center.x),
@@ -28,7 +38,7 @@ pub(super) fn spawn_trigger(
             10.0,
         ),
         Mesh2d(meshes.add(Annulus::new(radius - 0.001, radius))),
-        MeshMaterial2d(materials.add(Color::from(css::YELLOW))),
+        MeshMaterial2d(materials.add(Color::from(TRIGGER_COLOR))),
         // physics
         CollisionEventsEnabled,
         RigidBody::Static,

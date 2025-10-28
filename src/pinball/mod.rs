@@ -8,7 +8,9 @@ use bevy::prelude::*;
 mod ball;
 mod ballcontrol;
 mod bumper;
+mod kicker;
 pub mod level;
+mod light;
 mod scripts;
 pub mod table;
 mod trigger;
@@ -21,5 +23,6 @@ pub(super) fn plugin(app: &mut App) {
         ball::plugin,
         ballcontrol::plugin,
         bumper::plugin,
+        scripts::plugin,
     ));
 }
