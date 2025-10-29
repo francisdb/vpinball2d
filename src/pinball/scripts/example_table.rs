@@ -1,5 +1,6 @@
 //! Visual Pinball example table script re-implemented in Rust.
 
+use crate::audio::spatial_sound_effect;
 use crate::pinball;
 use crate::pinball::ball::Ball;
 use avian2d::prelude::CollisionStart;
@@ -42,19 +43,19 @@ fn example_table_script(
         let trigger_b = kicker_query.get(entity_b).ok();
 
         let ball_kicker = if let (Some(ball), Some((_, kicker, _))) = (ball_a, trigger_b) {
-            Some(((entity_a, ball), kicker))
+            Some(((entity_a, ball), (entity_b, kicker)))
         } else if let (Some(ball), Some((_, kicker, _))) = (ball_b, trigger_a) {
-            Some(((entity_b, ball), kicker))
+            Some(((entity_b, ball), (entity_a, kicker)))
         } else {
             None
         };
 
-        if let Some(((ball_entity, ball), kicker)) = ball_kicker {
+        if let Some(((ball_entity, ball), (drain_kicker_entity, drain_kicker))) = ball_kicker {
             info!(
                 "Ball {} - kicker {} collision detected",
-                ball.id, kicker.name
+                ball.id, drain_kicker.name
             );
-            if kicker.name == "Drain" {
+            if drain_kicker.name == "Drain" {
                 info!("Ball {} drained!", ball.id);
                 // play "drain" sound at the kicker location
                 let drain_sound_handle = assets_vpx
@@ -64,15 +65,14 @@ fn example_table_script(
                     .get("drain")
                     .unwrap()
                     .clone();
-                commands.entity(ball_entity).insert((
-                    AudioPlayer::new(drain_sound_handle),
-                    PlaybackSettings::ONCE.with_spatial(true),
-                ));
+                commands
+                    .entity(drain_kicker_entity)
+                    .with_child(spatial_sound_effect(drain_sound_handle));
 
                 commands.entity(ball_entity).despawn();
 
                 // find the kicker named "BallRelease" to spawn a new ball there
-                let (kicker_entity, _, kicker_transform) = kicker_query
+                let (eject_kicker_entity, _, kicker_transform) = kicker_query
                     .iter()
                     .find(|(_, k, _)| k.name == "BallRelease")
                     .expect("BallRelease kicker not found");
@@ -84,10 +84,9 @@ fn example_table_script(
                     .get("ballrelease")
                     .unwrap()
                     .clone();
-                commands.entity(kicker_entity).insert((
-                    AudioPlayer::new(release_sound_handle),
-                    PlaybackSettings::ONCE.with_spatial(true),
-                ));
+                commands
+                    .entity(eject_kicker_entity)
+                    .with_child(spatial_sound_effect(release_sound_handle));
 
                 // TODO we want to delay the kick
                 // TODO get rid off all these dependencies to spawn a new ball

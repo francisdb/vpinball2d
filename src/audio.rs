@@ -34,6 +34,16 @@ pub fn sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
     (AudioPlayer(handle), PlaybackSettings::DESPAWN, SoundEffect)
 }
 
+pub fn spatial_sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
+    (
+        AudioPlayer(handle),
+        PlaybackSettings::DESPAWN.with_spatial(true),
+        SoundEffect,
+        // TODO not sure if this works correctly or if this needs to be a global transform
+        Transform::default(),
+    )
+}
+
 /// [`GlobalVolume`] doesn't apply to already-running audio entities, so this system will update them.
 fn apply_global_volume(
     global_volume: Res<GlobalVolume>,
