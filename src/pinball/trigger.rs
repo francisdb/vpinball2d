@@ -25,6 +25,8 @@ pub(super) fn spawn_trigger(
     // TODO triggers in case the shape is None have a custom polygon shape
     // TODO make the drag_points accessible in the vpin lib
 
+    // trigger.drag_points.clone();
+
     // we also want to draw the wire, the button or the star shape depending on the trigger type
     let radius = vpu_to_m(trigger.radius);
     parent.spawn((

@@ -4,6 +4,7 @@ use crate::pinball::ball::ball;
 use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
+use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
@@ -12,7 +13,9 @@ use crate::{
     pinball::table::{TableAssets, table},
     screens::Screen,
 };
+use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
+use vpin::vpx;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::vpu_to_m;
 
@@ -128,6 +131,14 @@ pub fn spawn_level(
                         light,
                     );
                 }
+                GameItemEnum::Rubber(rubber) => spawn_rubber(
+                    &mut meshes,
+                    &mut materials,
+                    vpx_to_bevy_transform,
+                    parent,
+                    rubber,
+                    vpx_asset,
+                ),
                 _ => (),
             });
         });

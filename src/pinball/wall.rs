@@ -37,10 +37,6 @@ pub(super) fn spawn_wall(
         css::PINK
     };
     let texture = vpx_asset.named_images.get(wall.image.as_str()).cloned();
-    println!(
-        "Wall {}: texture {} collidable {}",
-        wall.name, wall.image, wall.is_collidable
-    );
     let mut mat = ColorMaterial {
         color: color.into(),
         alpha_mode: AlphaMode2d::Opaque,

@@ -11,6 +11,7 @@ mod bumper;
 mod kicker;
 pub mod level;
 mod light;
+mod rubber;
 mod scripts;
 pub mod table;
 mod trigger;

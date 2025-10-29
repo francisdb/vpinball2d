@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::image::ImageData;
 use vpin::vpx::sound::write_sound;
@@ -123,19 +124,34 @@ impl VpxLoader {
         let mut named_mesh_handles = HashMap::new();
         if settings.load_meshes {
             for item in &vpx.gameitems {
-                if let vpin::vpx::gameitem::GameItemEnum::Wall(wall) = item {
-                    let top_height = vpu_to_m(wall.height_top);
-                    let handle = load_mesh_2d_from_drag_points(
-                        VpxAsset::wall_mesh_sub_path(&wall.name),
-                        &wall.drag_points,
-                        top_height,
-                        load_context,
-                    );
-                    named_mesh_handles.insert(
-                        VpxAsset::wall_mesh_sub_path(&wall.name).into_boxed_str(),
-                        handle.clone(),
-                    );
-                    mesh_handles.push(handle);
+                match item {
+                    GameItemEnum::Wall(wall) => {
+                        let top_height = vpu_to_m(wall.height_top);
+                        let path = VpxAsset::wall_mesh_sub_path(&wall.name);
+                        let handle = load_mesh_2d_from_drag_points(
+                            path.clone(),
+                            &wall.drag_points,
+                            top_height,
+                            load_context,
+                        );
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
+                    GameItemEnum::Rubber(rubber) => {
+                        // a rubber is presented by a ring shape formed by the rubber.drag_points
+                        // with the thickness rubber.thickness
+                        let top_height = vpu_to_m(rubber.height + rubber.thickness as f32 / 2.0);
+                        let path = VpxAsset::rubber_mesh_sub_path(&rubber.name);
+                        let handle = load_mesh_2d_from_drag_points(
+                            path.clone(),
+                            &rubber.drag_points,
+                            top_height,
+                            load_context,
+                        );
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
+                    _ => {}
                 }
             }
         }
