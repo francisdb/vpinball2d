@@ -1,4 +1,3 @@
-use avian2d::prelude::{Collider, CollisionEventsEnabled, RigidBody, Sensor};
 use bevy::asset::Assets;
 use bevy::color::palettes::css;
 use bevy::color::{Color, Srgba};

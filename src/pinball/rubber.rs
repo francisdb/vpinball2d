@@ -1,15 +1,11 @@
 use crate::vpx::VpxAsset;
-use avian2d::prelude::{
-    Collider, CollisionEventsEnabled, Friction, Restitution, RigidBody, Sensor,
-};
+use avian2d::prelude::{CollisionEventsEnabled, Friction, Restitution, RigidBody};
 use bevy::asset::Assets;
 use bevy::color::palettes::css;
 use bevy::color::{Color, Srgba};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
-use bevy::prelude::{
-    Annulus, ChildOf, ColorMaterial, Component, MeshMaterial2d, Name, ResMut, Transform,
-};
+use bevy::prelude::{ChildOf, ColorMaterial, Component, MeshMaterial2d, Name, ResMut, Transform};
 use vpin::vpx;
 
 const RUBER_COLOR: Srgba = css::WHITE;
