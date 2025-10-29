@@ -1,5 +1,7 @@
 use crate::vpx::VpxAsset;
-use avian2d::prelude::{Collider, CollisionEventsEnabled, RigidBody, Sensor};
+use avian2d::prelude::{
+    Collider, CollisionEventsEnabled, Friction, Restitution, RigidBody, Sensor,
+};
 use bevy::asset::Assets;
 use bevy::color::palettes::css;
 use bevy::color::{Color, Srgba};
@@ -9,7 +11,6 @@ use bevy::prelude::{
     Annulus, ChildOf, ColorMaterial, Component, MeshMaterial2d, Name, ResMut, Transform,
 };
 use vpin::vpx;
-use vpin::vpx::vpu_to_m;
 
 const RUBER_COLOR: Srgba = css::WHITE;
 
@@ -34,11 +35,14 @@ pub(super) fn spawn_rubber(
         .get(VpxAsset::rubber_mesh_sub_path(&rubber.name).as_str())
         .unwrap();
 
+    let mesh = meshes.get(mesh_handle).unwrap();
+    let collider = crate::pinball::wall::mesh_collider(mesh);
+
     parent.spawn((
         Rubber {
             name: rubber.name.clone(),
         },
-        Name::from(format!("RUbber {}", rubber.name)),
+        Name::from(format!("Rubber {}", rubber.name)),
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x,
             vpx_to_bevy_transform.translation.y,
@@ -49,7 +53,8 @@ pub(super) fn spawn_rubber(
         // physics
         CollisionEventsEnabled,
         RigidBody::Static,
-        // TODO proper collider shape
-        Sensor,
+        collider,
+        Restitution::from(rubber.elasticity),
+        Friction::from(rubber.friction),
     ));
 }

@@ -73,7 +73,7 @@ pub(super) fn spawn_wall(
 }
 
 /// Create a polyline collider from the 2D mesh vertices
-fn mesh_collider(mesh: &Mesh) -> Collider {
+pub(super) fn mesh_collider(mesh: &Mesh) -> Collider {
     let vertices: Vec<Vector> = mesh
         .attribute(Mesh::ATTRIBUTE_POSITION)
         .unwrap()
