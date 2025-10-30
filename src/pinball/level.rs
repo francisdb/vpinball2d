@@ -5,7 +5,6 @@ use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
 use crate::pinball::rubber::spawn_rubber;
-use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
 use crate::vpx::VpxAsset;
@@ -46,8 +45,8 @@ pub fn spawn_level(
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
-    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
+    let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
+    let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
     let vpx_to_bevy_transform = Transform::from_xyz(-table_width_m / 2.0, table_depth_m / 2.0, 0.0);
 
     // TODO the walls should probably be children of the table

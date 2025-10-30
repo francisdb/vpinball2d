@@ -59,7 +59,7 @@ fn example_table_script(
             if drain_kicker.name == "Drain" {
                 info!("Ball {} drained!", ball.id);
                 // play "drain" sound at the kicker location
-                let drain_sound_handle = load_sound(&table_assets, &assets_vpx, "drain");
+                let drain_sound_handle = load_sound(&table_assets, &assets_vpx, "fx_drain");
                 commands
                     .entity(drain_kicker_entity)
                     .with_child(spatial_sound_effect(drain_sound_handle));
@@ -72,7 +72,8 @@ fn example_table_script(
                     .find(|(_, k, _)| k.name == "BallRelease")
                     .expect("BallRelease kicker not found");
 
-                let release_sound_handle = load_sound(&table_assets, &assets_vpx, "ballrelease");
+                // the script seems to use "fx_Ballrel" which indicates that sound loading is case-insensitive?
+                let release_sound_handle = load_sound(&table_assets, &assets_vpx, "fx_ballrel");
                 commands
                     .entity(eject_kicker_entity)
                     .with_child(spatial_sound_effect(release_sound_handle));

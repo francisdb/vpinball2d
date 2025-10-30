@@ -122,6 +122,11 @@ impl VpxLoader {
 
         let mut mesh_handles = Vec::new();
         let mut named_mesh_handles = HashMap::new();
+        // TODO where does the 100.0 factor come from?
+        let table_size = Vec2::new(
+            (vpx.gamedata.right - vpx.gamedata.left) / 100.0,
+            (vpx.gamedata.bottom - vpx.gamedata.top) / 100.0,
+        );
         if settings.load_meshes {
             for item in &vpx.gameitems {
                 match item {
@@ -129,6 +134,7 @@ impl VpxLoader {
                         let top_height = vpu_to_m(wall.height_top);
                         let path = VpxAsset::wall_mesh_sub_path(&wall.name);
                         let handle = load_mesh_2d_from_drag_points(
+                            table_size,
                             path.clone(),
                             &wall.drag_points,
                             top_height,
@@ -143,6 +149,7 @@ impl VpxLoader {
                         let top_height = vpu_to_m(rubber.height + rubber.thickness as f32 / 2.0);
                         let path = VpxAsset::rubber_mesh_sub_path(&rubber.name);
                         let handle = load_mesh_2d_from_drag_points(
+                            table_size,
                             path.clone(),
                             &rubber.drag_points,
                             top_height,
@@ -228,6 +235,7 @@ async fn load_sound(
 
 /// Generates a flat 2D polygon mesh from the given drag points at the specified top height.
 fn load_mesh_2d_from_drag_points(
+    table_size: Vec2,
     label: String,
     drag_points: &Vec<DragPoint>,
     top_height: f32,
@@ -244,8 +252,14 @@ fn load_mesh_2d_from_drag_points(
         positions.push([vpu_to_m(point.x), -vpu_to_m(point.y), top_height]);
         // Normal points up for the top face
         normals.push([0.0, 0.0, 1.0]);
-        // Simple UV mapping (could be improved)
-        uvs.push([point.x, point.y]);
+        if point.has_auto_texture {
+            uvs.push([point.x / table_size.x, point.y / table_size.y]);
+        } else {
+            warn!(
+                "Handle non-auto texture coordinates for mesh generation, should we use tex_coord?"
+            );
+            uvs.push([point.x, point.y]);
+        }
     }
 
     // Triangulate the polygon using ear clipping (works for any polygon)

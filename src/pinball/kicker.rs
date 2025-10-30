@@ -13,6 +13,7 @@ use vpin::vpx::vpu_to_m;
 
 #[derive(Component)]
 pub struct Kicker {
+    #[allow(dead_code)]
     pub name: String,
 }
 

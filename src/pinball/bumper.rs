@@ -42,14 +42,21 @@ pub(super) fn spawn_bumper(
     let mesh = Mesh::from(Circle {
         radius: vpx::vpu_to_m(bumper.radius),
     });
-    let vpx_cap_material = vpx_asset
-        .raw
-        .gamedata
-        .materials
-        .iter()
-        .flatten()
-        .find(|m| m.name == bumper.cap_material)
-        .unwrap();
+    info!("cap material: {}", bumper.cap_material);
+    let vpx_cap_material_base_color = if bumper.cap_material.is_empty() {
+        Srgba::rgb_u8(200, 200, 200)
+    } else {
+        let base_color = vpx_asset
+            .raw
+            .gamedata
+            .materials
+            .iter()
+            .flatten()
+            .find(|m| m.name == bumper.cap_material)
+            .expect("If the bumper has a cap material it must exist")
+            .base_color;
+        Srgba::rgb_u8(base_color.r, base_color.g, base_color.b)
+    };
     let vpx_base_material = vpx_asset
         .raw
         .gamedata
@@ -71,14 +78,7 @@ pub(super) fn spawn_bumper(
         ..default()
     });
     let cap_material = materials.add(ColorMaterial {
-        color: Srgba::rgba_u8(
-            vpx_cap_material.base_color.r,
-            vpx_cap_material.base_color.g,
-            vpx_cap_material.base_color.b,
-            210, // slightly transparent
-        )
-        //.darker(0.2)
-        .into(),
+        color: vpx_cap_material_base_color.into(),
         // TODO we want to create a proper transparent plastic material type
         alpha_mode: AlphaMode2d::Blend,
         texture: None,
@@ -125,21 +125,29 @@ fn handle_bumper_collisions(
                 && (h1 == bumper_entity || h2 == bumper_entity)
             {
                 let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-                // random sound number between 1 and 4
-                // TODO we might want to store these handles in a resource to avoid looking them up every time
-                let sound_index = rand::rng().random_range(1..=4);
-                let sound_ball_collision = vpx_asset
-                    .named_sounds
-                    .get(format!("fx_bumper{sound_index}").as_str())
-                    .unwrap()
-                    .clone();
 
-                commands.spawn((
-                    AudioPlayer::new(sound_ball_collision.clone()),
-                    PlaybackSettings::ONCE.with_spatial(true),
-                    //.with_volume(Volume::Linear(volume)),
-                    Transform::from_translation(bumper_transform.translation),
-                ));
+                // jpsalas bumper sound
+                let sound_ball_collision = vpx_asset.named_sounds.get("fx_Bumper").or_else(|| {
+                    // vpx example tables use fx_bumper1 to fx_bumper4
+
+                    // random sound number between 1 and 4
+                    // TODO we might want to store these handles in a resource to avoid looking them up every time
+                    let sound_index = rand::rng().random_range(1..=4);
+                    vpx_asset
+                        .named_sounds
+                        .get(format!("fx_bumper{sound_index}").as_str())
+                });
+
+                if let Some(sound_ball_collision) = sound_ball_collision {
+                    commands.spawn((
+                        AudioPlayer::new(sound_ball_collision.clone()),
+                        PlaybackSettings::ONCE.with_spatial(true),
+                        //.with_volume(Volume::Linear(volume)),
+                        Transform::from_translation(bumper_transform.translation),
+                    ));
+                } else {
+                    warn!("Bumper sound fx_bumper not found");
+                }
 
                 // Apply outward pulse to the ball
                 let ball_entity = if h1 == bumper_entity { h2 } else { h1 };

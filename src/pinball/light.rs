@@ -13,6 +13,7 @@ const LIGHT_FALLOFF_COLOR: Srgba = css::YELLOW;
 
 #[derive(Component)]
 pub struct Light {
+    #[allow(dead_code)]
     pub name: String,
 }
 

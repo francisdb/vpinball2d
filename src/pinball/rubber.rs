@@ -12,6 +12,7 @@ const RUBER_COLOR: Srgba = css::WHITE;
 
 #[derive(Component)]
 pub struct Rubber {
+    #[allow(dead_code)]
     pub name: String,
 }
 

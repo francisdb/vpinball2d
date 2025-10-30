@@ -8,10 +8,6 @@ use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::vpu_to_m;
 
-// The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
-// TODO: get that info from the vpx file directly.
-pub const TABLE_WIDTH_VPU: f32 = 952.0;
-pub const TABLE_DEPTH_VPU: f32 = 2162.0;
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
 
@@ -41,7 +37,6 @@ pub(crate) fn table(
         .named_images
         .get(vpx_asset.raw.gamedata.image.as_str())
         .unwrap();
-
     let playfield_material = materials.add(ColorMaterial {
         //color: css::WHITE.into(),
         alpha_mode: AlphaMode2d::Opaque,
@@ -55,8 +50,12 @@ pub(crate) fn table(
         ..default()
     });
 
-    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
-    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
+    let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
+    let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
+
+    // TODO if there is a primitive named "playfield_mesh" we should use that mesh instead.
+    //   eg this is used where the playfield has holes. Not sure this makes sense for 2D though.
+    let playfield_mesh = meshes.add(Rectangle::new(table_width_m, table_depth_m));
 
     (
         Table,
@@ -71,8 +70,8 @@ pub(crate) fn table(
                 Transform::from_xyz(0.0, 0.0, 1.0),
             ),
             (
-                Name::from("Table Floor"),
-                Mesh2d(meshes.add(Rectangle::new(table_width_m, table_depth_m))),
+                Name::from("Playfield"),
+                Mesh2d(playfield_mesh),
                 MeshMaterial2d(playfield_material),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ),
@@ -131,6 +130,7 @@ struct Table;
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct TableAssets {
+    pub(crate) file_name: String,
     #[dependency]
     pub(crate) vpx: Handle<VpxAsset>,
 }
@@ -138,8 +138,11 @@ pub struct TableAssets {
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
+        // let file_name = "exampleTable.vpx".to_string();
+        let file_name = "North Pole (Playmatic 1967) v600.vpx";
         Self {
-            vpx: assets.load("exampleTable.vpx"),
+            file_name: file_name.to_string(),
+            vpx: assets.load(file_name),
         }
     }
 }
