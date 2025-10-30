@@ -49,7 +49,10 @@ pub(super) fn spawn_wall(
         mat.color = color.with_alpha(0.5).into();
     }
     let material = materials.add(mat);
-    if wall.is_collidable && wall.height_bottom < BALL_RADIUS_M * 2.0 {
+    // A wall above the ball height is just visual
+    // A wall that is below the playfield can't collide with the ball
+    //   one example is the hole for the trigger wire where there is a bottom wall and the sides walls that reach to playfield
+    if wall.is_collidable && wall.height_bottom < BALL_RADIUS_M * 2.0 && wall.height_top > 0.0 {
         let mesh = meshes.get(mesh_handle).unwrap();
         let collider = mesh_collider(mesh);
         parent.spawn((

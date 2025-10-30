@@ -13,6 +13,7 @@ use crate::{
     screens::Screen,
 };
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::vpu_to_m;
 
@@ -43,6 +44,8 @@ pub fn spawn_level(
     mut materials: ResMut<Assets<ColorMaterial>>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
@@ -61,6 +64,8 @@ pub fn spawn_level(
                 &mut meshes,
                 &mut materials,
                 &assets_vpx,
+                window,
+                camera_q,
             )],
         ))
         .with_children(|parent| {

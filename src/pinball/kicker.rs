@@ -27,6 +27,11 @@ pub(super) fn spawn_kicker(
     kicker: &vpx::gameitem::kicker::Kicker,
 ) {
     let radius = vpu_to_m(kicker.radius);
+
+    // TODO the orientation field will indicate where the ball is kicked towards
+    //   0 is up (positive Y), 90 is right (positive X), etc.
+    //   we can draw a small arrow or to indicate the direction visually
+
     parent.spawn((
         Kicker {
             name: kicker.name.clone(),
