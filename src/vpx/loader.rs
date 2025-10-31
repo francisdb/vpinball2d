@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
+use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::image::ImageData;
 use vpin::vpx::sound::write_sound;
@@ -94,12 +95,22 @@ impl VpxLoader {
                     let bytes = jpeg.data.clone();
                     let handle =
                         load_image(format!("images/{}", image.name), load_context, image, bytes)
-                            .await?;
-                    if !image.name.is_empty() {
-                        named_image_handles
-                            .insert(image.name.clone().into_boxed_str(), handle.clone());
+                            .await;
+                    match handle {
+                        Ok(handle) => {
+                            if !image.name.is_empty() {
+                                named_image_handles
+                                    .insert(image.name.clone().into_boxed_str(), handle.clone());
+                            }
+                            image_handles.push(handle);
+                        }
+                        Err(e) => {
+                            // TODO we could retry loading the image and let the image loader guess the format
+                            //   sometimes vpx files have images with the wrong extension.
+                            error!("Failed to load image {}: {}", image.name, e);
+                            continue;
+                        }
                     }
-                    image_handles.push(handle);
                 } else {
                     warn!("Image: {} Path: {} No JPEG data", image.name, image.path);
                 }
@@ -111,31 +122,62 @@ impl VpxLoader {
         if settings.load_sounds {
             for sound in &vpx.sounds {
                 let handle =
-                    load_sound(format!("sounds/{}", sound.name), load_context, sound).await?;
-                if !sound.name.is_empty() {
-                    named_sound_handles.insert(sound.name.clone().into_boxed_str(), handle.clone());
+                    load_sound(format!("sounds/{}", sound.name), load_context, sound).await;
+                match handle {
+                    Ok(handle) => {
+                        if !sound.name.is_empty() {
+                            named_sound_handles
+                                .insert(sound.name.clone().into_boxed_str(), handle.clone());
+                        }
+                        sound_handles.push(handle);
+                    }
+                    Err(e) => {
+                        error!("Failed to load sound {}: {}", sound.name, e);
+                        continue;
+                    }
                 }
-                sound_handles.push(handle);
             }
         }
 
         let mut mesh_handles = Vec::new();
         let mut named_mesh_handles = HashMap::new();
+        // TODO where does the 100.0 factor come from?
+        let table_size = Vec2::new(
+            (vpx.gamedata.right - vpx.gamedata.left) / 100.0,
+            (vpx.gamedata.bottom - vpx.gamedata.top) / 100.0,
+        );
         if settings.load_meshes {
             for item in &vpx.gameitems {
-                if let vpin::vpx::gameitem::GameItemEnum::Wall(wall) = item {
-                    let top_height = vpu_to_m(wall.height_top);
-                    let handle = load_mesh_2d_from_drag_points(
-                        VpxAsset::wall_mesh_sub_path(&wall.name),
-                        &wall.drag_points,
-                        top_height,
-                        load_context,
-                    );
-                    named_mesh_handles.insert(
-                        VpxAsset::wall_mesh_sub_path(&wall.name).into_boxed_str(),
-                        handle.clone(),
-                    );
-                    mesh_handles.push(handle);
+                match item {
+                    GameItemEnum::Wall(wall) => {
+                        let top_height = vpu_to_m(wall.height_top);
+                        let path = VpxAsset::wall_mesh_sub_path(&wall.name);
+                        let handle = load_mesh_2d_from_drag_points(
+                            table_size,
+                            path.clone(),
+                            &wall.drag_points,
+                            top_height,
+                            load_context,
+                        );
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
+                    GameItemEnum::Rubber(rubber) => {
+                        // a rubber is presented by a ring shape formed by the rubber.drag_points
+                        // with the thickness rubber.thickness
+                        let top_height = vpu_to_m(rubber.height + rubber.thickness as f32 / 2.0);
+                        let path = VpxAsset::rubber_mesh_sub_path(&rubber.name);
+                        let handle = load_mesh_2d_from_drag_points(
+                            table_size,
+                            path.clone(),
+                            &rubber.drag_points,
+                            top_height,
+                            load_context,
+                        );
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -157,7 +199,7 @@ impl VpxLoader {
 async fn load_image(
     label: String,
     load_context: &mut LoadContext<'_>,
-    ball_image: &ImageData,
+    image_data: &ImageData,
     bytes: Vec<u8>,
 ) -> Result<Handle<Image>, <VpxLoader as AssetLoader>::Error> {
     let mut reader = bevy::asset::io::VecReader::new(bytes);
@@ -174,7 +216,7 @@ async fn load_image(
 
     // TODO how do we get an image loader instead of creating a new one here?
     let image_loader = ImageLoader::new(CompressedImageFormats::all());
-    let path = Path::new(&ball_image.path);
+    let path = Path::new(&image_data.path);
     let image_format = ImageFormat::from_extension(path.extension().unwrap().to_str().unwrap());
     let format_setting = match image_format {
         Some(fmt) => bevy::image::ImageFormatSetting::Format(fmt),
@@ -212,6 +254,7 @@ async fn load_sound(
 
 /// Generates a flat 2D polygon mesh from the given drag points at the specified top height.
 fn load_mesh_2d_from_drag_points(
+    table_size: Vec2,
     label: String,
     drag_points: &Vec<DragPoint>,
     top_height: f32,
@@ -228,8 +271,14 @@ fn load_mesh_2d_from_drag_points(
         positions.push([vpu_to_m(point.x), -vpu_to_m(point.y), top_height]);
         // Normal points up for the top face
         normals.push([0.0, 0.0, 1.0]);
-        // Simple UV mapping (could be improved)
-        uvs.push([point.x, point.y]);
+        if point.has_auto_texture {
+            uvs.push([point.x / table_size.x, point.y / table_size.y]);
+        } else {
+            warn!(
+                "Handle non-auto texture coordinates for mesh generation, should we use tex_coord?"
+            );
+            uvs.push([point.x, point.y]);
+        }
     }
 
     // Triangulate the polygon using ear clipping (works for any polygon)

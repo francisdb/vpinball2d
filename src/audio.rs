@@ -16,6 +16,7 @@ pub(super) fn plugin(app: &mut App) {
 pub struct Music;
 
 /// A music audio instance.
+#[allow(dead_code)]
 pub fn music(handle: Handle<AudioSource>) -> impl Bundle {
     (AudioPlayer(handle), PlaybackSettings::LOOP, Music)
 }
@@ -31,6 +32,16 @@ pub struct SoundEffect;
 /// A sound effect audio instance.
 pub fn sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
     (AudioPlayer(handle), PlaybackSettings::DESPAWN, SoundEffect)
+}
+
+pub fn spatial_sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
+    (
+        AudioPlayer(handle),
+        PlaybackSettings::DESPAWN.with_spatial(true),
+        SoundEffect,
+        // TODO not sure if this works correctly or if this needs to be a global transform
+        Transform::default(),
+    )
 }
 
 /// [`GlobalVolume`] doesn't apply to already-running audio entities, so this system will update them.
