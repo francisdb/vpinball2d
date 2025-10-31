@@ -51,9 +51,8 @@ pub(crate) fn ball(
     let ball_mesh = meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)));
     // TODO add ball wall collision sound effects
     // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
-
-    // Example / JPSalas fx_ballrolling0
-    // TNA SY_TNA_REV02_Ball_Roll_0
+    // Example / JPSalas => fx_ballrolling0
+    // TNA => SY_TNA_REV02_Ball_Roll_0
     let sound_roll = vpx_asset
         .named_sounds
         .get("fx_ballrolling0")
