@@ -1,3 +1,4 @@
+use crate::pinball::table::TableAssets;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -8,6 +9,7 @@ use vpin::vpx::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(FixedUpdate, plunger_movement);
+    app.add_systems(Update, plunger_sound);
 }
 
 #[derive(Component)]
@@ -165,6 +167,37 @@ fn plunger_movement(
             // We can't use keyboard_input.just_released because the system runs in FixedUpdate
             // https://github.com/bevyengine/bevy/issues/6183
             constant_force.y = 0.0;
+        }
+    }
+}
+
+fn plunger_sound(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    table_assets: Res<TableAssets>,
+    assets_vpx: Res<Assets<VpxAsset>>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Enter) {
+        // play plunger pull sound
+        let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
+        let sound_name = "plungerpull";
+        if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
+            commands.spawn((AudioPlayer::new(sound.clone()), Transform::default()));
+        } else {
+            warn!("Plunger pull sound '{}' not found in VPX asset", sound_name);
+        }
+    }
+    if keyboard_input.just_released(KeyCode::Enter) {
+        // play plunger release sound
+        let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
+        let sound_name = "plungerrelease";
+        if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
+            commands.spawn((AudioPlayer::new(sound.clone()), Transform::default()));
+        } else {
+            warn!(
+                "Plunger release sound '{}' not found in VPX asset",
+                sound_name
+            );
         }
     }
 }

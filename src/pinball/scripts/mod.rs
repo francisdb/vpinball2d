@@ -9,13 +9,15 @@ use bevy::prelude::*;
 
 mod example_table;
 mod north_pole;
+mod tna;
 
 pub(super) fn plugin(app: &mut App) {
     // depending on the TableFile resource we can choose which table script to load
     // if table_assets.file_name == "ExampleTable.vpx" {
-    //app.add_plugins((example_table::plugin,));
+    app.add_plugins((example_table::plugin,));
     // }
-    app.add_plugins((north_pole::plugin,));
+    //app.add_plugins((north_pole::plugin,));
+    //app.add_plugins((tna::plugin,));
 }
 
 pub(super) fn load_sound(

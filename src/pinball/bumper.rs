@@ -45,33 +45,54 @@ pub(super) fn spawn_bumper(
     let vpx_cap_material_base_color = if bumper.cap_material.is_empty() {
         Srgba::rgb_u8(200, 200, 200)
     } else {
-        let base_color = vpx_asset
+        match vpx_asset
             .raw
             .gamedata
             .materials
             .iter()
             .flatten()
             .find(|m| m.name == bumper.cap_material)
-            .expect("If the bumper has a cap material it must exist")
-            .base_color;
-        Srgba::rgb_u8(base_color.r, base_color.g, base_color.b)
+        {
+            None => {
+                warn!(
+                    "Bumper cap material '{}' not found, using default color",
+                    bumper.cap_material
+                );
+                Srgba::rgb_u8(200, 200, 200)
+            }
+            Some(m) => {
+                let base_color = m.base_color;
+                Srgba::rgb_u8(base_color.r, base_color.g, base_color.b)
+            }
+        }
     };
-    let vpx_base_material = vpx_asset
-        .raw
-        .gamedata
-        .materials
-        .iter()
-        .flatten()
-        .find(|m| m.name == bumper.base_material)
-        .unwrap();
+    let vpx_base_material_color = if bumper.base_material.is_empty() {
+        Srgba::rgb_u8(150, 150, 150)
+    } else {
+        match vpx_asset
+            .raw
+            .gamedata
+            .materials
+            .iter()
+            .flatten()
+            .find(|m| m.name == bumper.base_material)
+        {
+            None => {
+                warn!(
+                    "Bumper base material '{}' not found, using default color",
+                    bumper.base_material
+                );
+                Srgba::rgb_u8(150, 150, 150)
+            }
+            Some(m) => {
+                let base_color = m.base_color;
+                Srgba::rgb_u8(base_color.r, base_color.g, base_color.b)
+            }
+        }
+    };
 
     let base_material = materials.add(ColorMaterial {
-        color: Srgba::rgb_u8(
-            vpx_base_material.base_color.r,
-            vpx_base_material.base_color.g,
-            vpx_base_material.base_color.b,
-        )
-        .into(),
+        color: vpx_base_material_color.into(),
         alpha_mode: AlphaMode2d::Opaque,
         texture: None,
         ..default()

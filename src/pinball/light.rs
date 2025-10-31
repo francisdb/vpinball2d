@@ -25,6 +25,8 @@ pub(super) fn spawn_light(
     let falloff_radius = vpu_to_m(light.falloff_radius);
     let light_color = Srgba::rgb_u8(light.color.r, light.color.g, light.color.b).with_alpha(0.6);
     let light_falloff_color = light_color.clone().with_alpha(0.1);
+    // TODO check what the correct default is in vpinball
+    const DEFAULT_LIGHT_HEIGHT: f32 = 0.01;
     parent.spawn((
         Light {
             name: light.name.clone(),
@@ -33,7 +35,7 @@ pub(super) fn spawn_light(
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x + vpu_to_m(light.center.x),
             vpx_to_bevy_transform.translation.y - vpu_to_m(light.center.y),
-            vpu_to_m(light.height.unwrap()),
+            vpu_to_m(light.height.unwrap_or(DEFAULT_LIGHT_HEIGHT)),
         ),
         Mesh2d(meshes.add(Circle::new(radius))),
         MeshMaterial2d(materials.add(Color::from(light_color).with_alpha(0.5))),
