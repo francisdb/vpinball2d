@@ -42,7 +42,6 @@ pub(super) fn spawn_bumper(
     let mesh = Mesh::from(Circle {
         radius: vpx::vpu_to_m(bumper.radius),
     });
-    info!("cap material: {}", bumper.cap_material);
     let vpx_cap_material_base_color = if bumper.cap_material.is_empty() {
         Srgba::rgb_u8(200, 200, 200)
     } else {

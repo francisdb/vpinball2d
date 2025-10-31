@@ -11,6 +11,7 @@ mod bumper;
 mod kicker;
 pub mod level;
 mod light;
+mod plunger;
 mod rubber;
 mod scripts;
 pub mod table;
@@ -25,5 +26,6 @@ pub(super) fn plugin(app: &mut App) {
         ballcontrol::plugin,
         bumper::plugin,
         scripts::plugin,
+        plunger::plugin,
     ));
 }

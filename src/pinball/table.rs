@@ -85,15 +85,9 @@ pub(crate) fn table(
         _ => panic!("Expected orthographic camera"),
     };
 
-    println!("Ortho: {:?}", ortho);
-
-    // TODO we should take the same height as the table
-
     // Backglass fills the entire window
     let backglass_width = ortho.area.max.x - ortho.area.min.x;
     let backglass_height = table_depth_m;
-
-    println!("Backglass size: {} x {}", backglass_width, backglass_height);
     let backglass_mesh = Mesh::from(Rectangle::new(backglass_width, backglass_height));
 
     // TODO if there is a primitive named "playfield_mesh" we should use that mesh instead.

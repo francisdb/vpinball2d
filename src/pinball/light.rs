@@ -8,9 +8,6 @@ use bevy::prelude::*;
 use vpin::vpx;
 use vpin::vpx::vpu_to_m;
 
-const LIGHT_COLOR: Srgba = css::YELLOW;
-const LIGHT_FALLOFF_COLOR: Srgba = css::YELLOW;
-
 #[derive(Component)]
 pub struct Light {
     #[allow(dead_code)]
@@ -26,6 +23,8 @@ pub(super) fn spawn_light(
 ) {
     let radius = vpu_to_m(light.mesh_radius);
     let falloff_radius = vpu_to_m(light.falloff_radius);
+    let light_color = Srgba::rgb_u8(light.color.r, light.color.g, light.color.b).with_alpha(0.6);
+    let light_falloff_color = light_color.clone().with_alpha(0.1);
     parent.spawn((
         Light {
             name: light.name.clone(),
@@ -37,10 +36,10 @@ pub(super) fn spawn_light(
             vpu_to_m(light.height.unwrap()),
         ),
         Mesh2d(meshes.add(Circle::new(radius))),
-        MeshMaterial2d(materials.add(Color::from(LIGHT_COLOR).with_alpha(0.5))),
+        MeshMaterial2d(materials.add(Color::from(light_color).with_alpha(0.5))),
         children![(
             Mesh2d(meshes.add(Circle::new(falloff_radius))),
-            MeshMaterial2d(materials.add(Color::from(LIGHT_FALLOFF_COLOR).with_alpha(0.1))),
+            MeshMaterial2d(materials.add(Color::from(light_falloff_color).with_alpha(0.1))),
             Transform::from_xyz(0.0, 0.0, -0.001)
         )],
     ));

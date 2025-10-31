@@ -5,7 +5,7 @@ use bevy::color::palettes::css;
 use bevy::color::{Color, Srgba};
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
-use bevy::prelude::{ChildOf, ColorMaterial, Component, MeshMaterial2d, Name, ResMut, Transform};
+use bevy::prelude::*;
 use vpin::vpx;
 
 const RUBER_COLOR: Srgba = css::WHITE;
@@ -26,6 +26,15 @@ pub(super) fn spawn_rubber(
 ) {
     // a rubber is presented by a ring shape formed by the rubber.drag_points
     // with the thickness rubber.thickness
+
+    // sometimes rubbers are used to just render a metallic ring without collision
+    if rubber.rot_x != 0.0 || rubber.rot_y != 0.0 || rubber.rot_z != 0.0 {
+        warn!(
+            "Rubber {} has rotation, which is not supported yet",
+            rubber.name
+        );
+        return;
+    }
 
     let mesh_handle = vpx_asset
         .named_meshes

@@ -4,6 +4,7 @@ use crate::pinball::ball::ball;
 use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
+use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
@@ -87,14 +88,23 @@ pub fn spawn_level(
         })
         .with_children(|parent| {
             vpx_asset.raw.gameitems.iter().for_each(|item| match item {
-                GameItemEnum::Wall(wall) => spawn_wall(
-                    parent,
-                    &meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    wall,
-                ),
+                GameItemEnum::Wall(wall) => {
+                    // TODO on the example table wall 15 is a wall that keeps the
+                    //   ball in in the lane and allows the plunger to pass through
+                    //   However we don't know how to allow that behavior yet so we skip it for now
+                    //   https://github.com/avianphysics/avian/blob/main/crates/avian2d/examples/one_way_platform_2d.rs
+                    //   Maybe they should be on different collision layers?
+                    if wall.name != "Wall15" {
+                        spawn_wall(
+                            parent,
+                            &meshes,
+                            &mut materials,
+                            vpx_asset,
+                            vpx_to_bevy_transform,
+                            wall,
+                        )
+                    }
+                }
                 GameItemEnum::Bumper(bumper) => {
                     spawn_bumper(
                         parent,
@@ -139,6 +149,14 @@ pub fn spawn_level(
                     vpx_to_bevy_transform,
                     parent,
                     rubber,
+                    vpx_asset,
+                ),
+                GameItemEnum::Plunger(plunger) => spawn_plunger(
+                    &mut meshes,
+                    &mut materials,
+                    vpx_to_bevy_transform,
+                    parent,
+                    plunger,
                     vpx_asset,
                 ),
                 _ => (),
