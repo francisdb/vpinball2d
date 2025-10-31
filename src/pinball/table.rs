@@ -62,16 +62,32 @@ pub(crate) fn table(
             ..default()
         }),
         _ => {
-            let backglass_image = vpx_asset
+            match vpx_asset
                 .named_images
                 .get(vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str())
-                .unwrap();
-            materials.add(ColorMaterial {
-                //color: css::WHITE.into(),
-                alpha_mode: AlphaMode2d::Opaque,
-                texture: Some(backglass_image.clone()),
-                ..default()
-            })
+            {
+                None => {
+                    warn!(
+                        "Backglass image '{}' not found in table '{}'",
+                        vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str(),
+                        table_assets.file_name
+                    );
+                    materials.add(ColorMaterial {
+                        color: css::WHITE.with_alpha(0.0).into(),
+                        alpha_mode: AlphaMode2d::Blend,
+                        texture: None,
+                        ..default()
+                    })
+                }
+                Some(backglass_image) => {
+                    materials.add(ColorMaterial {
+                        //color: css::WHITE.into(),
+                        alpha_mode: AlphaMode2d::Opaque,
+                        texture: Some(backglass_image.clone()),
+                        ..default()
+                    })
+                }
+            }
         }
     };
 
@@ -182,7 +198,8 @@ impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         //let file_name = "exampleTable.vpx".to_string();
-        let file_name = "North Pole (Playmatic 1967) v600.vpx";
+        //let file_name = "North Pole (Playmatic 1967) v600.vpx";
+        let file_name = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
         Self {
             file_name: file_name.to_string(),
             vpx: assets.load(file_name),

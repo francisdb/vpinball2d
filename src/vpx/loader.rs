@@ -95,12 +95,22 @@ impl VpxLoader {
                     let bytes = jpeg.data.clone();
                     let handle =
                         load_image(format!("images/{}", image.name), load_context, image, bytes)
-                            .await?;
-                    if !image.name.is_empty() {
-                        named_image_handles
-                            .insert(image.name.clone().into_boxed_str(), handle.clone());
+                            .await;
+                    match handle {
+                        Ok(handle) => {
+                            if !image.name.is_empty() {
+                                named_image_handles
+                                    .insert(image.name.clone().into_boxed_str(), handle.clone());
+                            }
+                            image_handles.push(handle);
+                        }
+                        Err(e) => {
+                            // TODO we could retry loading the image and let the image loader guess the format
+                            //   sometimes vpx files have images with the wrong extension.
+                            error!("Failed to load image {}: {}", image.name, e);
+                            continue;
+                        }
                     }
-                    image_handles.push(handle);
                 } else {
                     warn!("Image: {} Path: {} No JPEG data", image.name, image.path);
                 }
@@ -112,11 +122,20 @@ impl VpxLoader {
         if settings.load_sounds {
             for sound in &vpx.sounds {
                 let handle =
-                    load_sound(format!("sounds/{}", sound.name), load_context, sound).await?;
-                if !sound.name.is_empty() {
-                    named_sound_handles.insert(sound.name.clone().into_boxed_str(), handle.clone());
+                    load_sound(format!("sounds/{}", sound.name), load_context, sound).await;
+                match handle {
+                    Ok(handle) => {
+                        if !sound.name.is_empty() {
+                            named_sound_handles
+                                .insert(sound.name.clone().into_boxed_str(), handle.clone());
+                        }
+                        sound_handles.push(handle);
+                    }
+                    Err(e) => {
+                        error!("Failed to load sound {}: {}", sound.name, e);
+                        continue;
+                    }
                 }
-                sound_handles.push(handle);
             }
         }
 
@@ -180,7 +199,7 @@ impl VpxLoader {
 async fn load_image(
     label: String,
     load_context: &mut LoadContext<'_>,
-    ball_image: &ImageData,
+    image_data: &ImageData,
     bytes: Vec<u8>,
 ) -> Result<Handle<Image>, <VpxLoader as AssetLoader>::Error> {
     let mut reader = bevy::asset::io::VecReader::new(bytes);
@@ -197,7 +216,7 @@ async fn load_image(
 
     // TODO how do we get an image loader instead of creating a new one here?
     let image_loader = ImageLoader::new(CompressedImageFormats::all());
-    let path = Path::new(&ball_image.path);
+    let path = Path::new(&image_data.path);
     let image_format = ImageFormat::from_extension(path.extension().unwrap().to_str().unwrap());
     let format_setting = match image_format {
         Some(fmt) => bevy::image::ImageFormatSetting::Format(fmt),

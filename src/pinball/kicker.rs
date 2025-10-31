@@ -1,13 +1,11 @@
-use avian2d::prelude::{Collider, CollisionEventsEnabled, RigidBody, Sensor};
+use avian2d::prelude::*;
 use bevy::asset::Assets;
 use bevy::color::Color;
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
-use bevy::prelude::{
-    Annulus, ChildOf, ColorMaterial, Component, MeshMaterial2d, Name, ResMut, Transform,
-};
+use bevy::prelude::*;
 use vpin::vpx;
 use vpin::vpx::vpu_to_m;
 
