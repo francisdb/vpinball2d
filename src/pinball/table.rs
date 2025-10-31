@@ -181,8 +181,8 @@ pub struct TableAssets {
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
-        let file_name = "exampleTable.vpx".to_string();
-        //let file_name = "North Pole (Playmatic 1967) v600.vpx";
+        //let file_name = "exampleTable.vpx".to_string();
+        let file_name = "North Pole (Playmatic 1967) v600.vpx";
         Self {
             file_name: file_name.to_string(),
             vpx: assets.load(file_name),

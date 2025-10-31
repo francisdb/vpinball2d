@@ -7,7 +7,7 @@ use vpin::vpx;
 use vpin::vpx::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(FixedUpdate, launcher_movement);
+    app.add_systems(FixedUpdate, plunger_movement);
 }
 
 #[derive(Component)]
@@ -26,53 +26,51 @@ pub(super) fn spawn_plunger(
     plunger: &vpx::gameitem::plunger::Plunger,
     vpx_asset: &VpxAsset,
 ) {
-    let launcher_pos = Vec2::new(
+    let plunger_pos = Vec2::new(
         vpx_to_bevy_transform.translation.x + vpu_to_m(plunger.center.x),
-        vpx_to_bevy_transform.translation.y - vpu_to_m(plunger.center.y),
+        vpx_to_bevy_transform.translation.y - vpu_to_m(plunger.center.y) - vpu_to_m(plunger.height),
     );
 
     let transform = Transform::from_xyz(
-        launcher_pos.x,
-        launcher_pos.y + vpu_to_m(plunger.stroke),
+        plunger_pos.x,
+        plunger_pos.y + vpu_to_m(plunger.stroke),
         vpu_to_m(plunger.height),
     );
-    info!("spawning plunger {} at {:?}", plunger.name, transform);
-    info!("plunger: {:?}", plunger);
 
     // the width is the width of the whole assembly
-    let shape_launcher = Rectangle::new(vpu_to_m(plunger.width), vpu_to_m(plunger.height));
+    let shape_plunger = Rectangle::new(vpu_to_m(plunger.width), vpu_to_m(plunger.height));
 
     // Create a fixed anchor for the spring
-    let anchor = parent
+    let anchor_entity = parent
         .spawn((
-            Name::from("Launcher Anchor"),
+            Name::from("plunger Anchor"),
             Mesh2d(meshes.add(Circle::new(0.005))),
             MeshMaterial2d(materials.add(Color::from(css::BLUE_VIOLET))),
             RigidBody::Static,
             Transform::from_xyz(
-                launcher_pos.x,
-                launcher_pos.y,
+                plunger_pos.x,
+                plunger_pos.y,
                 // just to make it visible above the table
                 vpu_to_m(plunger.height + 0.01),
             ),
         ))
         .id();
 
-    // Spawn the launcher with spring joint
-    let launcher = parent
+    // Spawn the plunger with spring joint
+    let plunger_entity = parent
         .spawn((
             Plunger {
                 name: plunger.name.clone(),
-                start_point: launcher_pos,
+                start_point: plunger_pos,
                 stroke: vpu_to_m(plunger.stroke),
             },
             Name::from(format!("Plunger {}", plunger.name)),
             transform,
-            Mesh2d(meshes.add(shape_launcher)),
-            MeshMaterial2d(materials.add(Color::from(css::CORNFLOWER_BLUE))),
+            Mesh2d(meshes.add(shape_plunger)),
+            MeshMaterial2d(materials.add(Color::from(css::GHOST_WHITE))),
             // physics
             RigidBody::Dynamic,
-            Collider::rectangle(shape_launcher.size().x, shape_launcher.size().y),
+            Collider::rectangle(shape_plunger.size().x, shape_plunger.size().y),
             Restitution::new(0.5), // rubber
             ConstantForce::new(0.0, 0.0),
             LockedAxes::ROTATION_LOCKED.lock_translation_x(),
@@ -81,21 +79,54 @@ pub(super) fn spawn_plunger(
         ))
         .id();
 
+    // left and right wall a bit below the plunger head to keep the ball aligned
+    let wall_height = 0.005;
+    let wall_width = 0.010;
+    let wall_margin = 0.002;
+    let wall_y = plunger_pos.y + vpu_to_m(plunger.stroke) - 0.010;
+    let wall_z = vpu_to_m(plunger.height);
+    // left wall
+    parent.spawn((
+        Name::from("Plunger left guide wall"),
+        Mesh2d(meshes.add(Rectangle::new(wall_width, wall_height))),
+        MeshMaterial2d(materials.add(Color::from(css::DARK_GRAY))),
+        RigidBody::Static,
+        Collider::rectangle(wall_width, wall_height),
+        Transform::from_xyz(
+            plunger_pos.x - vpu_to_m(plunger.width) / 2.0 - wall_width / 2.0 - wall_margin,
+            wall_y,
+            wall_z,
+        ),
+    ));
+    // right wall
+    parent.spawn((
+        Name::from("Plunger right guide wall"),
+        Mesh2d(meshes.add(Rectangle::new(wall_width, wall_height))),
+        MeshMaterial2d(materials.add(Color::from(css::SILVER))),
+        RigidBody::Static,
+        Collider::rectangle(wall_width, wall_height),
+        Transform::from_xyz(
+            plunger_pos.x + vpu_to_m(plunger.width) / 2.0 + wall_width / 2.0 + wall_margin,
+            wall_y,
+            wall_z,
+        ),
+    ));
+
     // hidden wall just above the anchor to avoid the plunger getting pulled through
     parent.spawn((
         Name::from("Plunger stop"),
         RigidBody::Static,
         Collider::rectangle(vpu_to_m(plunger.width), 0.01),
         Transform::from_xyz(
-            launcher_pos.x,
-            launcher_pos.y + 0.004,
+            plunger_pos.x,
+            plunger_pos.y + 0.004,
             vpu_to_m(plunger.height),
         ),
     ));
 
     // Add prismatic joint (vertical slider) with spring properties
     parent.spawn((
-        DistanceJoint::new(anchor, launcher)
+        DistanceJoint::new(anchor_entity, plunger_entity)
             .with_local_anchor1(Vec2::ZERO)
             .with_local_anchor2(Vec2::ZERO)
             .with_compliance(0.002)
@@ -109,9 +140,9 @@ pub(super) fn spawn_plunger(
     ));
 }
 
-fn launcher_movement(
+fn plunger_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut launchers: Query<(&Plunger, &Transform, &mut ConstantForce)>,
+    mut plungers: Query<(&Plunger, &Transform, &mut ConstantForce)>,
     time: Res<Time>,
 ) {
     // Newtons per second applied when pulling the plunger
@@ -121,14 +152,14 @@ fn launcher_movement(
     let dt = time.delta_secs();
     let delta_force = PULL_FORCE_PER_SECOND * dt;
 
-    for (plunger, transform, mut constant_force) in launchers.iter_mut() {
+    for (plunger, transform, mut constant_force) in plungers.iter_mut() {
         let current_offset = transform.translation.y - plunger.start_point.y;
 
         if keyboard_input.pressed(KeyCode::Enter) {
             // Apply downward force if not at max stretch
             if current_offset > -plunger.stroke && constant_force.y > -MAX_FORCE {
                 constant_force.y -= delta_force;
-                debug!("Pulling launcher down: force.y = {}", constant_force.y);
+                debug!("Pulling plunger down: force.y = {}", constant_force.y);
             }
         } else {
             // We can't use keyboard_input.just_released because the system runs in FixedUpdate

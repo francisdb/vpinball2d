@@ -46,7 +46,7 @@ pub(super) fn spawn_kicker(
         MeshMaterial2d(materials.add(Color::from(KICKER_COLOR))),
         // physics
         CollisionEventsEnabled,
-        RigidBody::Static,
+        //RigidBody::Static,
         Collider::circle(radius),
         Sensor,
     ));

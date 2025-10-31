@@ -94,7 +94,14 @@ pub fn spawn_level(
                     //   However we don't know how to allow that behavior yet so we skip it for now
                     //   https://github.com/avianphysics/avian/blob/main/crates/avian2d/examples/one_way_platform_2d.rs
                     //   Maybe they should be on different collision layers?
-                    if wall.name != "Wall15" {
+                    //   The best option would be replacing the single wall with a left and right part
+                    //   that leaves a gap for the plunger in the center.
+                    if (wall.name == "Wall15" || wall.name == "Wall6")
+                        && !wall.is_top_bottom_visible
+                        && !wall.is_side_visible
+                    {
+                        warn!("Skipping wall {} that would block the plunger", wall.name);
+                    } else {
                         spawn_wall(
                             parent,
                             &meshes,
