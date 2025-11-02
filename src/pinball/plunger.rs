@@ -1,4 +1,7 @@
+use crate::PausableSystems;
+use crate::audio::spatial_sound_effect;
 use crate::pinball::table::TableAssets;
+use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -8,8 +11,18 @@ use vpin::vpx;
 use vpin::vpx::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(FixedUpdate, plunger_movement);
-    app.add_systems(Update, plunger_sound);
+    app.add_systems(
+        FixedUpdate,
+        plunger_movement
+            .in_set(PausableSystems)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
+        Update,
+        plunger_sound
+            .in_set(PausableSystems)
+            .run_if(in_state(Screen::Gameplay)),
+    );
 }
 
 #[derive(Component)]
@@ -176,13 +189,18 @@ fn plunger_sound(
     mut commands: Commands,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    plunger_query: Query<(Entity), With<Plunger>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Enter) {
         // play plunger pull sound
         let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
         let sound_name = "plungerpull";
         if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
-            commands.spawn((AudioPlayer::new(sound.clone()), Transform::default()));
+            for plunger_entity in plunger_query.iter() {
+                commands
+                    .entity(plunger_entity)
+                    .with_child(spatial_sound_effect(sound.clone()));
+            }
         } else {
             warn!("Plunger pull sound '{}' not found in VPX asset", sound_name);
         }
@@ -190,9 +208,13 @@ fn plunger_sound(
     if keyboard_input.just_released(KeyCode::Enter) {
         // play plunger release sound
         let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-        let sound_name = "plungerrelease";
+        let sound_name = "plunger";
         if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
-            commands.spawn((AudioPlayer::new(sound.clone()), Transform::default()));
+            for plunger_entity in plunger_query.iter() {
+                commands
+                    .entity(plunger_entity)
+                    .with_child(spatial_sound_effect(sound.clone()));
+            }
         } else {
             warn!(
                 "Plunger release sound '{}' not found in VPX asset",

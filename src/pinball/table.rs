@@ -1,6 +1,7 @@
 //! Table-specific behavior.
 
 use crate::asset_tracking::LoadResource;
+use crate::pinball::TablePath;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -32,7 +33,6 @@ pub(crate) fn table(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     assets_vpx: &Res<Assets<VpxAsset>>,
-    window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
@@ -94,8 +94,7 @@ pub(crate) fn table(
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
 
-    let window = window.single().unwrap();
-    let (camera, proj) = camera_q.single().unwrap();
+    let (_camera, proj) = camera_q.single().unwrap();
     let ortho = match proj {
         Projection::Orthographic(ortho) => ortho,
         _ => panic!("Expected orthographic camera"),
@@ -196,12 +195,13 @@ pub struct TableAssets {
 
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
+        let table_path = world
+            .get_resource::<TablePath>()
+            .expect("Failed to get table path");
         let assets = world.resource::<AssetServer>();
-        let file_name = "exampleTable.vpx".to_string();
-        //let file_name = "North Pole (Playmatic 1967) v600.vpx";
-        //let file_name = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
+        let file_name = table_path.path.to_string_lossy().to_string();
         Self {
-            file_name: file_name.to_string(),
+            file_name: file_name.clone(),
             vpx: assets.load(file_name),
         }
     }

@@ -45,7 +45,6 @@ pub fn spawn_level(
     mut materials: ResMut<Assets<ColorMaterial>>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
-    window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
@@ -65,7 +64,6 @@ pub fn spawn_level(
                 &mut meshes,
                 &mut materials,
                 &assets_vpx,
-                window,
                 camera_q,
             )],
         ))

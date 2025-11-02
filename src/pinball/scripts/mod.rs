@@ -3,6 +3,7 @@
 //! Instead, we want to use a still supported and widely used language like Lua.
 //! For now however we re-implement the script in Rust directly as a proof of concept.
 
+use crate::pinball::TablePath;
 use crate::pinball::table::TableAssets;
 use crate::vpx::VpxAsset;
 use bevy::prelude::*;
@@ -12,12 +13,21 @@ mod north_pole;
 mod tna;
 
 pub(super) fn plugin(app: &mut App) {
-    // depending on the TableFile resource we can choose which table script to load
-    // if table_assets.file_name == "ExampleTable.vpx" {
-    app.add_plugins((example_table::plugin,));
-    // }
-    //app.add_plugins((north_pole::plugin,));
-    //app.add_plugins((tna::plugin,));
+    let table_path = app.world().resource::<TablePath>();
+    match table_path.path.file_name().unwrap().to_str().unwrap() {
+        "exampleTable.vpx" => {
+            app.add_plugins((example_table::plugin,));
+        }
+        "North Pole (Playmatic 1967) v600.vpx" => {
+            app.add_plugins((north_pole::plugin,));
+        }
+        "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx" => {
+            app.add_plugins((tna::plugin,));
+        }
+        other => {
+            warn!("No script available for table file: {}", other);
+        }
+    }
 }
 
 pub(super) fn load_sound(
