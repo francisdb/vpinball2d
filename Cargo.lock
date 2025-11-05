@@ -362,9 +362,9 @@ dependencies = [
 
 [[package]]
 name = "avian2d"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a09520bf5896787549454bfefee896fd24cca34ec0ce4c7d9c00b6402322edf"
+checksum = "1527c0529592ee609cdf44cfba8ba5190f0bef5f04ae057b1d1e28d412aee63a"
 dependencies = [
  "approx",
  "arrayvec",
