@@ -1,6 +1,7 @@
 //! Table-specific behavior.
 
 use crate::asset_tracking::LoadResource;
+use crate::pinball::TablePath;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -8,10 +9,6 @@ use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::vpu_to_m;
 
-// The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
-// TODO: get that info from the vpx file directly.
-pub const TABLE_WIDTH_VPU: f32 = 952.0;
-pub const TABLE_DEPTH_VPU: f32 = 2162.0;
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
 
@@ -35,13 +32,13 @@ pub(crate) fn table(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     assets_vpx: &Res<Assets<VpxAsset>>,
+    camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let playfield_image = vpx_asset
         .named_images
         .get(vpx_asset.raw.gamedata.image.as_str())
         .unwrap();
-
     let playfield_material = materials.add(ColorMaterial {
         //color: css::WHITE.into(),
         alpha_mode: AlphaMode2d::Opaque,
@@ -55,8 +52,61 @@ pub(crate) fn table(
         ..default()
     });
 
-    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
-    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
+    // add a backdrop
+    let backglass_material = match vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str() {
+        "" => materials.add(ColorMaterial {
+            color: css::WHITE.with_alpha(0.0).into(),
+            alpha_mode: AlphaMode2d::Blend,
+            texture: None,
+            ..default()
+        }),
+        _ => {
+            match vpx_asset
+                .named_images
+                .get(vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str())
+            {
+                None => {
+                    warn!(
+                        "Backglass image '{}' not found in table '{}'",
+                        vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str(),
+                        table_assets.file_name
+                    );
+                    materials.add(ColorMaterial {
+                        color: css::WHITE.with_alpha(0.0).into(),
+                        alpha_mode: AlphaMode2d::Blend,
+                        texture: None,
+                        ..default()
+                    })
+                }
+                Some(backglass_image) => {
+                    materials.add(ColorMaterial {
+                        //color: css::WHITE.into(),
+                        alpha_mode: AlphaMode2d::Opaque,
+                        texture: Some(backglass_image.clone()),
+                        ..default()
+                    })
+                }
+            }
+        }
+    };
+
+    let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
+    let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
+
+    let (_camera, proj) = camera_q.single().unwrap();
+    let ortho = match proj {
+        Projection::Orthographic(ortho) => ortho,
+        _ => panic!("Expected orthographic camera"),
+    };
+
+    // Backglass fills the entire window
+    let backglass_width = ortho.area.max.x - ortho.area.min.x;
+    let backglass_height = table_depth_m;
+    let backglass_mesh = Mesh::from(Rectangle::new(backglass_width, backglass_height));
+
+    // TODO if there is a primitive named "playfield_mesh" we should use that mesh instead.
+    //   eg this is used where the playfield has holes. Not sure this makes sense for 2D though.
+    let playfield_mesh = meshes.add(Rectangle::new(table_width_m, table_depth_m));
 
     (
         Table,
@@ -65,14 +115,20 @@ pub(crate) fn table(
         Visibility::default(),
         children![
             (
+                Name::from("Backglass"),
+                Mesh2d(meshes.add(backglass_mesh)),
+                MeshMaterial2d(backglass_material),
+                Transform::from_xyz(0.0, 0.0, -20.0)
+            ),
+            (
                 Name::from("Origin"),
                 Mesh2d(meshes.add(Mesh::from(Circle::new(0.01)))),
                 MeshMaterial2d(materials.add(Color::from(css::RED))),
                 Transform::from_xyz(0.0, 0.0, 1.0),
             ),
             (
-                Name::from("Table Floor"),
-                Mesh2d(meshes.add(Rectangle::new(table_width_m, table_depth_m))),
+                Name::from("Playfield"),
+                Mesh2d(playfield_mesh),
                 MeshMaterial2d(playfield_material),
                 Transform::from_xyz(0.0, 0.0, 0.0),
             ),
@@ -131,15 +187,21 @@ struct Table;
 #[derive(Resource, Asset, Clone, Reflect)]
 #[reflect(Resource)]
 pub struct TableAssets {
+    pub(crate) file_name: String,
     #[dependency]
     pub(crate) vpx: Handle<VpxAsset>,
 }
 
 impl FromWorld for TableAssets {
     fn from_world(world: &mut World) -> Self {
+        let table_path = world
+            .get_resource::<TablePath>()
+            .expect("Failed to get table path");
         let assets = world.resource::<AssetServer>();
+        let file_name = table_path.path.to_string_lossy().to_string();
         Self {
-            vpx: assets.load("exampleTable.vpx"),
+            file_name: file_name.clone(),
+            vpx: assets.load(file_name),
         }
     }
 }

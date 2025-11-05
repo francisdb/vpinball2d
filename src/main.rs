@@ -15,7 +15,6 @@ mod vpx;
 
 // mod diagnostics;
 
-use crate::pinball::table::{TABLE_DEPTH_VPU, TABLE_WIDTH_VPU};
 use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
@@ -122,7 +121,7 @@ enum AppSystems {
     Update,
 }
 
-/// Whether or not the game is paused.
+/// Whether the game is paused.
 #[derive(States, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 struct Pause(pub bool);
 
@@ -137,8 +136,9 @@ struct PausableSystems;
 /// Further the origin is at the top-left of the table in VPinball, while we use the
 /// center of the table as origin in Bevy.
 fn spawn_camera(mut commands: Commands) {
-    let table_width_m = vpu_to_m(TABLE_WIDTH_VPU);
-    let table_depth_m = vpu_to_m(TABLE_DEPTH_VPU);
+    // The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
+    let table_width_m = vpu_to_m(952.0);
+    let table_depth_m = vpu_to_m(2162.0);
     commands.spawn((
         Name::new("Camera"),
         Camera2d,

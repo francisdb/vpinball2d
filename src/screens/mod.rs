@@ -25,5 +25,6 @@ pub enum Screen {
     Splash,
     Title,
     Loading,
+    GameSetup,
     Gameplay,
 }

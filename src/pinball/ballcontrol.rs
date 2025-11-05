@@ -6,11 +6,14 @@ use crate::{AppSystems, PausableSystems};
 use avian2d::prelude::*;
 use bevy::app::{App, Update};
 use bevy::camera::{Camera, Camera2d};
+use bevy::ecs::bundle::InsertMode;
+use bevy::ecs::system::entity_command::{insert, remove};
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-const BALL_CONTROL_STRENGTH: f32 = 5.0;
+const BALL_CONTROL_STRENGTH: f32 = 8.0;
+const MAX_BALL_CONTROL_SPEED: f32 = 2.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -41,17 +44,23 @@ fn mouse_ball_control(
                 let direction = (world_position - ball_pos).normalize_or_zero();
                 let distance = world_position.distance(ball_pos);
                 // adjust ball velocity towards the mouse position
-                velocity.0 = direction * distance * BALL_CONTROL_STRENGTH;
-                // cancel gravity
-                commands
-                    .entity(entity)
-                    .insert(ConstantForce(-gravity.0 * mass.0));
+                let speed = (distance * BALL_CONTROL_STRENGTH).min(MAX_BALL_CONTROL_SPEED);
+                velocity.0 = direction * speed;
+                // cancel gravity and apply force towards the mouse position
+                // this might fail if meanwhile the ball has been despawned, which is fine
+                commands.entity(entity).queue_silenced(insert(
+                    ConstantForce(-gravity.0 * mass.0),
+                    InsertMode::Replace,
+                ));
             }
         }
     } else {
         for (entity, _transform, _mass, _velocity) in ball_query.iter_mut() {
             // keep velocity so we can sling the ball around but cancel the anti-gravity force
-            commands.entity(entity).remove::<ConstantForce>();
+            // this removal might fail as meanwhile the ball might have been despawned, which is fine
+            commands
+                .entity(entity)
+                .queue_silenced(remove::<ConstantForce>());
         }
     }
 }
