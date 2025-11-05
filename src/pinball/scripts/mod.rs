@@ -40,6 +40,6 @@ pub(super) fn load_sound(
         .unwrap()
         .named_sounds
         .get(name)
-        .unwrap_or_else(|| panic!("Sound {} not found", name))
+        .unwrap_or_else(|| panic!("Sound {name} not found"))
         .clone()
 }
