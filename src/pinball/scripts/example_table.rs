@@ -4,6 +4,7 @@ use crate::audio::spatial_sound_effect;
 use crate::pinball;
 use crate::pinball::ball::Ball;
 use crate::pinball::scripts::load_sound;
+use crate::pinball::wall::Wall;
 use avian2d::prelude::CollisionStart;
 use bevy::prelude::*;
 
@@ -12,6 +13,29 @@ pub(super) fn plugin(app: &mut App) {
         Update,
         example_table_script.run_if(in_state(crate::screens::Screen::Gameplay)),
     );
+    app.add_systems(
+        OnEnter(crate::screens::Screen::Gameplay),
+        remove_plunger_wall,
+    );
+}
+
+fn remove_plunger_wall(mut commands: Commands, wall_query: Query<(Entity, &Wall)>) {
+    // TODO on the example table wall 15 is a wall that keeps the
+    //   ball in in the lane and allows the plunger to pass through
+    //   However we don't know how to allow that behavior yet so we skip it for now
+    //   https://github.com/avianphysics/avian/blob/main/crates/avian2d/examples/one_way_platform_2d.rs
+    //   Maybe they should be on different collision layers?
+    //   The best option would be replacing the single wall with a left and right part
+    //   that leaves a gap for the plunger in the center.
+    let name = "Wall15";
+    if let Some((plunger_wall_entity, _wall)) = wall_query.iter().find(|(_, k)| k.name == name) {
+        commands.entity(plunger_wall_entity).despawn();
+    } else {
+        warn!(
+            "Plunger centering wall {} not found, could not remove it",
+            name
+        );
+    }
 }
 
 // TODO implement ball spawn and despawn logic that matches the original script

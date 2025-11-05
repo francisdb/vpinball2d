@@ -40,6 +40,6 @@ pub(super) fn load_sound(
         .unwrap()
         .named_sounds
         .get(name)
-        .expect(format!("Sound {} not found", name).as_str())
+        .unwrap_or_else(|| panic!("Sound {} not found", name))
         .clone()
 }

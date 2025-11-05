@@ -8,7 +8,12 @@ use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
-use vpin::vpx::gameitem::wall::Wall;
+use vpin::vpx::gameitem::wall;
+
+#[derive(Component)]
+pub struct Wall {
+    pub name: String,
+}
 
 pub(super) fn spawn_wall(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
@@ -16,9 +21,8 @@ pub(super) fn spawn_wall(
     materials: &mut ResMut<Assets<ColorMaterial>>,
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
-    wall: &Wall,
+    wall: &wall::Wall,
 ) {
-    let name = Name::from(format!("Wall {}", wall.name));
     let mesh_handle = vpx_asset
         .named_meshes
         .get(VpxAsset::wall_mesh_sub_path(&wall.name).as_str())
@@ -49,6 +53,10 @@ pub(super) fn spawn_wall(
         mat.color = color.with_alpha(0.5).into();
     }
     let material = materials.add(mat);
+    let name_component = Name::from(format!("Wall {}", wall.name));
+    let wall_component = Wall {
+        name: wall.name.clone(),
+    };
     // A wall above the ball height is just visual
     // A wall that is below the playfield can't collide with the ball
     //   one example is the hole for the trigger wire where there is a bottom wall and the sides walls that reach to playfield
@@ -56,7 +64,8 @@ pub(super) fn spawn_wall(
         let mesh = meshes.get(mesh_handle).unwrap();
         let collider = mesh_collider(mesh);
         parent.spawn((
-            name,
+            name_component,
+            wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             vpx_to_bevy_transform,
@@ -67,7 +76,8 @@ pub(super) fn spawn_wall(
         ));
     } else {
         parent.spawn((
-            name,
+            name_component,
+            wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             vpx_to_bevy_transform,

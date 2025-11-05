@@ -4,19 +4,37 @@ use crate::audio::spatial_sound_effect;
 use crate::pinball;
 use crate::pinball::ball::Ball;
 use crate::pinball::scripts::load_sound;
+use crate::pinball::wall::Wall;
 use avian2d::prelude::CollisionStart;
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        example_table_script.run_if(in_state(crate::screens::Screen::Gameplay)),
+        north_pole_table_script.run_if(in_state(crate::screens::Screen::Gameplay)),
     );
+
+    app.add_systems(
+        OnEnter(crate::screens::Screen::Gameplay),
+        remove_plunger_wall,
+    );
+}
+
+fn remove_plunger_wall(mut commands: Commands, wall_query: Query<(Entity, &Wall)>) {
+    let name = "Wall6";
+    if let Some((plunger_wall_entity, _wall)) = wall_query.iter().find(|(_, k)| k.name == name) {
+        commands.entity(plunger_wall_entity).despawn();
+    } else {
+        warn!(
+            "Plunger centering wall {} not found, could not remove it",
+            name
+        );
+    }
 }
 
 // TODO implement ball spawn and despawn logic that matches the original script
 
-fn example_table_script(
+fn north_pole_table_script(
     mut collision_reader: MessageReader<CollisionStart>,
     ball_query: Query<&Ball>,
     kicker_query: Query<(Entity, &pinball::kicker::Kicker, &Transform)>,

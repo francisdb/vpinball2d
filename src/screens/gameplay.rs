@@ -8,8 +8,13 @@ use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 use vpin::vpx::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Gameplay), spawn_level);
-    app.add_systems(OnEnter(Screen::Gameplay), fit_camera);
+    app.add_systems(
+        OnEnter(Screen::GameSetup),
+        (spawn_level, enter_gameplay_screen).chain(),
+    );
+    app.add_systems(OnEnter(Screen::GameSetup), fit_camera);
+
+    // we need to first spawn entities before we can run the script that starts on Screen::Gameplay
 
     // Toggle pause on key press.
     app.add_systems(
@@ -32,6 +37,10 @@ pub(super) fn plugin(app: &mut App) {
         OnEnter(Menu::None),
         unpause.run_if(in_state(Screen::Gameplay)),
     );
+}
+
+fn enter_gameplay_screen(mut next_screen: ResMut<NextState<Screen>>) {
+    next_screen.set(Screen::Gameplay);
 }
 
 fn unpause(mut next_pause: ResMut<NextState<Pause>>, mut time: ResMut<Time<Physics>>) {

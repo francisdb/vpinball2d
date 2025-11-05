@@ -39,7 +39,6 @@ pub(super) fn spawn_plunger(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     plunger: &vpx::gameitem::plunger::Plunger,
-    vpx_asset: &VpxAsset,
 ) {
     let plunger_pos = Vec2::new(
         vpx_to_bevy_transform.translation.x + vpu_to_m(plunger.center.x),
@@ -189,13 +188,21 @@ fn plunger_sound(
     mut commands: Commands,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
-    plunger_query: Query<(Entity), With<Plunger>>,
+    plunger_query: Query<Entity, With<Plunger>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Enter) {
         // play plunger pull sound
         let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
         let sound_name = "plungerpull";
-        if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
+        let sound_name_2 = "fx_plungerpull";
+        // TOOD there is also a slow variant for tna
+        let sound_name_3 = "SY_TNA_REV02_Plunger_Pull";
+        let pull_sound = vpx_asset
+            .named_sounds
+            .get(sound_name)
+            .or(vpx_asset.named_sounds.get(sound_name_2))
+            .or(vpx_asset.named_sounds.get(sound_name_3));
+        if let Some(sound) = pull_sound {
             for plunger_entity in plunger_query.iter() {
                 commands
                     .entity(plunger_entity)
@@ -207,9 +214,18 @@ fn plunger_sound(
     }
     if keyboard_input.just_released(KeyCode::Enter) {
         // play plunger release sound
+        // TODO the jpsalas table have a different sound for a release without the ball
         let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
         let sound_name = "plunger";
-        if let Some(sound) = vpx_asset.named_sounds.get(sound_name) {
+        let sound_name_2 = "fx_plunger";
+        let sound_name_3 = "SY_TNA_REV02_Plunger_Release_Ball_1";
+        // TODO tna also has a second sound and one for release without ball
+        let release_sound = vpx_asset
+            .named_sounds
+            .get(sound_name)
+            .or(vpx_asset.named_sounds.get(sound_name_2))
+            .or(vpx_asset.named_sounds.get(sound_name_3));
+        if let Some(sound) = release_sound {
             for plunger_entity in plunger_query.iter() {
                 commands
                     .entity(plunger_entity)

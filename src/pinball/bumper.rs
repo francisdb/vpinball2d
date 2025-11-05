@@ -146,19 +146,30 @@ fn handle_bumper_collisions(
             {
                 let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
 
-                // jpsalas bumper sound
-                let sound_ball_collision = vpx_asset.named_sounds.get("fx_Bumper").or_else(|| {
+                // jpsalas table
+                let bumper_sound = vpx_asset.named_sounds.get("fx_Bumper").or_else(|| {
                     // vpx example tables use fx_bumper1 to fx_bumper4
 
+                    // example table
                     // random sound number between 1 and 4
                     // TODO we might want to store these handles in a resource to avoid looking them up every time
                     let sound_index = rand::rng().random_range(1..=4);
-                    vpx_asset
+                    let vpx_sound = vpx_asset
                         .named_sounds
-                        .get(format!("fx_bumper{sound_index}").as_str())
+                        .get(format!("fx_bumper{sound_index}").as_str());
+
+                    // tna table
+                    // random sound number between 1 and 7
+                    // TODO we might want to store these handles in a resource to avoid looking them up every time
+                    let sound_index = rand::rng().random_range(1..=7);
+                    let tna_sound = vpx_asset
+                        .named_sounds
+                        .get(format!("SY_TNA_REV03_Pop_Bumper_{sound_index}").as_str());
+
+                    vpx_sound.or(tna_sound)
                 });
 
-                if let Some(sound_ball_collision) = sound_ball_collision {
+                if let Some(sound_ball_collision) = bumper_sound {
                     commands.spawn((
                         AudioPlayer::new(sound_ball_collision.clone()),
                         PlaybackSettings::ONCE.with_spatial(true),

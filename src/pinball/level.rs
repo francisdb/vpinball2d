@@ -14,7 +14,6 @@ use crate::{
     screens::Screen,
 };
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::vpu_to_m;
 
@@ -86,30 +85,14 @@ pub fn spawn_level(
         })
         .with_children(|parent| {
             vpx_asset.raw.gameitems.iter().for_each(|item| match item {
-                GameItemEnum::Wall(wall) => {
-                    // TODO on the example table wall 15 is a wall that keeps the
-                    //   ball in in the lane and allows the plunger to pass through
-                    //   However we don't know how to allow that behavior yet so we skip it for now
-                    //   https://github.com/avianphysics/avian/blob/main/crates/avian2d/examples/one_way_platform_2d.rs
-                    //   Maybe they should be on different collision layers?
-                    //   The best option would be replacing the single wall with a left and right part
-                    //   that leaves a gap for the plunger in the center.
-                    if (wall.name == "Wall15" || wall.name == "Wall6")
-                        && !wall.is_top_bottom_visible
-                        && !wall.is_side_visible
-                    {
-                        warn!("Skipping wall {} that would block the plunger", wall.name);
-                    } else {
-                        spawn_wall(
-                            parent,
-                            &meshes,
-                            &mut materials,
-                            vpx_asset,
-                            vpx_to_bevy_transform,
-                            wall,
-                        )
-                    }
-                }
+                GameItemEnum::Wall(wall) => spawn_wall(
+                    parent,
+                    &meshes,
+                    &mut materials,
+                    vpx_asset,
+                    vpx_to_bevy_transform,
+                    wall,
+                ),
                 GameItemEnum::Bumper(bumper) => {
                     spawn_bumper(
                         parent,
@@ -162,7 +145,6 @@ pub fn spawn_level(
                     vpx_to_bevy_transform,
                     parent,
                     plunger,
-                    vpx_asset,
                 ),
                 _ => (),
             });
