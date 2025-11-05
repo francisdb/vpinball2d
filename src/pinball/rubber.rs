@@ -30,7 +30,7 @@ pub(super) fn spawn_rubber(
     // sometimes rubbers are used to just render a metallic ring without collision
     if rubber.rot_x != 0.0 || rubber.rot_y != 0.0 || rubber.rot_z != 0.0 {
         warn!(
-            "Rubber {} has rotation, which is not supported yet",
+            "Skipping rubber {} with rotation which is not supported yet.",
             rubber.name
         );
         return;
