@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 mod ball;
 mod ballcontrol;
 mod bumper;
+mod flipper;
 mod kicker;
 pub mod level;
 mod light;
@@ -43,5 +44,6 @@ pub(super) fn plugin(app: &mut App) {
         bumper::plugin,
         scripts::plugin,
         plunger::plugin,
+        flipper::plugin,
     ));
 }
