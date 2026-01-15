@@ -49,7 +49,7 @@ impl Default for VpxLoaderSettings {
 }
 
 /// Loads vpx files with all of their data as their corresponding bevy representations.
-#[derive(Reflect)]
+#[derive(TypePath)]
 pub struct VpxLoader {}
 
 impl AssetLoader for VpxLoader {
