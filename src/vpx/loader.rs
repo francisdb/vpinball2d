@@ -49,6 +49,7 @@ impl Default for VpxLoaderSettings {
 }
 
 /// Loads vpx files with all of their data as their corresponding bevy representations.
+#[derive(TypePath)]
 pub struct VpxLoader {}
 
 impl AssetLoader for VpxLoader {
@@ -62,7 +63,7 @@ impl AssetLoader for VpxLoader {
         settings: &VpxLoaderSettings,
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        info!("Loading VPX {}", load_context.path().display());
+        info!("Loading VPX {}", load_context.path());
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         Self::load_vpx(self, &bytes, load_context, settings).await
