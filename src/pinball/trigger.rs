@@ -6,7 +6,7 @@ use bevy::mesh::{Mesh, Mesh2d};
 use bevy::prelude::*;
 use bevy::prelude::{Annulus, ChildOf, ColorMaterial, MeshMaterial2d, Name, ResMut, Transform};
 use vpin::vpx;
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 #[derive(Component)]
 pub struct Trigger {

@@ -10,8 +10,8 @@ use bevy::prelude::*;
 use crate::screens::Screen;
 use bevy::sprite_render::AlphaMode2d;
 use rand::Rng;
-use vpin::vpx;
 use vpin::vpx::gameitem;
+use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -36,11 +36,11 @@ pub(super) fn spawn_bumper(
     bumper: &gameitem::bumper::Bumper,
 ) {
     // TODO we might want to create the mesh in the asset loader instead
-    let base_radius = vpx::vpu_to_m(bumper.radius);
+    let base_radius = vpu_to_m(bumper.radius);
     // TODO check how big the default cap is in vpinball
     let cap_radius = base_radius + 0.015;
     let mesh = Mesh::from(Circle {
-        radius: vpx::vpu_to_m(bumper.radius),
+        radius: vpu_to_m(bumper.radius),
     });
     let vpx_cap_material_base_color = if bumper.cap_material.is_empty() {
         Srgba::rgb_u8(200, 200, 200)
@@ -107,8 +107,8 @@ pub(super) fn spawn_bumper(
 
     // use bumper.center to modify the transform
     let transform = Transform::from_xyz(
-        vpx::vpu_to_m(bumper.center.x) + vpx_to_bevy_transform.translation.x,
-        -vpx::vpu_to_m(bumper.center.y) + vpx_to_bevy_transform.translation.y,
+        vpu_to_m(bumper.center.x) + vpx_to_bevy_transform.translation.x,
+        -vpu_to_m(bumper.center.y) + vpx_to_bevy_transform.translation.y,
         0.1,
     );
     // not sure what vpinball uses as force but we want newtons

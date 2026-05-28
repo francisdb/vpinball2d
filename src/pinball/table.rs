@@ -7,7 +7,7 @@ use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;

@@ -5,7 +5,7 @@ use crate::vpx::VpxAsset;
 use crate::{Pause, menus::Menu, pinball::level::spawn_level, screens::Screen};
 use avian2d::prelude::*;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(

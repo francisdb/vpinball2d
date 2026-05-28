@@ -8,7 +8,7 @@ use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
 use vpin::vpx;
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(

@@ -21,7 +21,7 @@ use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::audio::{AudioPlugin, SpatialScale};
 use bevy::{asset::AssetMetaCheck, prelude::*};
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 // use bevy_inspector_egui::bevy_egui::EguiPlugin;
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 

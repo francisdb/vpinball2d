@@ -15,7 +15,7 @@ use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::image::ImageData;
 use vpin::vpx::sound::write_sound;
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 /// An error that occurs when loading a vpx file.
 #[derive(Error, Debug)]

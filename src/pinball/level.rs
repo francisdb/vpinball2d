@@ -15,7 +15,7 @@ use crate::{
 };
 use bevy::prelude::*;
 use vpin::vpx::gameitem::GameItemEnum;
-use vpin::vpx::vpu_to_m;
+use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(_app: &mut App) {
     //app.load_resource::<LevelAssets>();
