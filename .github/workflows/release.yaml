@@ -46,6 +46,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+# Default to no permissions; jobs that need more (build, GitHub Pages deploy)
+# grant them explicitly below.
+permissions: {}
+
 # Configure the release workflow by editing the following values.
 env:
   # The base filename of the binary produced by `cargo build`.
