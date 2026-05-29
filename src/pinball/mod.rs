@@ -12,6 +12,7 @@ mod bumper;
 mod kicker;
 pub mod level;
 mod light;
+mod nudge;
 mod plunger;
 mod rubber;
 mod scripts;
@@ -43,5 +44,6 @@ pub(super) fn plugin(app: &mut App) {
         bumper::plugin,
         scripts::plugin,
         plunger::plugin,
+        nudge::plugin,
     ));
 }
