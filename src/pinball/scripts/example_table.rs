@@ -42,6 +42,7 @@ fn remove_plunger_wall(mut commands: Commands, wall_query: Query<(Entity, &Wall)
 
 fn example_table_script(
     mut collision_reader: MessageReader<CollisionStart>,
+    name_query: Query<&Name>,
     ball_query: Query<&Ball>,
     kicker_query: Query<(Entity, &pinball::kicker::Kicker, &Transform)>,
     mut commands: Commands,
@@ -58,8 +59,23 @@ fn example_table_script(
 
     // for each collision, check if it's a ball with a trigger
     for collision in collision_reader.read() {
-        let entity_a = collision.body1.unwrap();
-        let entity_b = collision.body2.unwrap();
+        // body1/body2 are None when a collider has no associated rigid body
+        let (Some(entity_a), Some(entity_b)) = (collision.body1, collision.body2) else {
+            let name_of = |entity| {
+                name_query
+                    .get(entity)
+                    .map(|name| name.to_string())
+                    .unwrap_or_else(|_| format!("{entity:?}"))
+            };
+            warn!(
+                "Ignoring collision with a collider that has no rigid body: collider1={} (body1={:?}), collider2={} (body2={:?})",
+                name_of(collision.collider1),
+                collision.body1,
+                name_of(collision.collider2),
+                collision.body2
+            );
+            continue;
+        };
 
         let ball_a = ball_query.get(entity_a).ok();
         let ball_b = ball_query.get(entity_b).ok();
