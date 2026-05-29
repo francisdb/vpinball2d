@@ -44,21 +44,10 @@ const FLIPPER_ENABLED_TORQUE: f32 = 1.5;
 /// return ratio (see `FlipperMoverObject::UpdateVelocities` in hitflipper.cpp).
 const FLIPPER_RETURN_TORQUE: f32 = 0.5;
 
-/// Which player button drives a flipper. Visual Pinball does not classify flippers
-/// geometrically; its `m_direction = (end_angle >= start_angle)` flag decides which
-/// way the coil swings the bat (hitflipper.cpp), which lines up with the left/right
-/// flipper buttons for a standard table layout.
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum FlipperSide {
-    Left,
-    Right,
-}
-
 #[derive(Component)]
 struct Flipper {
     #[allow(dead_code)]
     pub name: String,
-    side: FlipperSide,
     /// Body angle (rad) the flipper rests at when released (Visual Pinball start angle).
     rest_angle: f32,
     /// Body angle (rad) the flipper swings to while energised (Visual Pinball end angle).
@@ -90,11 +79,7 @@ pub(super) fn spawn_flipper(
 
     // Visual Pinball's `m_direction = (end_angle >= start_angle)`: a right-hand flipper
     // increases its angle towards the end position, a left-hand flipper decreases it.
-    let side = if flipper.end_angle >= flipper.start_angle {
-        FlipperSide::Right
-    } else {
-        FlipperSide::Left
-    };
+    let right_hand = flipper.end_angle >= flipper.start_angle;
 
     let shape_flipper = Rectangle::new(
         vpu_to_m(flipper.flipper_radius_max + flipper.end_radius / 2.0),
@@ -105,9 +90,10 @@ pub(super) fn spawn_flipper(
     // tip. A left flipper's body +x axis points at the tip; a right flipper is the mirror
     // image, pivoting on its other end. Mirroring keeps the joint's relative rotation
     // within (-PI, PI], which is what avian's angle limits compare against.
-    let (flipper_pivot, body_turn) = match side {
-        FlipperSide::Left => (Vec2::new(-shape_flipper.half_size.x, 0.0), 0.0),
-        FlipperSide::Right => (Vec2::new(shape_flipper.half_size.x, 0.0), PI),
+    let (flipper_pivot, body_turn) = if right_hand {
+        (Vec2::new(shape_flipper.half_size.x, 0.0), PI)
+    } else {
+        (Vec2::new(-shape_flipper.half_size.x, 0.0), 0.0)
     };
     let rest_angle = normalize_angle(rest_tip_dir - body_turn);
     let active_angle = normalize_angle(active_tip_dir - body_turn);
@@ -137,7 +123,6 @@ pub(super) fn spawn_flipper(
         .spawn((
             Flipper {
                 name: flipper.name.clone(),
-                side,
                 rest_angle,
                 active_angle,
             },
@@ -178,21 +163,22 @@ fn flipper_movement(
     mut commands: Commands,
 ) {
     for (entity, flipper) in &flippers {
-        let pressed = match flipper.side {
-            FlipperSide::Left => {
-                keyboard_input.pressed(KeyCode::ArrowLeft)
-                    || keyboard_input.pressed(KeyCode::ShiftLeft)
-            }
-            FlipperSide::Right => {
-                keyboard_input.pressed(KeyCode::ArrowRight)
-                    || keyboard_input.pressed(KeyCode::ShiftRight)
-            }
+        // The solenoid drives towards the active angle, so the sign of the swing tells us
+        // which way the flipper turns: a counter-clockwise (positive) swing is a left-hand
+        // flipper, a clockwise (negative) one is right-hand. Visual Pinball has no left/right
+        // flipper concept of its own - the table script binds each named flipper to
+        // LeftFlipperKey / RightFlipperKey - so we map it to the matching button here.
+        let towards_active = (flipper.active_angle - flipper.rest_angle).signum();
+        let pressed = if towards_active > 0.0 {
+            keyboard_input.pressed(KeyCode::ArrowLeft) || keyboard_input.pressed(KeyCode::ShiftLeft)
+        } else {
+            keyboard_input.pressed(KeyCode::ArrowRight)
+                || keyboard_input.pressed(KeyCode::ShiftRight)
         };
 
-        // The solenoid drives towards the active angle; when released the return spring
-        // pulls back to rest with a weaker torque. Gravity alone is not enough to hold
-        // the flipper down, so we always apply a torque towards one of the two limits.
-        let towards_active = (flipper.active_angle - flipper.rest_angle).signum();
+        // While held, drive towards the active angle; when released the return spring pulls
+        // back to rest with a weaker torque. Gravity alone is not enough to hold the flipper
+        // down, so we always apply a torque towards one of the two limits.
         let torque = if pressed {
             towards_active * FLIPPER_ENABLED_TORQUE
         } else {
