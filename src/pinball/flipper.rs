@@ -1,3 +1,29 @@
+//! Flippers, modelled after Visual Pinball.
+//!
+//! Researched against the upstream Visual Pinball sources (`src/physics/hitflipper.cpp`,
+//! `src/parts/flipper.cpp`) and the `exampleTable.vpx` flipper data:
+//!
+//!   - A flipper is a rod pivoting at its `center`. It rests at `start_angle` and the
+//!     solenoid rotates it to `end_angle`; the angle is clamped to the
+//!     `[min(start, end), max(start, end)]` range. VPX angles are in degrees with 0
+//!     pointing up and positive angles going clockwise.
+//!   - VPX has no left/right notion in the geometry. The swing sense comes from a single
+//!     flag `m_direction = (end_angle >= start_angle)`: a right-hand flipper increases
+//!     its angle towards the end position, a left-hand flipper decreases it. For a
+//!     standard table this lines up with the left/right flipper buttons.
+//!   - The coil applies a strong torque towards `end_angle` while the button is held; on
+//!     release a weaker spring torque (coil strength * return ratio) pulls it back to
+//!     `start_angle`. Near the end of stroke VPX also damps the torque (the "EOS" hold
+//!     coil), which we do not model yet.
+//!   - The example table is mirror-symmetric: LeftFlipper `120.5 deg -> 70 deg`,
+//!     RightFlipper `-120.5 deg -> -70 deg`, centres at x=278 and x=596 vpu.
+//!
+//! We map VPX angles into bevy (0 points +x, positive counter-clockwise) and drive the
+//! bat with a `RevoluteJoint` plus a `ConstantTorque`. The right flipper is the mirror of
+//! the left: it pivots on the opposite end of the bat with its body angle turned half a
+//! turn, which keeps the joint's relative rotation within (-PI, PI] - the range avian's
+//! angle limits compare against (`rotation_difference` comes from `Rotation::angle_between`).
+
 use crate::PausableSystems;
 use crate::screens::Screen;
 use avian2d::prelude::*;
@@ -5,25 +31,25 @@ use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::Mesh;
 use bevy::prelude::*;
+use core::f32::consts::{PI, TAU};
 use vpin::vpx;
 use vpin::vpx::units::vpu_to_m;
 
-/// Flippers have a solenoid that applies a strong torque when activated.
+/// Torque the solenoid applies while the flipper button is held.
 /// TODO Most flippers also reduce the torque when the flipper is fully extended to avoid burning out the coil.
-///   not sure if this is distance or time based in real machines
-///   To check how this is modeled in Visual Pinball
+///   In Visual Pinball this is the "EOS" (end-of-stroke) torque damping near the end angle.
 const FLIPPER_ENABLED_TORQUE: f32 = 1.5;
-/// The flipper assembly contains a spring that pulls the flipper down when not activated.
-const FLIPPER_DISABLED_TORQUE: f32 = -0.5;
+/// Weaker torque from the return spring while the button is released.
+/// Visual Pinball models the return as the coil strength scaled by the flipper's
+/// return ratio (see `FlipperMoverObject::UpdateVelocities` in hitflipper.cpp).
+const FLIPPER_RETURN_TORQUE: f32 = 0.5;
 
-// Typical pinball flipper extents involve a maximum upward swing of about 20 degrees for each flipper,
-// and a swing of 55-60 degrees from their resting position.
-// TODO not yet wired up; angle limits are currently derived from the vpx flipper data instead.
-// const FLIPPER_MAX_UP_ANGLE: f32 = 20.0_f32.to_radians();
-// const FLIPPER_MAX_DOWN_ANGLE: f32 = 35.0_f32.to_radians();
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-enum FlipperDirection {
+/// Which player button drives a flipper. Visual Pinball does not classify flippers
+/// geometrically; its `m_direction = (end_angle >= start_angle)` flag decides which
+/// way the coil swings the bat (hitflipper.cpp), which lines up with the left/right
+/// flipper buttons for a standard table layout.
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum FlipperSide {
     Left,
     Right,
 }
@@ -32,19 +58,17 @@ enum FlipperDirection {
 struct Flipper {
     #[allow(dead_code)]
     pub name: String,
-    pub direction: FlipperDirection,
+    side: FlipperSide,
+    /// Body angle (rad) the flipper rests at when released (Visual Pinball start angle).
+    rest_angle: f32,
+    /// Body angle (rad) the flipper swings to while energised (Visual Pinball end angle).
+    active_angle: f32,
 }
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        left_flipper_movement
-            .in_set(PausableSystems)
-            .run_if(in_state(Screen::Gameplay)),
-    )
-    .add_systems(
-        Update,
-        right_flipper_movement
+        flipper_movement
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -57,33 +81,41 @@ pub(super) fn spawn_flipper(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     flipper: &vpx::gameitem::flipper::Flipper,
 ) {
-    // TODO how do we know the flipper orientation and what button they should be assigned to?
+    // Visual Pinball rests the flipper at `start_angle` and the solenoid rotates it to
+    // `end_angle`. In vpinball an angle is 0 when the flipper points up and positive
+    // angles go clockwise; in bevy 0 points right (+x) and positive angles go
+    // counter-clockwise, so the tip direction for each position converts as:
+    let rest_tip_dir = (90.0 - flipper.start_angle).to_radians();
+    let active_tip_dir = (90.0 - flipper.end_angle).to_radians();
 
-    // in vpinball an angle is 0 when the flipper is pointing up, positive angles go clockwise
-    // for bevy we want 0 to be horizontal pointing right, positive angles go counter-clockwise
-    let bevy_start_angle = (90.0 - flipper.end_angle).to_radians();
-    let bevy_end_angle = (90.0 - flipper.start_angle).to_radians();
-    // determine if we have a left or right flipper based on the angles
-    let (min_angle, max_angle, direction) = if bevy_start_angle > bevy_end_angle {
-        (bevy_start_angle, bevy_end_angle, FlipperDirection::Left)
+    // Visual Pinball's `m_direction = (end_angle >= start_angle)`: a right-hand flipper
+    // increases its angle towards the end position, a left-hand flipper decreases it.
+    let side = if flipper.end_angle >= flipper.start_angle {
+        FlipperSide::Right
     } else {
-        (bevy_end_angle, bevy_start_angle, FlipperDirection::Right)
+        FlipperSide::Left
     };
-
-    // skip right flipper for now
-    if direction == FlipperDirection::Right {
-        return;
-    }
 
     let shape_flipper = Rectangle::new(
         vpu_to_m(flipper.flipper_radius_max + flipper.end_radius / 2.0),
         0.018,
     );
 
+    // The bat is a rod pivoting at the flipper centre (its base), extending towards the
+    // tip. A left flipper's body +x axis points at the tip; a right flipper is the mirror
+    // image, pivoting on its other end. Mirroring keeps the joint's relative rotation
+    // within (-PI, PI], which is what avian's angle limits compare against.
+    let (flipper_pivot, body_turn) = match side {
+        FlipperSide::Left => (Vec2::new(-shape_flipper.half_size.x, 0.0), 0.0),
+        FlipperSide::Right => (Vec2::new(shape_flipper.half_size.x, 0.0), PI),
+    };
+    let rest_angle = normalize_angle(rest_tip_dir - body_turn);
+    let active_angle = normalize_angle(active_tip_dir - body_turn);
+    let (min_angle, max_angle) = (rest_angle.min(active_angle), rest_angle.max(active_angle));
+
     // this will be overridden by the joint transform
     // TODO place it correctly
     let base_pos = Vec2::new(0.0, -0.5);
-    let flipper_pivot = Vec2::new(-shape_flipper.half_size.x, 0.0);
 
     let anchor = parent
         .spawn((
@@ -105,7 +137,9 @@ pub(super) fn spawn_flipper(
         .spawn((
             Flipper {
                 name: flipper.name.clone(),
-                direction,
+                side,
+                rest_angle,
+                active_angle,
             },
             Name::from(format!("Flipper {}", flipper.name)),
             Mesh2d(mesh),
@@ -128,56 +162,42 @@ pub(super) fn spawn_flipper(
         RevoluteJoint::new(anchor, flipper_entity)
             .with_local_anchor1(Vec2::ZERO)
             .with_local_anchor2(flipper_pivot)
-            .with_angle_limits(max_angle, min_angle),
+            .with_angle_limits(min_angle, max_angle),
     ));
 }
 
-fn left_flipper_movement(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut flippers: Query<(Entity, &Flipper)>,
-    mut commands: Commands,
-) {
-    // TODO we could probably be smarter on the key presses
-    for (entity, _flipper) in flippers
-        .iter_mut()
-        .filter(|(_, flipper)| flipper.direction == FlipperDirection::Left)
-    {
-        if keyboard_input.pressed(KeyCode::ArrowLeft) || keyboard_input.pressed(KeyCode::ShiftLeft)
-        {
-            commands
-                .entity(entity)
-                .insert(ConstantTorque(FLIPPER_ENABLED_TORQUE));
-        } else {
-            // since gravity is not pulling enough, we force a torque in the opposite direction
-            // commands.entity(flipper).remove::<ConstantTorque>();
-            commands
-                .entity(entity)
-                .insert(ConstantTorque(FLIPPER_DISABLED_TORQUE));
-        }
-    }
+/// Wrap an angle into the (-PI, PI] range expected by the revolute joint limits.
+fn normalize_angle(angle: f32) -> f32 {
+    let wrapped = angle.rem_euclid(TAU);
+    if wrapped > PI { wrapped - TAU } else { wrapped }
 }
 
-fn right_flipper_movement(
+fn flipper_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut flippers: Query<(Entity, &Flipper)>,
+    flippers: Query<(Entity, &Flipper)>,
     mut commands: Commands,
 ) {
-    for (entity, _flipper) in flippers
-        .iter_mut()
-        .filter(|(_, flipper)| flipper.direction == FlipperDirection::Right)
-    {
-        if keyboard_input.pressed(KeyCode::ArrowRight)
-            || keyboard_input.pressed(KeyCode::ShiftRight)
-        {
-            commands
-                .entity(entity)
-                .insert(ConstantTorque(-FLIPPER_ENABLED_TORQUE));
+    for (entity, flipper) in &flippers {
+        let pressed = match flipper.side {
+            FlipperSide::Left => {
+                keyboard_input.pressed(KeyCode::ArrowLeft)
+                    || keyboard_input.pressed(KeyCode::ShiftLeft)
+            }
+            FlipperSide::Right => {
+                keyboard_input.pressed(KeyCode::ArrowRight)
+                    || keyboard_input.pressed(KeyCode::ShiftRight)
+            }
+        };
+
+        // The solenoid drives towards the active angle; when released the return spring
+        // pulls back to rest with a weaker torque. Gravity alone is not enough to hold
+        // the flipper down, so we always apply a torque towards one of the two limits.
+        let towards_active = (flipper.active_angle - flipper.rest_angle).signum();
+        let torque = if pressed {
+            towards_active * FLIPPER_ENABLED_TORQUE
         } else {
-            // since gravity is not pulling enough we force a torque in the opposite direction
-            //commands.entity(flipper).remove::<ConstantTorque>();
-            commands
-                .entity(entity)
-                .insert(ConstantTorque(-FLIPPER_DISABLED_TORQUE));
-        }
+            -towards_active * FLIPPER_RETURN_TORQUE
+        };
+        commands.entity(entity).insert(ConstantTorque(torque));
     }
 }
