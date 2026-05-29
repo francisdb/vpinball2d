@@ -9,7 +9,7 @@ bevy = { version = "0.18.1", features = ["webp", "wav", "jpeg"] }
 #bevy-inspector-egui = "0.34.0"
 avian2d = { version = "0.6.1", features = ["diagnostic_ui"] }
 vpin = "0.26.3"
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 
 # Compile out low-severity logs to improve performance.
 # Remove these features if you want to profile your game with tracy.
