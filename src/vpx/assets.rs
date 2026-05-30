@@ -30,7 +30,4 @@ impl VpxAsset {
     pub fn wall_mesh_sub_path(name: &str) -> String {
         format!("meshes/wall/{name}")
     }
-    pub fn rubber_mesh_sub_path(name: &str) -> String {
-        format!("meshes/rubber/{name}")
-    }
 }

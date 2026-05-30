@@ -149,36 +149,20 @@ impl VpxLoader {
         );
         if settings.load_meshes {
             for item in &vpx.gameitems {
-                match item {
-                    GameItemEnum::Wall(wall) => {
-                        let top_height = vpu_to_m(wall.height_top);
-                        let path = VpxAsset::wall_mesh_sub_path(&wall.name);
-                        let handle = load_mesh_2d_from_drag_points(
-                            table_size,
-                            path.clone(),
-                            &wall.drag_points,
-                            top_height,
-                            load_context,
-                        );
-                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
-                        mesh_handles.push(handle);
-                    }
-                    GameItemEnum::Rubber(rubber) => {
-                        // a rubber is presented by a ring shape formed by the rubber.drag_points
-                        // with the thickness rubber.thickness
-                        let top_height = vpu_to_m(rubber.height + rubber.thickness as f32 / 2.0);
-                        let path = VpxAsset::rubber_mesh_sub_path(&rubber.name);
-                        let handle = load_mesh_2d_from_drag_points(
-                            table_size,
-                            path.clone(),
-                            &rubber.drag_points,
-                            top_height,
-                            load_context,
-                        );
-                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
-                        mesh_handles.push(handle);
-                    }
-                    _ => {}
+                // Walls get a generated 2D mesh; rubbers build their own ring mesh at spawn
+                // time (see pinball::rubber) and other items have no generated mesh.
+                if let GameItemEnum::Wall(wall) = item {
+                    let top_height = vpu_to_m(wall.height_top);
+                    let path = VpxAsset::wall_mesh_sub_path(&wall.name);
+                    let handle = load_mesh_2d_from_drag_points(
+                        table_size,
+                        path.clone(),
+                        &wall.drag_points,
+                        top_height,
+                        load_context,
+                    );
+                    named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                    mesh_handles.push(handle);
                 }
             }
         }
