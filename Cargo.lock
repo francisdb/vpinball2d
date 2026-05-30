@@ -2908,7 +2908,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5df2ba84018d80c213569363bdcd0c64e6933c67fe4c1d60ecf822971a3c35e"
 dependencies = [
  "color_quant",
- "weezl",
+ "weezl 0.1.12",
 ]
 
 [[package]]
@@ -5746,7 +5746,9 @@ dependencies = [
 
 [[package]]
 name = "vpin"
-version = "0.26.3"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d6e915d7460b1edb276633a192b663c77536f39fdf1f3f1eb00cf2a88a2d71"
 dependencies = [
  "byteorder",
  "bytes",
@@ -5766,7 +5768,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "wavefront-obj-io",
- "weezl",
+ "weezl 0.2.1",
 ]
 
 [[package]]
@@ -6009,6 +6011,12 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "weezl"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4ca08e5ef825b65b056d9efbd95c8750683f0a6d0466d02e96dc2e4e360f3d2"
 
 [[package]]
 name = "wgpu"

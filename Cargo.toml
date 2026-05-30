@@ -8,9 +8,7 @@ edition = "2024"
 bevy = { version = "0.18.1", features = ["webp", "wav", "jpeg"] }
 #bevy-inspector-egui = "0.34.0"
 avian2d = { version = "0.6.1", features = ["diagnostic_ui"] }
-# Local path while we extend vpin with a public drag-point smoothing helper.
-# TODO switch back to a crates.io release once smooth_drag_points_2d is published.
-vpin = { path = "../vpin" }
+vpin = "0.26.4"
 thiserror = "2.0.18"
 
 # Compile out low-severity logs to improve performance.
