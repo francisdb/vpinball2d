@@ -241,29 +241,23 @@ async fn load_sound(
 fn load_mesh_2d_from_drag_points(
     table_size: Vec2,
     label: String,
-    drag_points: &Vec<DragPoint>,
+    drag_points: &[DragPoint],
     top_height: f32,
     load_context: &mut LoadContext<'_>,
 ) -> Handle<Mesh> {
-    // Generate vertices for top face (all with the same height)
-    let num_points = drag_points.len();
+    // Round the outline like Visual Pinball: smooth the drag points with the same
+    // Catmull-Rom spline VPX uses for wall/rubber meshes (closed loop, max accuracy 4.0).
+    // The smoothed points are in vpx units, like the raw drag-point coordinates.
+    let smoothed = vpin::vpx::smooth_drag_points_2d(drag_points, 4.0, true);
+    let num_points = smoothed.len();
     let mut positions = Vec::with_capacity(num_points);
-    let mut normals = Vec::with_capacity(num_points);
     let mut uvs = Vec::with_capacity(num_points);
 
-    for point in drag_points {
+    for (x, y) in &smoothed {
         // Position (x, top_height, y) -> Bevy uses y-up
-        positions.push([vpu_to_m(point.x), -vpu_to_m(point.y), top_height]);
-        // Normal points up for the top face
-        normals.push([0.0, 0.0, 1.0]);
-        if point.has_auto_texture {
-            uvs.push([point.x / table_size.x, point.y / table_size.y]);
-        } else {
-            warn!(
-                "Handle non-auto texture coordinates for mesh generation, should we use tex_coord?"
-            );
-            uvs.push([point.x, point.y]);
-        }
+        positions.push([vpu_to_m(*x), -vpu_to_m(*y), top_height]);
+        // Wall top textures use table-space UVs (auto texture coordinates).
+        uvs.push([x / table_size.x, y / table_size.y]);
     }
 
     // Triangulate the polygon using ear clipping (works for any polygon)
