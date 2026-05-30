@@ -27,9 +27,10 @@
 use crate::PausableSystems;
 use crate::screens::Screen;
 use avian2d::prelude::*;
+use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::mesh::Mesh;
+use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 use core::f32::consts::{PI, TAU};
 use vpin::vpx;
@@ -43,6 +44,9 @@ const FLIPPER_ENABLED_TORQUE: f32 = 1.5;
 /// Visual Pinball models the return as the coil strength scaled by the flipper's
 /// return ratio (see `FlipperMoverObject::UpdateVelocities` in hitflipper.cpp).
 const FLIPPER_RETURN_TORQUE: f32 = 0.5;
+
+/// Number of segments used to sample each circular arc of the flipper outline.
+const FLIPPER_ARC_SEGMENTS: usize = 16;
 
 #[derive(Component)]
 struct Flipper {
@@ -81,44 +85,57 @@ pub(super) fn spawn_flipper(
     // increases its angle towards the end position, a left-hand flipper decreases it.
     let right_hand = flipper.end_angle >= flipper.start_angle;
 
-    let shape_flipper = Rectangle::new(
-        vpu_to_m(flipper.flipper_radius_max + flipper.end_radius / 2.0),
-        0.018,
+    // Flipper geometry from the VPX radii: a base circle at the pivot and a smaller end
+    // circle `flipper_radius_max` away, joined by their outer tangent lines. The rubber
+    // band is the outer outline (the ball contact surface); the bat is the same outline
+    // inset by the rubber thickness. Both share the pivot, so the bat rotates with it.
+    let length = vpu_to_m(flipper.flipper_radius_max);
+    let base_radius = vpu_to_m(flipper.base_radius);
+    let end_radius = vpu_to_m(flipper.end_radius);
+    let rubber_thickness = vpu_to_m(
+        flipper
+            .rubber_thickness
+            .unwrap_or(flipper.rubber_thickness_int as f32),
     );
 
-    // The bat is a rod pivoting at the flipper centre (its base), extending towards the
-    // tip. A left flipper's body +x axis points at the tip; a right flipper is the mirror
-    // image, pivoting on its other end. Mirroring keeps the joint's relative rotation
-    // within (-PI, PI], which is what avian's angle limits compare against.
-    let (flipper_pivot, body_turn) = if right_hand {
-        (Vec2::new(shape_flipper.half_size.x, 0.0), PI)
-    } else {
-        (Vec2::new(-shape_flipper.half_size.x, 0.0), 0.0)
-    };
+    // The bat extends towards the tip along the body's +x axis; a right-hand flipper is the
+    // mirror image (tip towards -x). Mirroring keeps the joint's relative rotation within
+    // (-PI, PI], which is what avian's angle limits compare against.
+    let body_turn = if right_hand { PI } else { 0.0 };
+    let rubber_outline = flipper_outline(base_radius, end_radius, length, right_hand);
+    let bat_outline = flipper_outline(
+        base_radius - rubber_thickness,
+        end_radius - rubber_thickness,
+        length,
+        right_hand,
+    );
+
     let rest_angle = normalize_angle(rest_tip_dir - body_turn);
     let active_angle = normalize_angle(active_tip_dir - body_turn);
     let (min_angle, max_angle) = (rest_angle.min(active_angle), rest_angle.max(active_angle));
 
-    // this will be overridden by the joint transform
-    // TODO place it correctly
-    let base_pos = Vec2::new(0.0, -0.5);
+    // World position of the flipper pivot (its centre in the table).
+    let anchor_pos = Vec2::new(
+        vpx_to_bevy_transform.translation.x + vpu_to_m(flipper.center.x),
+        vpx_to_bevy_transform.translation.y - vpu_to_m(flipper.center.y),
+    );
 
+    // The anchor is the static body the joint pivots around; it has no visual.
     let anchor = parent
         .spawn((
             Name::from(format!("Flipper {} Anchor", flipper.name)),
-            Mesh2d(meshes.add(Mesh::from(Circle::new(0.005)))),
-            MeshMaterial2d(materials.add(ColorMaterial::from(Color::from(css::YELLOW)))),
             RigidBody::Static,
-            Transform::from_xyz(
-                vpx_to_bevy_transform.translation.x + vpu_to_m(flipper.center.x),
-                vpx_to_bevy_transform.translation.y - vpu_to_m(flipper.center.y),
-                0.1, // TODO use flipper.height
-            ),
+            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.0),
         ))
         .id();
 
-    let mesh = meshes.add(Mesh::from(shape_flipper));
-    let material = materials.add(ColorMaterial::from(Color::from(css::ANTIQUE_WHITE)));
+    let rubber_collider = Collider::convex_hull(rubber_outline.clone())
+        .expect("flipper rubber outline should form a valid convex hull");
+    let rubber_mesh = meshes.add(convex_mesh(&rubber_outline));
+    let rubber_material = materials.add(ColorMaterial::from(Color::from(css::RED)));
+    let bat_mesh = meshes.add(convex_mesh(&bat_outline));
+    let bat_material = materials.add(ColorMaterial::from(Color::from(css::ANTIQUE_WHITE)));
+
     let flipper_entity = parent
         .spawn((
             Flipper {
@@ -127,18 +144,24 @@ pub(super) fn spawn_flipper(
                 active_angle,
             },
             Name::from(format!("Flipper {}", flipper.name)),
-            Mesh2d(mesh),
-            MeshMaterial2d(material),
+            // the rubber band is the outer shape and the ball contact surface
+            Mesh2d(rubber_mesh),
+            MeshMaterial2d(rubber_material),
             RigidBody::Dynamic,
-            Collider::rectangle(
-                shape_flipper.half_size.x * 2.0,
-                shape_flipper.half_size.y * 2.0,
-            ),
+            rubber_collider,
             //SleepingDisabled,
             Mass::from(1.0),
-            // flippers have rubbers that make them bouncy
+            // the rubber makes the flipper bouncy
             Restitution::from(0.4),
-            Transform::from_xyz(base_pos.x, base_pos.y, 0.0),
+            // start at the pivot so the body never overlaps the ball at the world origin
+            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.0),
+        ))
+        // the rigid bat sits just above the rubber and moves with it
+        .with_child((
+            Name::from(format!("Flipper {} Bat", flipper.name)),
+            Mesh2d(bat_mesh),
+            MeshMaterial2d(bat_material),
+            Transform::from_xyz(0.0, 0.0, 0.01),
         ))
         .id();
 
@@ -146,7 +169,8 @@ pub(super) fn spawn_flipper(
         Name::from(format!("Flipper {} Joint", flipper.name)),
         RevoluteJoint::new(anchor, flipper_entity)
             .with_local_anchor1(Vec2::ZERO)
-            .with_local_anchor2(flipper_pivot)
+            // the flipper's base circle is centred on the body origin, which is the pivot
+            .with_local_anchor2(Vec2::ZERO)
             .with_angle_limits(min_angle, max_angle),
     ));
 }
@@ -155,6 +179,51 @@ pub(super) fn spawn_flipper(
 fn normalize_angle(angle: f32) -> f32 {
     let wrapped = angle.rem_euclid(TAU);
     if wrapped > PI { wrapped - TAU } else { wrapped }
+}
+
+/// Outline of a flipper as a convex polygon, with the base circle centred on the pivot
+/// (origin) and the end circle `length` away along +x (or -x when `mirror` is set, for a
+/// right-hand flipper). The two circles are joined by their outer tangent lines, matching
+/// Visual Pinball's flipper footprint.
+fn flipper_outline(base_radius: f32, end_radius: f32, length: f32, mirror: bool) -> Vec<Vec2> {
+    // Angle of the outer tangent's normal from the +x axis (VPX's "fix angle").
+    let psi = ((base_radius - end_radius) / length).clamp(-1.0, 1.0).acos();
+    let mut points = Vec::with_capacity(2 * (FLIPPER_ARC_SEGMENTS + 1));
+    // Base major arc: from one tangent point around the back to the other.
+    for i in 0..=FLIPPER_ARC_SEGMENTS {
+        let t = psi + (TAU - 2.0 * psi) * (i as f32 / FLIPPER_ARC_SEGMENTS as f32);
+        points.push(Vec2::new(base_radius * t.cos(), base_radius * t.sin()));
+    }
+    // End minor arc: around the tip.
+    for i in 0..=FLIPPER_ARC_SEGMENTS {
+        let t = -psi + (2.0 * psi) * (i as f32 / FLIPPER_ARC_SEGMENTS as f32);
+        points.push(Vec2::new(length + end_radius * t.cos(), end_radius * t.sin()));
+    }
+    if mirror {
+        // Mirror across x and reverse to keep the winding counter-clockwise.
+        for p in &mut points {
+            p.x = -p.x;
+        }
+        points.reverse();
+    }
+    points
+}
+
+/// Triangulate a convex, counter-clockwise polygon into a bevy mesh as a triangle fan.
+fn convex_mesh(points: &[Vec2]) -> Mesh {
+    let positions: Vec<[f32; 3]> = points.iter().map(|p| [p.x, p.y, 0.0]).collect();
+    let normals = vec![[0.0, 0.0, 1.0]; points.len()];
+    let uvs = vec![[0.0, 0.0]; points.len()];
+    let mut indices = Vec::new();
+    for i in 1..points.len() as u32 - 1 {
+        indices.extend_from_slice(&[0, i, i + 1]);
+    }
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
 }
 
 fn flipper_movement(
