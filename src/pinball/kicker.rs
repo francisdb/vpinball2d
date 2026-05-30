@@ -80,7 +80,6 @@ pub(super) fn spawn_kicker(
 #[allow(clippy::too_many_arguments)]
 fn handle_drain(
     mut collision_reader: MessageReader<CollisionStart>,
-    name_query: Query<&Name>,
     ball_query: Query<&Ball>,
     kicker_query: Query<(Entity, &Kicker, &Transform)>,
     sounds: Res<DrainSounds>,
@@ -91,23 +90,11 @@ fn handle_drain(
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {
     for collision in collision_reader.read() {
-        // body1/body2 are None when a collider has no associated rigid body
-        let (Some(entity_a), Some(entity_b)) = (collision.body1, collision.body2) else {
-            let name_of = |entity| {
-                name_query
-                    .get(entity)
-                    .map(|name| name.to_string())
-                    .unwrap_or_else(|_| format!("{entity:?}"))
-            };
-            warn!(
-                "Ignoring collision with a collider that has no rigid body: collider1={} (body1={:?}), collider2={} (body2={:?})",
-                name_of(collision.collider1),
-                collision.body1,
-                name_of(collision.collider2),
-                collision.body2
-            );
-            continue;
-        };
+        // Match on the collider entities, not body1/body2: a kicker is a sensor without a
+        // rigid body, so its body is None. The Ball and Kicker components live on the same
+        // entities as their colliders.
+        let entity_a = collision.collider1;
+        let entity_b = collision.collider2;
 
         let ball_a = ball_query.get(entity_a).ok();
         let ball_b = ball_query.get(entity_b).ok();
