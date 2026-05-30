@@ -1,4 +1,4 @@
-use crate::audio::spatial_sound_effect;
+use crate::audio::play_sound_at;
 use crate::pinball::ball::{Ball, ball as spawn_ball};
 use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
@@ -11,7 +11,6 @@ use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
 use bevy::prelude::*;
-use rand::Rng;
 use vpin::vpx;
 use vpin::vpx::units::vpu_to_m;
 
@@ -123,12 +122,13 @@ fn handle_drain(
 
         info!("Ball {} drained!", ball.id);
         // play a drain sound at the kicker location
-        if let Some(name) = pick(&sounds.drain) {
-            let handle = load_sound(&table_assets, &assets_vpx, name);
-            commands
-                .entity(drain_kicker_entity)
-                .with_child(spatial_sound_effect(handle));
-        }
+        play_sound_at(
+            &mut commands,
+            &table_assets,
+            &assets_vpx,
+            drain_kicker_entity,
+            &sounds.drain,
+        );
 
         commands.entity(ball_entity).despawn();
 
@@ -138,12 +138,13 @@ fn handle_drain(
             .find(|(_, k, _)| k.name == "BallRelease")
             .expect("BallRelease kicker not found");
 
-        if let Some(name) = pick(&sounds.release) {
-            let handle = load_sound(&table_assets, &assets_vpx, name);
-            commands
-                .entity(eject_kicker_entity)
-                .with_child(spatial_sound_effect(handle));
-        }
+        play_sound_at(
+            &mut commands,
+            &table_assets,
+            &assets_vpx,
+            eject_kicker_entity,
+            &sounds.release,
+        );
 
         // TODO we want to delay the kick
         // TODO get rid off all these dependencies to spawn a new ball
@@ -159,28 +160,4 @@ fn handle_drain(
             },
         ));
     }
-}
-
-/// Pick a random sound name from the list, or `None` when the list is empty.
-fn pick(names: &[String]) -> Option<&str> {
-    if names.is_empty() {
-        return None;
-    }
-    let index = rand::rng().random_range(0..names.len());
-    Some(&names[index])
-}
-
-/// Load a named sound from the loaded table asset.
-fn load_sound(
-    table_assets: &Res<TableAssets>,
-    assets_vpx: &Res<Assets<VpxAsset>>,
-    name: &str,
-) -> Handle<AudioSource> {
-    assets_vpx
-        .get(&table_assets.vpx)
-        .unwrap()
-        .named_sounds
-        .get(name)
-        .unwrap_or_else(|| panic!("Sound {name} not found"))
-        .clone()
 }

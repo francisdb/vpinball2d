@@ -1,7 +1,10 @@
 //! Visual Pinball example table, re-implemented in Rust.
 //!
-//! Drain/release behaviour is generic and configured declaratively via [`DrainSounds`].
+//! Behaviour is generic and configured declaratively via the sound resources
+//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`]).
 
+use crate::pinball::bumper::BumperSounds;
+use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
 use crate::pinball::wall::Wall;
 use bevy::prelude::*;
@@ -10,6 +13,13 @@ pub(super) fn plugin(app: &mut App) {
     app.insert_resource(DrainSounds {
         drain: vec!["drain".to_string()],
         release: vec!["ballrelease".to_string()],
+    });
+    app.insert_resource(FlipperSounds {
+        up: vec!["fx_Flipperup".to_string()],
+        down: vec!["fx_Flipperdown".to_string()],
+    });
+    app.insert_resource(BumperSounds {
+        hit: vec!["fx_bumper4".to_string()],
     });
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),

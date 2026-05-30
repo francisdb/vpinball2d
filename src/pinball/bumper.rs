@@ -7,9 +7,9 @@ use avian2d::prelude::*;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
 
+use crate::audio::play_sound_at;
 use crate::screens::Screen;
 use bevy::sprite_render::AlphaMode2d;
-use rand::Rng;
 use vpin::vpx::gameitem;
 use vpin::vpx::units::vpu_to_m;
 
@@ -25,6 +25,13 @@ pub(super) fn plugin(app: &mut App) {
 #[derive(Component)]
 struct Bumper {
     force: Scalar,
+}
+
+/// Sounds a table plays when a bumper is hit. A random entry is picked. A table enables
+/// bumper sounds by inserting this resource.
+#[derive(Resource, Default)]
+pub struct BumperSounds {
+    pub hit: Vec<String>,
 }
 
 pub(super) fn spawn_bumper(
@@ -131,11 +138,13 @@ pub(super) fn spawn_bumper(
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_bumper_collisions(
     bumper_query: Query<(Entity, &Bumper, &Transform)>,
     mut ball_query: Query<(&Transform, Forces), With<Ball>>,
     mut contact_events: MessageReader<CollisionStart>,
     mut commands: Commands,
+    sounds: Option<Res<BumperSounds>>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {
@@ -144,40 +153,15 @@ fn handle_bumper_collisions(
             if let (Some(h1), Some(h2)) = (contact_event.body1, contact_event.body2)
                 && (h1 == bumper_entity || h2 == bumper_entity)
             {
-                let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-
-                // jpsalas table
-                let bumper_sound = vpx_asset.named_sounds.get("fx_Bumper").or_else(|| {
-                    // vpx example tables use fx_bumper1 to fx_bumper4
-
-                    // example table
-                    // random sound number between 1 and 4
-                    // TODO we might want to store these handles in a resource to avoid looking them up every time
-                    let sound_index = rand::rng().random_range(1..=4);
-                    let vpx_sound = vpx_asset
-                        .named_sounds
-                        .get(format!("fx_bumper{sound_index}").as_str());
-
-                    // tna table
-                    // random sound number between 1 and 7
-                    // TODO we might want to store these handles in a resource to avoid looking them up every time
-                    let sound_index = rand::rng().random_range(1..=7);
-                    let tna_sound = vpx_asset
-                        .named_sounds
-                        .get(format!("SY_TNA_REV03_Pop_Bumper_{sound_index}").as_str());
-
-                    vpx_sound.or(tna_sound)
-                });
-
-                if let Some(sound_ball_collision) = bumper_sound {
-                    commands.spawn((
-                        AudioPlayer::new(sound_ball_collision.clone()),
-                        PlaybackSettings::ONCE.with_spatial(true),
-                        //.with_volume(Volume::Linear(volume)),
-                        Transform::from_translation(bumper_transform.translation),
-                    ));
-                } else {
-                    warn!("Bumper sound fx_bumper not found");
+                // play a bumper hit sound at the bumper
+                if let Some(sounds) = &sounds {
+                    play_sound_at(
+                        &mut commands,
+                        &table_assets,
+                        &assets_vpx,
+                        bumper_entity,
+                        &sounds.hit,
+                    );
                 }
 
                 // Apply outward pulse to the ball

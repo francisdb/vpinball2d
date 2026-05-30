@@ -1,4 +1,7 @@
+use crate::pinball::table::TableAssets;
+use crate::vpx::VpxAsset;
 use bevy::prelude::*;
+use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -42,6 +45,46 @@ pub fn spatial_sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
         // TODO not sure if this works correctly or if this needs to be a global transform
         Transform::default(),
     )
+}
+
+/// Pick a random sound name from the list, or `None` when the list is empty.
+pub(crate) fn pick_sound(names: &[String]) -> Option<&str> {
+    if names.is_empty() {
+        return None;
+    }
+    let index = rand::rng().random_range(0..names.len());
+    Some(&names[index])
+}
+
+/// Load a named sound from the loaded table asset.
+pub(crate) fn load_sound(
+    table_assets: &TableAssets,
+    assets_vpx: &Assets<VpxAsset>,
+    name: &str,
+) -> Handle<AudioSource> {
+    assets_vpx
+        .get(&table_assets.vpx)
+        .unwrap()
+        .named_sounds
+        .get(name)
+        .unwrap_or_else(|| panic!("Sound {name} not found"))
+        .clone()
+}
+
+/// Play a random sound from `names` (if any) as a spatial child of `entity`.
+pub(crate) fn play_sound_at(
+    commands: &mut Commands,
+    table_assets: &TableAssets,
+    assets_vpx: &Assets<VpxAsset>,
+    entity: Entity,
+    names: &[String],
+) {
+    if let Some(name) = pick_sound(names) {
+        let handle = load_sound(table_assets, assets_vpx, name);
+        commands
+            .entity(entity)
+            .with_child(spatial_sound_effect(handle));
+    }
 }
 
 /// [`GlobalVolume`] doesn't apply to already-running audio entities, so this system will update them.

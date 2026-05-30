@@ -25,7 +25,10 @@
 //! angle limits compare against (`rotation_difference` comes from `Rotation::angle_between`).
 
 use crate::PausableSystems;
+use crate::audio::play_sound_at;
+use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
+use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::css;
@@ -56,6 +59,16 @@ struct Flipper {
     rest_angle: f32,
     /// Body angle (rad) the flipper swings to while energised (Visual Pinball end angle).
     active_angle: f32,
+    /// Whether the flipper button was held last frame, for sound edge detection.
+    pressed: bool,
+}
+
+/// Sounds a table plays when a flipper energises (`up`) or returns (`down`). A random
+/// entry is picked. A table enables flipper sounds by inserting this resource.
+#[derive(Resource, Default)]
+pub struct FlipperSounds {
+    pub up: Vec<String>,
+    pub down: Vec<String>,
 }
 
 pub(super) fn plugin(app: &mut App) {
@@ -148,6 +161,7 @@ pub(super) fn spawn_flipper(
                 name: flipper.name.clone(),
                 rest_angle,
                 active_angle,
+                pressed: false,
             },
             Name::from(format!("Flipper {}", flipper.name)),
             // the rubber band is the outer shape and the ball contact surface
@@ -261,10 +275,13 @@ fn material_color(materials: &[vpx::material::Material], name: &str, fallback: C
 
 fn flipper_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    flippers: Query<(Entity, &Flipper)>,
+    mut flippers: Query<(Entity, &mut Flipper)>,
+    sounds: Option<Res<FlipperSounds>>,
+    table_assets: Option<Res<TableAssets>>,
+    assets_vpx: Res<Assets<VpxAsset>>,
     mut commands: Commands,
 ) {
-    for (entity, flipper) in &flippers {
+    for (entity, mut flipper) in &mut flippers {
         // The solenoid drives towards the active angle, so the sign of the swing tells us
         // which way the flipper turns: a counter-clockwise (positive) swing is a left-hand
         // flipper, a clockwise (negative) one is right-hand. Visual Pinball has no left/right
@@ -287,5 +304,14 @@ fn flipper_movement(
             -towards_active * FLIPPER_RETURN_TORQUE
         };
         commands.entity(entity).insert(ConstantTorque(torque));
+
+        // Play the up/down sound on a button-state edge.
+        if pressed != flipper.pressed
+            && let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets)
+        {
+            let names = if pressed { &sounds.up } else { &sounds.down };
+            play_sound_at(&mut commands, table_assets, &assets_vpx, entity, names);
+        }
+        flipper.pressed = pressed;
     }
 }
