@@ -73,6 +73,7 @@ pub(super) fn spawn_flipper(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     flipper: &vpx::gameitem::flipper::Flipper,
+    vpx_materials: &[vpx::material::Material],
 ) {
     // Visual Pinball rests the flipper at `start_angle` and the solenoid rotates it to
     // `end_angle`. In vpinball an angle is 0 when the flipper points up and positive
@@ -131,10 +132,15 @@ pub(super) fn spawn_flipper(
 
     let rubber_collider = Collider::convex_hull(rubber_outline.clone())
         .expect("flipper rubber outline should form a valid convex hull");
+    // Resolve the rubber and bat colours from the table materials, falling back to the
+    // usual red rubber / off-white bat when the named material is missing.
+    let rubber_color = material_color(vpx_materials, &flipper.rubber_material, css::RED.into());
+    let bat_color = material_color(vpx_materials, &flipper.material, css::ANTIQUE_WHITE.into());
+
     let rubber_mesh = meshes.add(convex_mesh(&rubber_outline));
-    let rubber_material = materials.add(ColorMaterial::from(Color::from(css::RED)));
+    let rubber_material = materials.add(ColorMaterial::from(rubber_color));
     let bat_mesh = meshes.add(convex_mesh(&bat_outline));
-    let bat_material = materials.add(ColorMaterial::from(Color::from(css::ANTIQUE_WHITE)));
+    let bat_material = materials.add(ColorMaterial::from(bat_color));
 
     let flipper_entity = parent
         .spawn((
@@ -187,7 +193,9 @@ fn normalize_angle(angle: f32) -> f32 {
 /// Visual Pinball's flipper footprint.
 fn flipper_outline(base_radius: f32, end_radius: f32, length: f32, mirror: bool) -> Vec<Vec2> {
     // Angle of the outer tangent's normal from the +x axis (VPX's "fix angle").
-    let psi = ((base_radius - end_radius) / length).clamp(-1.0, 1.0).acos();
+    let psi = ((base_radius - end_radius) / length)
+        .clamp(-1.0, 1.0)
+        .acos();
     let mut points = Vec::with_capacity(2 * (FLIPPER_ARC_SEGMENTS + 1));
     // Base major arc: from one tangent point around the back to the other.
     for i in 0..=FLIPPER_ARC_SEGMENTS {
@@ -197,7 +205,10 @@ fn flipper_outline(base_radius: f32, end_radius: f32, length: f32, mirror: bool)
     // End minor arc: around the tip.
     for i in 0..=FLIPPER_ARC_SEGMENTS {
         let t = -psi + (2.0 * psi) * (i as f32 / FLIPPER_ARC_SEGMENTS as f32);
-        points.push(Vec2::new(length + end_radius * t.cos(), end_radius * t.sin()));
+        points.push(Vec2::new(
+            length + end_radius * t.cos(),
+            end_radius * t.sin(),
+        ));
     }
     if mirror {
         // Mirror across x and reverse to keep the winding counter-clockwise.
@@ -218,12 +229,34 @@ fn convex_mesh(points: &[Vec2]) -> Mesh {
     for i in 1..points.len() as u32 - 1 {
         indices.extend_from_slice(&[0, i, i + 1]);
     }
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
     mesh
+}
+
+/// Look up a VPX material by name and return its base colour, or `fallback` when the name
+/// is empty or the material is missing from the table.
+fn material_color(materials: &[vpx::material::Material], name: &str, fallback: Color) -> Color {
+    if name.is_empty() {
+        return fallback;
+    }
+    materials
+        .iter()
+        .find(|m| m.name == name)
+        .map(|m| {
+            let c = m.base_color;
+            Srgba::rgb_u8(c.r, c.g, c.b).into()
+        })
+        .unwrap_or_else(|| {
+            warn!("Flipper material '{name}' not found, using default color");
+            fallback
+        })
 }
 
 fn flipper_movement(
