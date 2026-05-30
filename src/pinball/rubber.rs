@@ -36,12 +36,13 @@ pub(super) fn spawn_rubber(
         return;
     }
 
-    // Centerline of the band from the drag points, in bevy coordinates.
-    let centerline: Vec<Vec2> = rubber
-        .drag_points
-        .iter()
-        .map(|dp| Vec2::new(vpu_to_m(dp.x), -vpu_to_m(dp.y)))
-        .collect();
+    // Centerline of the band, smoothed with the same Catmull-Rom spline VPX uses for
+    // rubber/wall meshes (closed loop, max accuracy 4.0), then converted to bevy coords.
+    let centerline: Vec<Vec2> =
+        vpin::vpx::mesh::smooth_drag_points_2d(&rubber.drag_points, 4.0, true)
+            .iter()
+            .map(|(x, y)| Vec2::new(vpu_to_m(*x), -vpu_to_m(*y)))
+            .collect();
     if centerline.len() < 3 {
         return;
     }
