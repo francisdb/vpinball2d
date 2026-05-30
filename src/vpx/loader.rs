@@ -248,7 +248,7 @@ fn load_mesh_2d_from_drag_points(
     // Round the outline like Visual Pinball: smooth the drag points with the same
     // Catmull-Rom spline VPX uses for wall/rubber meshes (closed loop, max accuracy 4.0).
     // The smoothed points are in vpx units, like the raw drag-point coordinates.
-    let smoothed = vpin::vpx::smooth_drag_points_2d(drag_points, 4.0, true);
+    let smoothed = vpin::vpx::mesh::smooth_drag_points_2d(drag_points, 4.0, true);
     let num_points = smoothed.len();
     let mut positions = Vec::with_capacity(num_points);
     let mut uvs = Vec::with_capacity(num_points);
