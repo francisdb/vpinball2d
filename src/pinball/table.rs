@@ -2,6 +2,7 @@
 
 use crate::asset_tracking::LoadResource;
 use crate::pinball::TablePath;
+use crate::pinball::playfield::playfield;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -35,16 +36,6 @@ pub(crate) fn table(
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-    let playfield_image = vpx_asset
-        .named_images
-        .get(vpx_asset.raw.gamedata.image.as_str())
-        .unwrap();
-    let playfield_material = materials.add(ColorMaterial {
-        //color: css::WHITE.into(),
-        alpha_mode: AlphaMode2d::Opaque,
-        texture: Some(playfield_image.clone()),
-        ..default()
-    });
     let default_wall_material = materials.add(ColorMaterial {
         color: css::BLACK.into(),
         alpha_mode: AlphaMode2d::Opaque,
@@ -104,10 +95,6 @@ pub(crate) fn table(
     let backglass_height = table_depth_m;
     let backglass_mesh = Mesh::from(Rectangle::new(backglass_width, backglass_height));
 
-    // TODO if there is a primitive named "playfield_mesh" we should use that mesh instead.
-    //   eg this is used where the playfield has holes. Not sure this makes sense for 2D though.
-    let playfield_mesh = meshes.add(Rectangle::new(table_width_m, table_depth_m));
-
     (
         Table,
         Name::from("Table"),
@@ -126,12 +113,7 @@ pub(crate) fn table(
                 MeshMaterial2d(materials.add(Color::from(css::RED))),
                 Transform::from_xyz(0.0, 0.0, 1.0),
             ),
-            (
-                Name::from("Playfield"),
-                Mesh2d(playfield_mesh),
-                MeshMaterial2d(playfield_material),
-                Transform::from_xyz(0.0, 0.0, 0.0),
-            ),
+            playfield(vpx_asset, meshes, materials),
             (
                 Name::from("Bottom Wall"),
                 Mesh2d(meshes.add(Rectangle::new(

@@ -14,6 +14,7 @@ mod kicker;
 pub mod level;
 mod light;
 mod nudge;
+pub mod playfield;
 mod plunger;
 mod rubber;
 mod scripts;
