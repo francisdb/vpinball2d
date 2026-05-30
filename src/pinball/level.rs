@@ -138,7 +138,6 @@ pub fn spawn_level(
                     vpx_to_bevy_transform,
                     parent,
                     rubber,
-                    vpx_asset,
                 ),
                 GameItemEnum::Plunger(plunger) => spawn_plunger(
                     &mut meshes,
