@@ -9,6 +9,7 @@ use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem::wall;
+use vpin::vpx::units::vpu_to_m;
 
 #[derive(Component)]
 pub struct Wall {
@@ -57,10 +58,15 @@ pub(super) fn spawn_wall(
     let wall_component = Wall {
         name: wall.name.clone(),
     };
-    // A wall above the ball height is just visual
-    // A wall that is below the playfield can't collide with the ball
-    //   one example is the hole for the trigger wire where there is a bottom wall and the sides walls that reach to playfield
-    if wall.is_collidable && wall.height_bottom < BALL_RADIUS_M * 2.0 && wall.height_top > 0.0 {
+    // A wall collides with the ball when its vertical span reaches into the ball's height.
+    // VPX wall heights are in vpu, so convert to metres before comparing with the ball size.
+    //   - height_bottom below the ball top: not floating above the ball (e.g. raised plastics
+    //     at 50 vpu sit at the ball top and stay visual; slingshot guides at 30 vpu collide)
+    //   - height_top above the playfield: not sunk below it (e.g. the trigger wire hole)
+    if wall.is_collidable
+        && vpu_to_m(wall.height_bottom) < BALL_RADIUS_M * 2.0
+        && wall.height_top > 0.0
+    {
         let mesh = meshes.get(mesh_handle).unwrap();
         let collider = mesh_collider(mesh);
         parent.spawn((
