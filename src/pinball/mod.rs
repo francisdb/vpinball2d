@@ -48,5 +48,6 @@ pub(super) fn plugin(app: &mut App) {
         plunger::plugin,
         nudge::plugin,
         flipper::plugin,
+        kicker::plugin,
     ));
 }

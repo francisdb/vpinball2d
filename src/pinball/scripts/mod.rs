@@ -4,8 +4,6 @@
 //! For now however we re-implement the script in Rust directly as a proof of concept.
 
 use crate::pinball::TablePath;
-use crate::pinball::table::TableAssets;
-use crate::vpx::VpxAsset;
 use bevy::prelude::*;
 
 mod example_table;
@@ -28,18 +26,4 @@ pub(super) fn plugin(app: &mut App) {
             warn!("No script available for table file: {}", other);
         }
     }
-}
-
-pub(super) fn load_sound(
-    table_assets: &Res<TableAssets>,
-    assets_vpx: &Res<Assets<VpxAsset>>,
-    name: &str,
-) -> Handle<AudioSource> {
-    assets_vpx
-        .get(&table_assets.vpx)
-        .unwrap()
-        .named_sounds
-        .get(name)
-        .unwrap_or_else(|| panic!("Sound {name} not found"))
-        .clone()
 }
