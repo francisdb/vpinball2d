@@ -213,9 +213,12 @@ fn slingshot_center(drag_points: &[DragPoint], transform: Transform) -> Vec2 {
     transform.translation.truncate() + mean
 }
 
-/// When a ball hits a slingshot fast enough, kick it back out along the outward direction
-/// (from the slingshot centre towards the ball). Mirrors vpinball's `LineSegSlingshot`:
-/// reflect happens via the static collider; this adds the extra slingshot impulse.
+/// When a ball hits a slingshot fast enough, kick it back out. The kick direction comes
+/// from the slingshot's own deformation: a real slingshot's solenoid bulges the rubber
+/// band into a triangle pointing the way it throws the ball, so we kick along
+/// `flexed_rubber_centre - rest_rubber_centre`. The magnitude is a constant impulse above
+/// the speed threshold (a solenoid fires the same each time), tuned via the scale consts.
+/// Falls back to "slingshot centre -> ball" when the table has no rubber animation mapping.
 #[allow(clippy::too_many_arguments)]
 fn handle_slingshot_collisions(
     mut collision_reader: MessageReader<CollisionStart>,
@@ -249,39 +252,57 @@ fn handle_slingshot_collisions(
             continue;
         };
 
+        // The rest/flexed rubbers (if the table maps them) drive both the kick direction
+        // and the flex animation.
+        let anim = animations
+            .as_ref()
+            .and_then(|a| a.0.iter().find(|a| a.slingshot == slingshot.name));
+        let rubber_entity =
+            |name: &str| rubbers.iter().find(|(_, r)| r.name == name).map(|(e, _)| e);
+        let rest_flexed =
+            anim.and_then(|a| Some((rubber_entity(&a.rest)?, rubber_entity(&a.flexed)?)));
+
+        // Kick direction: from the rest rubber towards the flexed (extended) one, i.e. the
+        // way the band bulges. Fall back to centre -> ball when there is no mapping.
         let ball_pos = ball_transform.translation.truncate();
-        let outward = (ball_pos - slingshot.center).normalize_or_zero();
+        let outward = rest_flexed
+            .and_then(|(rest, flexed)| {
+                let rest_c = rubbers.get(rest).ok()?.1.center;
+                let flexed_c = rubbers.get(flexed).ok()?.1.center;
+                (flexed_c - rest_c).try_normalize()
+            })
+            .unwrap_or_else(|| (ball_pos - slingshot.center).normalize_or_zero());
+
         // Inbound speed towards the slingshot face (positive when moving into it).
         let inbound = -forces.linear_velocity().dot(outward);
-        if inbound >= slingshot.threshold {
-            forces.apply_linear_impulse(outward * slingshot.force);
-            // play the slingshot sound at the slingshot (spatial panning from its position)
-            if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {
-                play_sound_at(
-                    &mut commands,
-                    table_assets,
-                    &assets_vpx,
-                    slingshot_entity,
-                    &sounds.hit,
-                );
-            }
-            // flex animation: briefly show the flexed rubber instead of the rest one
-            if let Some(animations) = &animations
-                && !flashing.contains(slingshot_entity)
-                && let Some(anim) = animations.0.iter().find(|a| a.slingshot == slingshot.name)
-            {
-                let find =
-                    |name: &str| rubbers.iter().find(|(_, r)| r.name == name).map(|(e, _)| e);
-                if let (Some(rest), Some(flexed)) = (find(&anim.rest), find(&anim.flexed)) {
-                    set_visibility(&mut visibility, rest, Visibility::Hidden);
-                    set_visibility(&mut visibility, flexed, Visibility::Inherited);
-                    commands.entity(slingshot_entity).insert(SlingshotFlash {
-                        rest,
-                        flexed,
-                        timer: Timer::new(SLINGSHOT_FLASH, TimerMode::Once),
-                    });
-                }
-            }
+        if inbound < slingshot.threshold {
+            continue;
+        }
+
+        forces.apply_linear_impulse(outward * slingshot.force);
+
+        // play the slingshot sound at the slingshot (spatial panning from its position)
+        if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {
+            play_sound_at(
+                &mut commands,
+                table_assets,
+                &assets_vpx,
+                slingshot_entity,
+                &sounds.hit,
+            );
+        }
+
+        // flex animation: briefly show the flexed rubber instead of the rest one
+        if let Some((rest, flexed)) = rest_flexed
+            && !flashing.contains(slingshot_entity)
+        {
+            set_visibility(&mut visibility, rest, Visibility::Hidden);
+            set_visibility(&mut visibility, flexed, Visibility::Inherited);
+            commands.entity(slingshot_entity).insert(SlingshotFlash {
+                rest,
+                flexed,
+                timer: Timer::new(SLINGSHOT_FLASH, TimerMode::Once),
+            });
         }
     }
 }
