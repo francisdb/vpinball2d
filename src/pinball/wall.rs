@@ -253,6 +253,7 @@ fn handle_slingshot_collisions(
     // `Forces` already holds `&mut LinearVelocity`, so read the velocity through it rather
     // than adding a conflicting `&LinearVelocity` to the same query.
     mut ball_query: Query<(&Transform, Forces), With<Ball>>,
+    collisions: Collisions,
     sounds: Option<Res<SlingshotSounds>>,
     table_assets: Option<Res<TableAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
@@ -300,8 +301,25 @@ fn handle_slingshot_collisions(
             })
             .unwrap_or_else(|| (ball_pos - slingshot.center).normalize_or_zero());
 
-        // Inbound speed towards the slingshot face (positive when moving into it).
-        let inbound = -forces.linear_velocity().dot(outward);
+        // Trigger on the actual contact normal (how vpinball does it: dot(hitnormal, vel)),
+        // not on the kick direction. The two differ - a ball can strike the face hard while
+        // moving across the kick/flex axis - so testing against the kick direction missed
+        // straight-on hits. Orient the manifold normal to point out of the face (towards the
+        // ball); fall back to the kick direction if no manifold is available.
+        let face_normal = collisions
+            .get(collision.collider1, collision.collider2)
+            .and_then(|pair| pair.manifolds.first())
+            .map(|manifold| {
+                if manifold.normal.dot(ball_pos - slingshot.center) < 0.0 {
+                    -manifold.normal
+                } else {
+                    manifold.normal
+                }
+            })
+            .unwrap_or(outward);
+
+        // Inbound speed into the slingshot face (positive when moving into it).
+        let inbound = -forces.linear_velocity().dot(face_normal);
         if inbound < slingshot.threshold {
             continue;
         }
