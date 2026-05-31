@@ -1,13 +1,13 @@
 //! Total Nuclear Annihilation table, re-implemented in Rust.
 //!
 //! Behaviour is generic and configured declaratively via the sound resources
-//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`]); a random sound is picked from
-//! each list, matching the original script.
+//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`], [`SlingshotSounds`]); a random
+//! sound is picked from each list, matching the original script.
 
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
-use crate::pinball::wall::Wall;
+use crate::pinball::wall::{SlingshotSounds, Wall};
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
@@ -34,6 +34,12 @@ pub(super) fn plugin(app: &mut App) {
             .map(|i| format!("SY_TNA_REV03_Pop_Bumper_{i}"))
             .collect(),
     });
+    // Both slingshots' main sounds combined (a random one is picked per hit).
+    let mut sling: Vec<String> = (1..=7)
+        .map(|i| format!("SY_TNA_REV03_Slingshot_Main_Left_{i}"))
+        .collect();
+    sling.extend((1..=7).map(|i| format!("SY_TNA_REV03_Slingshot_Main_Right_{i}")));
+    app.insert_resource(SlingshotSounds { hit: sling });
     // TODO there's also a ramp that brings the ball over the loop side rail which we need
     //   to somehow ignore collisions with until the ball is fully launched.
     app.add_systems(
