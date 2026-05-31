@@ -63,6 +63,14 @@ pub(super) fn spawn_rubber(
     outline.push(outline[0]);
     let collider = Collider::polyline(outline, None);
 
+    // Hidden rubbers (e.g. the slingshot's flexed-frame rubbers) are not drawn at rest;
+    // they are shown briefly during the slingshot animation (see pinball::wall).
+    let visibility = if rubber.is_visible {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+
     parent.spawn((
         Rubber {
             name: rubber.name.clone(),
@@ -75,6 +83,7 @@ pub(super) fn spawn_rubber(
         ),
         Mesh2d(mesh),
         MeshMaterial2d(materials.add(Color::from(RUBER_COLOR))),
+        visibility,
         // physics
         CollisionEventsEnabled,
         RigidBody::Static,
