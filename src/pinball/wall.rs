@@ -1,10 +1,12 @@
 use crate::PausableSystems;
 use crate::audio::play_sound_at;
 use crate::pinball::ball::{BALL_RADIUS_M, Ball};
+use crate::pinball::rubber::Rubber;
 use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use avian2d::math::Vector;
+use core::time::Duration;
 
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
@@ -27,7 +29,7 @@ const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        handle_slingshot_collisions
+        (handle_slingshot_collisions, animate_slingshot_flash)
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -43,6 +45,8 @@ pub struct Wall {
 /// the ball and, above `slingshot_threshold`, adds an outward `slingshot_force` impulse.
 #[derive(Component)]
 pub struct Slingshot {
+    /// The slingshot wall's name (matches the vpx Wall name), used to find its animation.
+    name: String,
     /// Outward impulse strength (already scaled into this world's units).
     force: f32,
     /// Minimum inbound speed (m/s) before the slingshot fires.
@@ -57,6 +61,35 @@ pub struct Slingshot {
 #[derive(Resource, Default)]
 pub struct SlingshotSounds {
     pub hit: Vec<String>,
+}
+
+/// How long the flexed slingshot rubber is shown after a hit before reverting to rest.
+/// vpinball resets the slingshot animation ~100 ms after firing.
+const SLINGSHOT_FLASH: Duration = Duration::from_millis(100);
+
+/// Links a slingshot (by wall name) to the rubbers that visualise it, so firing it can
+/// briefly show the flexed rubber. The rubber/wall names are table conventions (e.g.
+/// `LeftSlingShot` -> rest `LSling`, flexed `LSling1`), driven by the script in vpinball,
+/// so a table enables the animation by inserting this resource.
+#[derive(Resource, Default)]
+pub struct SlingshotAnimations(pub Vec<SlingshotAnimation>);
+
+pub struct SlingshotAnimation {
+    /// Slingshot wall name.
+    pub slingshot: String,
+    /// Rubber shown at rest.
+    pub rest: String,
+    /// Rubber shown briefly while the slingshot is fired.
+    pub flexed: String,
+}
+
+/// Active flex animation on a slingshot: the flexed rubber is shown until the timer ends,
+/// then visibility reverts to the rest rubber.
+#[derive(Component)]
+struct SlingshotFlash {
+    rest: Entity,
+    flexed: Entity,
+    timer: Timer,
 }
 
 pub(super) fn spawn_wall(
@@ -133,6 +166,7 @@ pub(super) fn spawn_wall(
         if is_slingshot {
             entity.insert((
                 Slingshot {
+                    name: wall.name.clone(),
                     force: wall.slingshot_force * SLINGSHOT_FORCE_SCALE,
                     threshold: wall.slingshot_threshold * SLINGSHOT_THRESHOLD_SCALE,
                     center: slingshot_center(&wall.drag_points, vpx_to_bevy_transform),
@@ -192,6 +226,10 @@ fn handle_slingshot_collisions(
     sounds: Option<Res<SlingshotSounds>>,
     table_assets: Option<Res<TableAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    animations: Option<Res<SlingshotAnimations>>,
+    rubbers: Query<(Entity, &Rubber)>,
+    mut visibility: Query<&mut Visibility>,
+    flashing: Query<(), With<SlingshotFlash>>,
     mut commands: Commands,
 ) {
     for collision in collision_reader.read() {
@@ -227,6 +265,46 @@ fn handle_slingshot_collisions(
                     &sounds.hit,
                 );
             }
+            // flex animation: briefly show the flexed rubber instead of the rest one
+            if let Some(animations) = &animations
+                && !flashing.contains(slingshot_entity)
+                && let Some(anim) = animations.0.iter().find(|a| a.slingshot == slingshot.name)
+            {
+                let find =
+                    |name: &str| rubbers.iter().find(|(_, r)| r.name == name).map(|(e, _)| e);
+                if let (Some(rest), Some(flexed)) = (find(&anim.rest), find(&anim.flexed)) {
+                    set_visibility(&mut visibility, rest, Visibility::Hidden);
+                    set_visibility(&mut visibility, flexed, Visibility::Inherited);
+                    commands.entity(slingshot_entity).insert(SlingshotFlash {
+                        rest,
+                        flexed,
+                        timer: Timer::new(SLINGSHOT_FLASH, TimerMode::Once),
+                    });
+                }
+            }
         }
+    }
+}
+
+/// Revert a slingshot's flex animation once its timer elapses: hide the flexed rubber and
+/// show the rest rubber again.
+fn animate_slingshot_flash(
+    time: Res<Time>,
+    mut flashes: Query<(Entity, &mut SlingshotFlash)>,
+    mut visibility: Query<&mut Visibility>,
+    mut commands: Commands,
+) {
+    for (entity, mut flash) in &mut flashes {
+        if flash.timer.tick(time.delta()).just_finished() {
+            set_visibility(&mut visibility, flash.flexed, Visibility::Hidden);
+            set_visibility(&mut visibility, flash.rest, Visibility::Inherited);
+            commands.entity(entity).remove::<SlingshotFlash>();
+        }
+    }
+}
+
+fn set_visibility(query: &mut Query<&mut Visibility>, entity: Entity, value: Visibility) {
+    if let Ok(mut visibility) = query.get_mut(entity) {
+        *visibility = value;
     }
 }
