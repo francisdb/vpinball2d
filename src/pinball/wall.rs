@@ -29,10 +29,37 @@ const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (handle_slingshot_collisions, animate_slingshot_flash)
+        (
+            strip_slingshot_rest_colliders,
+            handle_slingshot_collisions,
+            animate_slingshot_flash,
+        )
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
+}
+
+/// A slingshot's rest rubber sits coincident with (slightly in front of) the slingshot
+/// wall. With both collidable the ball bounces off the rubber before reaching the wall, so
+/// the kick never fires. Match vpinball's effective behaviour by letting the wall be the
+/// single strike+kick surface: strip the collider from each slingshot's rest rubber,
+/// leaving it visual only. Runs when rubbers are spawned (`Added`).
+fn strip_slingshot_rest_colliders(
+    mut commands: Commands,
+    animations: Option<Res<SlingshotAnimations>>,
+    rubbers: Query<(Entity, &Rubber), Added<Rubber>>,
+) {
+    let Some(animations) = animations else {
+        return;
+    };
+    for (entity, rubber) in &rubbers {
+        if animations.0.iter().any(|a| a.rest == rubber.name) {
+            commands
+                .entity(entity)
+                .remove::<Collider>()
+                .remove::<CollisionEventsEnabled>();
+        }
+    }
 }
 
 #[derive(Component)]
