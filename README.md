@@ -41,7 +41,7 @@ Developer tools (only in builds with the `dev` feature):
 
 | Key | Action |
 | --- | --- |
-| ` (backtick) | Toggle the UI debug overlay |
+| ` (backtick) | Toggle the `bevy_ui` debug overlay; outlines menu/UI nodes only, so nothing shows on the playfield during play |
 | H | Hide meshes without a collider, leaving just the collision geometry |
 | S | Toggle slow motion (1/5 of real time) |
 
