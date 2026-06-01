@@ -2,9 +2,6 @@
 
 Visual Pinball 2D engine
 
-This project was generated using the [Bevy New 2D](https://github.com/TheBevyFlock/bevy_new_2d) template.
-Check out the [documentation](https://github.com/TheBevyFlock/bevy_new_2d/blob/main/README.md) to get started!
-
 ## Vpinball demo table
 
 Currently only a simple demo table is supported.
@@ -23,6 +20,29 @@ cargo run --release
 ```
 
 This will compile the project and launch the application.
+
+## Controls
+
+Gameplay:
+
+| Key | Action |
+| --- | --- |
+| Left Arrow / Left Shift | Left flipper |
+| Right Arrow / Right Shift | Right flipper |
+| Enter | Plunger (hold to pull back, release to fire) |
+| Z | Nudge left |
+| / | Nudge right |
+| Space | Nudge up (jolt the front of the table) |
+| P | Pause / resume |
+| Escape | Pause (and back out of menus) |
+| Left mouse drag | Drag the ball around (debug aid) |
+
+Developer tools (only in builds with the `dev` feature):
+
+| Key | Action |
+| --- | --- |
+| ` (backtick) | Toggle the UI debug overlay |
+| H | Hide meshes without a collider, leaving just the collision geometry |
 
 ## Play interface
 
