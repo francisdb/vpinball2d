@@ -52,8 +52,8 @@ pub(super) fn spawn_target(
     vpx_to_bevy_transform: Transform,
     target: &HitTarget,
 ) {
-    // Footprint (width x depth, metres) from vpin's target mesh; None when not visible.
-    let Some(size) = footprint(target) else {
+    // Footprint (width x depth) and top height (the render layer); None when not visible.
+    let Some((size, top)) = footprint(target) else {
         return;
     };
 
@@ -61,7 +61,9 @@ pub(super) fn spawn_target(
         translation: Vec3::new(
             vpu_to_m(target.position.x) + vpx_to_bevy_transform.translation.x,
             -vpu_to_m(target.position.y) + vpx_to_bevy_transform.translation.y,
-            0.1,
+            // Render at the target's top height so it depth-sorts against walls (which render at
+            // their own top height) the way vpinball stacks them.
+            top,
         ),
         // vpx rotates around +Z; this game flips the y axis, so the bevy angle is negated.
         rotation: Quat::from_rotation_z(-target.rot_z.to_radians()),
@@ -102,36 +104,39 @@ pub(super) fn spawn_target(
     }
 }
 
-/// Width x depth of the target's panel in metres: the per-type base footprint scaled by the
-/// item's `size`. `rot_z` is a rigid rotation so it does not change these extents (it is applied
-/// through the entity transform). `None` when the target is not visible.
-fn footprint(target: &HitTarget) -> Option<Vec2> {
+/// The target panel's footprint (width x depth, metres) and its top height (metres above the
+/// playfield, used as the render layer like pinball::wall does). The footprint is the per-type
+/// base extent scaled by the item's `size`; `rot_z` is a rigid rotation that does not change it
+/// (it is applied through the entity transform). `None` when the target is not visible.
+fn footprint(target: &HitTarget) -> Option<(Vec2, f32)> {
     if !target.is_visible {
         return None;
     }
     let base = base_extent(&target.target_type);
-    Some(Vec2::new(
+    let size = Vec2::new(
         vpu_to_m(base.x * target.size.x),
         vpu_to_m(base.y * target.size.y),
-    ))
+    );
+    let top = vpu_to_m(target.position.z + target.size.z * base.z);
+    Some((size, top))
 }
 
-/// Base footprint (width across the face x depth front-to-back, in mesh units) of each target
-/// type, measured from vpin's static target meshes (vpin's mesh builder is not public). The world
-/// size is this times the item's `size` (whose default is 32).
-fn base_extent(target_type: &TargetType) -> Vec2 {
-    let (width, depth) = match target_type {
-        TargetType::DropTargetBeveled => (1.050, 0.500),
-        TargetType::DropTargetSimple => (1.050, 0.350),
-        TargetType::DropTargetFlatSimple => (1.100, 0.200),
-        TargetType::HitTargetRound => (1.225, 0.430),
-        TargetType::HitTargetRectangle => (1.350, 0.430),
-        TargetType::HitFatTargetRectangle => (1.600, 0.450),
-        TargetType::HitFatTargetSquare => (1.200, 0.450),
-        TargetType::HitTargetSlim => (0.650, 0.430),
-        TargetType::HitFatTargetSlim => (0.775, 0.450),
+/// Base footprint (width across the face x depth front-to-back) and top height (z), in mesh
+/// units, of each target type, measured from vpin's static target meshes (vpin's mesh builder is
+/// not public). The world values are these times the item's `size` (whose default is 32).
+fn base_extent(target_type: &TargetType) -> Vec3 {
+    let (width, depth, top) = match target_type {
+        TargetType::DropTargetBeveled => (1.050, 0.500, 1.737),
+        TargetType::DropTargetSimple => (1.050, 0.350, 1.735),
+        TargetType::DropTargetFlatSimple => (1.100, 0.200, 1.790),
+        TargetType::HitTargetRound => (1.225, 0.430, 1.792),
+        TargetType::HitTargetRectangle => (1.350, 0.430, 1.788),
+        TargetType::HitFatTargetRectangle => (1.600, 0.450, 1.795),
+        TargetType::HitFatTargetSquare => (1.200, 0.450, 1.797),
+        TargetType::HitTargetSlim => (0.650, 0.430, 1.972),
+        TargetType::HitFatTargetSlim => (0.775, 0.450, 1.774),
     };
-    Vec2::new(width, depth)
+    Vec3::new(width, depth, top)
 }
 
 /// Drop a drop target when a ball strikes it above its threshold, and schedule its raise.
