@@ -20,7 +20,7 @@ mod rubber;
 mod scripts;
 pub mod table;
 mod trigger;
-mod wall;
+pub(crate) mod wall;
 
 #[derive(Resource)]
 pub struct TablePath {

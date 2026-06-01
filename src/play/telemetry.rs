@@ -6,6 +6,7 @@ use crate::pinball::ball::Ball;
 use crate::pinball::flipper::Flipper;
 use crate::pinball::plunger::Plunger;
 use crate::pinball::table::TableAssets;
+use crate::pinball::wall::Slingshot;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
@@ -117,6 +118,7 @@ fn write_telemetry(
     named: Query<(&Name, &Transform), Without<Ball>>,
     flippers: Query<(&Flipper, &Transform, &Name)>,
     plungers: Query<(&Plunger, &Transform, &Name)>,
+    slingshots: Query<&Slingshot>,
 ) {
     if !timer.0.tick(time.delta()).just_finished() {
         return;
@@ -139,6 +141,7 @@ fn write_telemetry(
     let mut j_kickers: Vec<String> = Vec::new();
     let mut j_flippers: Vec<String> = Vec::new();
     let mut j_plungers: Vec<String> = Vec::new();
+    let mut j_slingshots: Vec<String> = Vec::new();
     let mut j_balls: Vec<String> = Vec::new();
 
     // Static objects we can aim at: bumpers and kickers, by Name prefix.
@@ -207,6 +210,18 @@ fn write_telemetry(
         ));
     }
 
+    // Slingshots: world centre (to aim at) plus the firing `force`/`threshold` being calibrated.
+    for slingshot in &slingshots {
+        j_slingshots.push(format!(
+            "{{\"name\":{},\"pos\":[{:.3},{:.3}],\"force\":{:.4},\"threshold\":{:.4}}}",
+            json_str(&slingshot.name),
+            slingshot.center.x,
+            slingshot.center.y,
+            slingshot.force,
+            slingshot.threshold
+        ));
+    }
+
     // Report every ball by its real id (not iteration index), so a stray auto-released table
     // ball is never confused with another. Sorted by id.
     let mut ball_rows: Vec<(u32, Vec2, Vec2)> = balls
@@ -228,7 +243,8 @@ fn write_telemetry(
     let json = format!(
         concat!(
             "{{\"t\":{:.3},\"playfield\":{{\"x\":[{:.3},{:.3}],\"y\":[{:.3},{:.3}]}},",
-            "\"bumpers\":[{}],\"kickers\":[{}],\"flippers\":[{}],\"plungers\":[{}],\"balls\":[{}]}}\n"
+            "\"bumpers\":[{}],\"kickers\":[{}],\"flippers\":[{}],\"plungers\":[{}],",
+            "\"slingshots\":[{}],\"balls\":[{}]}}\n"
         ),
         time.elapsed_secs(),
         -half_w,
@@ -239,6 +255,7 @@ fn write_telemetry(
         j_kickers.join(","),
         j_flippers.join(","),
         j_plungers.join(","),
+        j_slingshots.join(","),
         j_balls.join(",")
     );
     let _ = fs::write(STATE_JSON_PATH, &json);

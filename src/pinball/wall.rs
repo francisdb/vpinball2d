@@ -73,13 +73,13 @@ pub struct Wall {
 #[derive(Component)]
 pub struct Slingshot {
     /// The slingshot wall's name (matches the vpx Wall name), used to find its animation.
-    name: String,
+    pub(crate) name: String,
     /// Outward impulse strength (already scaled into this world's units).
-    force: f32,
+    pub(crate) force: f32,
     /// Minimum inbound speed (m/s) before the slingshot fires.
-    threshold: f32,
+    pub(crate) threshold: f32,
     /// World-space centre of the slingshot, used to derive the outward kick direction.
-    center: Vec2,
+    pub(crate) center: Vec2,
 }
 
 /// Sounds a table plays when a slingshot fires. A random entry is picked and played
