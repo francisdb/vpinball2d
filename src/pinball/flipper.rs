@@ -52,15 +52,15 @@ const FLIPPER_RETURN_TORQUE: f32 = 0.5;
 const FLIPPER_ARC_SEGMENTS: usize = 16;
 
 #[derive(Component)]
-struct Flipper {
+pub(crate) struct Flipper {
     #[allow(dead_code)]
     pub name: String,
     /// Body angle (rad) the flipper rests at when released (Visual Pinball start angle).
-    rest_angle: f32,
+    pub(crate) rest_angle: f32,
     /// Body angle (rad) the flipper swings to while energised (Visual Pinball end angle).
-    active_angle: f32,
+    pub(crate) active_angle: f32,
     /// Whether the flipper button was held last frame, for sound edge detection.
-    pressed: bool,
+    pub(crate) pressed: bool,
 }
 
 /// Sounds a table plays when a flipper energises (`up`) or returns (`down`). A random

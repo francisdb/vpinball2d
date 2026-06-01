@@ -9,6 +9,8 @@ mod audio;
 mod dev_tools;
 mod menus;
 mod pinball;
+#[cfg(any(feature = "remote_control", feature = "telemetry"))]
+mod play;
 mod screens;
 mod theme;
 mod vpx;
@@ -83,6 +85,8 @@ impl Plugin for AppPlugin {
             pinball::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,
+            #[cfg(any(feature = "remote_control", feature = "telemetry"))]
+            play::plugin,
             menus::plugin,
             screens::plugin,
             theme::plugin,
