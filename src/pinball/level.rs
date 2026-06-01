@@ -7,6 +7,7 @@ use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
+use crate::pinball::targets::spawn_target;
 use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
 use crate::vpx::VpxAsset;
@@ -153,6 +154,13 @@ pub fn spawn_level(
                     parent,
                     flipper,
                     vpx_asset.raw.gamedata.materials.as_deref().unwrap_or(&[]),
+                ),
+                GameItemEnum::HitTarget(target) => spawn_target(
+                    parent,
+                    &mut meshes,
+                    &mut materials,
+                    vpx_to_bevy_transform,
+                    target,
                 ),
                 _ => (),
             });
