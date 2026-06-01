@@ -159,6 +159,7 @@ pub fn spawn_level(
                     parent,
                     &mut meshes,
                     &mut materials,
+                    vpx_asset,
                     vpx_to_bevy_transform,
                     target,
                 ),

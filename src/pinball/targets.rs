@@ -11,6 +11,7 @@
 use crate::PausableSystems;
 use crate::pinball::ball::Ball;
 use crate::screens::Screen;
+use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
@@ -49,6 +50,7 @@ pub(super) fn spawn_target(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     target: &HitTarget,
 ) {
@@ -80,7 +82,7 @@ pub(super) fn spawn_target(
     let mut entity = parent.spawn((
         Name::from(format!("Target {}", target.name)),
         Mesh2d(meshes.add(Rectangle::new(size.x, size.y))),
-        MeshMaterial2d(materials.add(Color::srgb_u8(210, 200, 90))),
+        MeshMaterial2d(materials.add(material_color(vpx_asset, &target.material))),
         transform,
     ));
 
@@ -102,6 +104,19 @@ pub(super) fn spawn_target(
             });
         }
     }
+}
+
+/// The base colour of the target's vpx material, or a default amber when it has none.
+fn material_color(vpx_asset: &VpxAsset, material: &str) -> Color {
+    vpx_asset
+        .raw
+        .gamedata
+        .materials
+        .iter()
+        .flatten()
+        .find(|m| m.name == material)
+        .map(|m| Color::srgb_u8(m.base_color.r, m.base_color.g, m.base_color.b))
+        .unwrap_or(Color::srgb_u8(210, 200, 90))
 }
 
 /// The target panel's footprint (width x depth, metres) and its top height (metres above the
