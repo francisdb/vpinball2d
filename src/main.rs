@@ -66,7 +66,12 @@ impl Plugin for AppPlugin {
             // One unit in bevy is one meter
             // However I have the impression that this should be adjusted to the average object size
             // in the scene? So we set it to 0.1 to have more reasonable values for debug rendering
-            PhysicsPlugins::default().with_length_unit(0.1),
+            // Interpolate rigid-body Transforms between fixed physics steps so rendering stays
+            // smooth when the step rate is low relative to the framerate (e.g. in slow motion).
+            // This is render-only and does not change the simulation.
+            PhysicsPlugins::default()
+                .with_length_unit(0.1)
+                .set(PhysicsInterpolationPlugin::interpolate_all()),
             // crate::diagnostics::DiagnosticsPlugin,
         ));
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
