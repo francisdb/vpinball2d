@@ -19,6 +19,7 @@ pub(crate) mod plunger;
 mod rubber;
 mod scripts;
 pub mod table;
+mod targets;
 mod trigger;
 pub(crate) mod wall;
 
@@ -50,5 +51,6 @@ pub(super) fn plugin(app: &mut App) {
         flipper::plugin,
         kicker::plugin,
         wall::plugin,
+        targets::plugin,
     ));
 }
