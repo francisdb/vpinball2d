@@ -24,13 +24,30 @@ pub(super) fn plugin(app: &mut App) {
         Update,
         toggle_non_collider_visibility.run_if(input_just_pressed(HIDE_NON_COLLIDERS_KEY)),
     );
+
+    // Toggle slow motion to inspect the physics.
+    app.add_systems(
+        Update,
+        toggle_slow_motion.run_if(input_just_pressed(SLOW_MOTION_KEY)),
+    );
 }
 
 const TOGGLE_KEY: KeyCode = KeyCode::Backquote;
 const HIDE_NON_COLLIDERS_KEY: KeyCode = KeyCode::KeyH;
+const SLOW_MOTION_KEY: KeyCode = KeyCode::KeyS;
+/// Time scale applied while slow motion is on (1/5 of real time).
+const SLOW_MOTION_SPEED: f32 = 0.2;
 
 fn toggle_debug_ui(mut options: ResMut<UiDebugOptions>) {
     options.toggle();
+}
+
+/// Toggle slow motion by scaling virtual time, which the physics (and everything else on the
+/// virtual clock) runs on: 1/5 of real time, or back to real time.
+fn toggle_slow_motion(mut slow: Local<bool>, mut time: ResMut<Time<Virtual>>) {
+    *slow = !*slow;
+    time.set_relative_speed(if *slow { SLOW_MOTION_SPEED } else { 1.0 });
+    info!("Slow motion {}", if *slow { "on (1/5)" } else { "off" });
 }
 
 /// Hide/show every mesh that has no collider so only the collision geometry remains.

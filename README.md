@@ -43,6 +43,7 @@ Developer tools (only in builds with the `dev` feature):
 | --- | --- |
 | ` (backtick) | Toggle the UI debug overlay |
 | H | Hide meshes without a collider, leaving just the collision geometry |
+| S | Toggle slow motion (1/5 of real time) |
 
 ## Play interface
 
