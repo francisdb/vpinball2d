@@ -301,25 +301,20 @@ fn handle_slingshot_collisions(
             })
             .unwrap_or_else(|| (ball_pos - slingshot.center).normalize_or_zero());
 
-        // Trigger on the actual contact normal (how vpinball does it: dot(hitnormal, vel)),
-        // not on the kick direction. The two differ - a ball can strike the face hard while
-        // moving across the kick/flex axis - so testing against the kick direction missed
-        // straight-on hits. Orient the manifold normal to point out of the face (towards the
-        // ball); fall back to the kick direction if no manifold is available.
-        let face_normal = collisions
+        // Fire on the impact velocity, read from the contact's pre-solve `normal_speed` (avian
+        // stores the relative normal velocity at the contact, negative when approaching). Reading
+        // the ball's `LinearVelocity` here would be wrong: this `Update` system runs after the
+        // solver has already bounced the ball back outward, so a clean head-on hit looks like it
+        // is moving away and never fires - only glancing hits keep enough inbound velocity to slip
+        // through. The contact velocity is mass-independent and survives the solve, so a
+        // straight-on hit reads as the strongest approach. Take the strongest across the points.
+        let inbound = collisions
             .get(collision.collider1, collision.collider2)
-            .and_then(|pair| pair.manifolds.first())
-            .map(|manifold| {
-                if manifold.normal.dot(ball_pos - slingshot.center) < 0.0 {
-                    -manifold.normal
-                } else {
-                    manifold.normal
-                }
-            })
-            .unwrap_or(outward);
-
-        // Inbound speed into the slingshot face (positive when moving into it).
-        let inbound = -forces.linear_velocity().dot(face_normal);
+            .into_iter()
+            .flat_map(|pair| pair.manifolds.iter())
+            .flat_map(|manifold| manifold.points.iter())
+            .map(|point| -point.normal_speed)
+            .fold(0.0_f32, f32::max);
         if inbound < slingshot.threshold {
             continue;
         }
