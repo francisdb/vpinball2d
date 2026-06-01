@@ -9,7 +9,9 @@
 //! 3D mesh, matching this game's 2D style (see pinball::wall, pinball::bumper).
 
 use crate::PausableSystems;
+use crate::audio::play_sound_at;
 use crate::pinball::ball::Ball;
+use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
@@ -26,10 +28,21 @@ const DROP_THRESHOLD_SCALE: f32 = 0.1;
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (handle_drop_targets, raise_dropped_targets)
+        (handle_target_hits, raise_dropped_targets)
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
+}
+
+/// Marks any target (drop or standup), so a ball hitting one plays the hit sound.
+#[derive(Component)]
+struct Target;
+
+/// Sounds a table plays when a target is hit. A random entry is picked. A table enables target
+/// sounds by inserting this resource.
+#[derive(Resource, Default)]
+pub struct TargetSounds {
+    pub hit: Vec<String>,
 }
 
 /// A drop target: drops out of play when hit above `threshold`, raised again after `raise_after`.
@@ -80,6 +93,7 @@ pub(super) fn spawn_target(
     );
 
     let mut entity = parent.spawn((
+        Target,
         Name::from(format!("Target {}", target.name)),
         Mesh2d(meshes.add(Rectangle::new(size.x, size.y))),
         MeshMaterial2d(materials.add(material_color(vpx_asset, &target.material))),
@@ -154,19 +168,25 @@ fn base_extent(target_type: &TargetType) -> Vec3 {
     Vec3::new(width, depth, top)
 }
 
-/// Drop a drop target when a ball strikes it above its threshold, and schedule its raise.
-fn handle_drop_targets(
+/// When a ball hits a target, play the hit sound; if it is a drop target struck above its
+/// threshold, drop it and schedule its raise.
+#[allow(clippy::too_many_arguments)]
+fn handle_target_hits(
     mut collision_reader: MessageReader<CollisionStart>,
     collisions: Collisions,
     balls: Query<(), With<Ball>>,
-    mut targets: Query<(Entity, &mut DropTarget)>,
+    targets: Query<(), With<Target>>,
+    mut drop_targets: Query<&mut DropTarget>,
     mut commands: Commands,
+    sounds: Option<Res<TargetSounds>>,
+    table_assets: Option<Res<TableAssets>>,
+    assets_vpx: Res<Assets<VpxAsset>>,
 ) {
     for collision in collision_reader.read() {
         let (Some(b1), Some(b2)) = (collision.body1, collision.body2) else {
             continue;
         };
-        // One body must be a drop target, the other a ball.
+        // One body must be a target, the other a ball.
         let (target_entity, other) = if targets.contains(b1) {
             (b1, b2)
         } else if targets.contains(b2) {
@@ -177,7 +197,20 @@ fn handle_drop_targets(
         if balls.get(other).is_err() {
             continue;
         }
-        let Ok((entity, mut drop_target)) = targets.get_mut(target_entity) else {
+
+        // Play the hit sound at the target (any target type).
+        if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {
+            play_sound_at(
+                &mut commands,
+                table_assets,
+                &assets_vpx,
+                target_entity,
+                &sounds.hit,
+            );
+        }
+
+        // Drop targets additionally drop when hit hard enough.
+        let Ok(mut drop_target) = drop_targets.get_mut(target_entity) else {
             continue;
         };
         if drop_target.dropped {
@@ -196,7 +229,7 @@ fn handle_drop_targets(
             continue;
         }
         drop_target.dropped = true;
-        let mut e = commands.entity(entity);
+        let mut e = commands.entity(target_entity);
         e.insert((ColliderDisabled, Visibility::Hidden));
         if let Some(delay) = drop_target.raise_after {
             e.insert(RaiseTimer(Timer::new(delay, TimerMode::Once)));
