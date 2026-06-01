@@ -78,8 +78,11 @@ pub struct Slingshot {
     pub(crate) force: f32,
     /// Minimum inbound speed (m/s) before the slingshot fires.
     pub(crate) threshold: f32,
-    /// World-space centre of the slingshot, used to derive the outward kick direction.
+    /// World-space centre of the slingshot, used to orient the kick towards the ball.
     pub(crate) center: Vec2,
+    /// Unit normal of the kicking segment (sign arbitrary; oriented towards the ball at hit
+    /// time). vpinball applies the slingshot force along this segment normal.
+    normal: Vec2,
 }
 
 /// Sounds a table plays when a slingshot fires. A random entry is picked and played
@@ -197,6 +200,7 @@ pub(super) fn spawn_wall(
                     force: wall.slingshot_force * SLINGSHOT_FORCE_SCALE,
                     threshold: wall.slingshot_threshold * SLINGSHOT_THRESHOLD_SCALE,
                     center: slingshot_center(&wall.drag_points, vpx_to_bevy_transform),
+                    normal: slingshot_normal(&wall.drag_points, vpx_to_bevy_transform),
                 },
                 CollisionEventsEnabled,
                 // The slingshot's visual band is a separate Rubber gameitem; hide the wall
@@ -240,12 +244,30 @@ fn slingshot_center(drag_points: &[DragPoint], transform: Transform) -> Vec2 {
     transform.translation.truncate() + mean
 }
 
-/// When a ball hits a slingshot fast enough, kick it back out. The kick direction comes
-/// from the slingshot's own deformation: a real slingshot's solenoid bulges the rubber
-/// band into a triangle pointing the way it throws the ball, so we kick along
-/// `flexed_rubber_centre - rest_rubber_centre`. The magnitude is a constant impulse above
-/// the speed threshold (a solenoid fires the same each time), tuned via the scale consts.
-/// Falls back to "slingshot centre -> ball" when the table has no rubber animation mapping.
+/// Unit normal of the slingshot's kicking segment, the segment that starts at the `is_slingshot`
+/// drag point (this is the line vpinball builds the `LineSegSlingshot` from). Perpendicular to
+/// that segment; the sign is arbitrary here and is oriented towards the ball at hit time.
+fn slingshot_normal(drag_points: &[DragPoint], transform: Transform) -> Vec2 {
+    let n = drag_points.len();
+    if n < 2 {
+        return Vec2::Y;
+    }
+    let i = drag_points
+        .iter()
+        .position(|dp| dp.is_slingshot == Some(true))
+        .unwrap_or(0);
+    let to_world = |dp: &DragPoint| {
+        transform.translation.truncate() + Vec2::new(vpu_to_m(dp.x), -vpu_to_m(dp.y))
+    };
+    let segment = to_world(&drag_points[(i + 1) % n]) - to_world(&drag_points[i]);
+    Vec2::new(segment.y, -segment.x).normalize_or_zero()
+}
+
+/// When a ball hits a slingshot fast enough, kick it back out. Like vpinball's
+/// `LineSegSlingshot`, the kick is along the kicking segment's normal (see [`slingshot_normal`]),
+/// oriented out of the face towards the ball. The magnitude is a constant impulse above the speed
+/// threshold (a solenoid fires the same each time), tuned via the scale consts. The rest/flexed
+/// rubbers, if the table maps them, only drive the brief flex animation.
 #[allow(clippy::too_many_arguments)]
 fn handle_slingshot_collisions(
     mut collision_reader: MessageReader<CollisionStart>,
@@ -280,8 +302,7 @@ fn handle_slingshot_collisions(
             continue;
         };
 
-        // The rest/flexed rubbers (if the table maps them) drive both the kick direction
-        // and the flex animation.
+        // The rest/flexed rubbers (if the table maps them) drive the flex animation.
         let anim = animations
             .as_ref()
             .and_then(|a| a.0.iter().find(|a| a.slingshot == slingshot.name));
@@ -290,16 +311,14 @@ fn handle_slingshot_collisions(
         let rest_flexed =
             anim.and_then(|a| Some((rubber_entity(&a.rest)?, rubber_entity(&a.flexed)?)));
 
-        // Kick direction: from the rest rubber towards the flexed (extended) one, i.e. the
-        // way the band bulges. Fall back to centre -> ball when there is no mapping.
+        // Kick direction: along the slingshot segment's normal, the way vpinball throws the ball,
+        // oriented to point out of the face towards the ball.
         let ball_pos = ball_transform.translation.truncate();
-        let outward = rest_flexed
-            .and_then(|(rest, flexed)| {
-                let rest_c = rubbers.get(rest).ok()?.1.center;
-                let flexed_c = rubbers.get(flexed).ok()?.1.center;
-                (flexed_c - rest_c).try_normalize()
-            })
-            .unwrap_or_else(|| (ball_pos - slingshot.center).normalize_or_zero());
+        let outward = if slingshot.normal.dot(ball_pos - slingshot.center) < 0.0 {
+            -slingshot.normal
+        } else {
+            slingshot.normal
+        };
 
         // Fire on the impact velocity, read from the contact's pre-solve `normal_speed` (avian
         // stores the relative normal velocity at the contact, negative when approaching). Reading

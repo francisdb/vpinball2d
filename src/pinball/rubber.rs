@@ -15,9 +15,6 @@ const RUBER_COLOR: Srgba = css::WHITE;
 pub struct Rubber {
     #[allow(dead_code)]
     pub name: String,
-    /// World-space centre of the rubber band. Used by slingshots to derive the kick
-    /// direction from the offset between the rest and flexed (extended) rubbers.
-    pub center: Vec2,
 }
 
 pub(super) fn spawn_rubber(
@@ -59,10 +56,6 @@ pub(super) fn spawn_rubber(
     // Lift the band above the playfield (at z 0) so it renders on top.
     let top_height = vpu_to_m(rubber.height + thickness as f32 / 2.0);
 
-    // World-space centre of the band (the transform is the table offset).
-    let band_center = vpx_to_bevy_transform.translation.truncate()
-        + centerline.iter().copied().sum::<Vec2>() / centerline.len() as f32;
-
     let mesh = meshes.add(rubber_ring_mesh(&centerline, half_width));
 
     // Hidden rubbers (e.g. the slingshot's flexed-frame rubbers) are not drawn at rest;
@@ -76,7 +69,6 @@ pub(super) fn spawn_rubber(
     let mut entity = parent.spawn((
         Rubber {
             name: rubber.name.clone(),
-            center: band_center,
         },
         Name::from(format!("Rubber {}", rubber.name)),
         Transform::from_xyz(
