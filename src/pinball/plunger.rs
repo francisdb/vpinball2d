@@ -29,8 +29,8 @@ pub(super) fn plugin(app: &mut App) {
 pub struct Plunger {
     #[allow(dead_code)]
     pub name: String,
-    start_point: Vec2,
-    stroke: f32,
+    pub(crate) start_point: Vec2,
+    pub(crate) stroke: f32,
 }
 
 pub(super) fn spawn_plunger(

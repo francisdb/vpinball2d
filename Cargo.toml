@@ -28,6 +28,9 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 # Default to a native dev build.
 default = ["dev_native"]
 dev = [
+    # The remote-control + telemetry play interface; dev builds get both for free.
+    "remote_control",
+    "telemetry",
     # Improve compile times for dev builds by linking Bevy as a dynamic library.
     "bevy/dynamic_linking",
     "bevy/bevy_dev_tools",
@@ -42,6 +45,11 @@ dev_native = [
     # Enable embedded asset hot reloading for native dev builds.
     "bevy/embedded_watcher",
 ]
+# Drive the game from a controller over /tmp files. Independent of dev tooling and of each other;
+# enable either or both in any build (e.g. `--features telemetry` for a read-only observer).
+# remote_control injects input (tp/launch/flippers/nudge); telemetry writes JSON state + events.
+remote_control = []
+telemetry = []
 
 
 [package.metadata.bevy_cli.release]
