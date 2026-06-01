@@ -1,12 +1,12 @@
 //! Visual Pinball example table, re-implemented in Rust.
 //!
 //! Behaviour is generic and configured declaratively via the sound resources
-//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`]).
+//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`], [`SlingshotSounds`]).
 
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
-use crate::pinball::wall::Wall;
+use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds, Wall};
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
@@ -21,6 +21,22 @@ pub(super) fn plugin(app: &mut App) {
     app.insert_resource(BumperSounds {
         hit: vec!["fx_bumper4".to_string()],
     });
+    app.insert_resource(SlingshotSounds {
+        hit: vec!["left_slingshot".to_string(), "right_slingshot".to_string()],
+    });
+    // Slingshot rubbers: the rest band plus a flexed frame shown briefly on a hit.
+    app.insert_resource(SlingshotAnimations(vec![
+        SlingshotAnimation {
+            slingshot: "LeftSlingShot".to_string(),
+            rest: "LSling".to_string(),
+            flexed: "LSling1".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "RightSlingShot".to_string(),
+            rest: "RSling".to_string(),
+            flexed: "RSling1".to_string(),
+        },
+    ]));
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),
         remove_plunger_wall,

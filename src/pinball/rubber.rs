@@ -58,12 +58,15 @@ pub(super) fn spawn_rubber(
 
     let mesh = meshes.add(rubber_ring_mesh(&centerline, half_width));
 
-    // Collide along the band centerline (a thin closed loop).
-    let mut outline: Vec<Vector> = centerline.iter().map(|p| Vector::new(p.x, p.y)).collect();
-    outline.push(outline[0]);
-    let collider = Collider::polyline(outline, None);
+    // Hidden rubbers (e.g. the slingshot's flexed-frame rubbers) are not drawn at rest;
+    // they are shown briefly during the slingshot animation (see pinball::wall).
+    let visibility = if rubber.is_visible {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
 
-    parent.spawn((
+    let mut entity = parent.spawn((
         Rubber {
             name: rubber.name.clone(),
         },
@@ -75,13 +78,24 @@ pub(super) fn spawn_rubber(
         ),
         Mesh2d(mesh),
         MeshMaterial2d(materials.add(Color::from(RUBER_COLOR))),
-        // physics
-        CollisionEventsEnabled,
-        RigidBody::Static,
-        collider,
-        Restitution::from(rubber.elasticity),
-        Friction::from(rubber.friction),
+        visibility,
     ));
+
+    // Only collidable rubbers get a collider. The slingshots' flexed-frame rubbers are
+    // visual-only (is_collidable = false): the contact surface stays the flat rest band,
+    // not the extended frame shown during the flex animation.
+    if rubber.is_collidable {
+        // Collide along the band centerline (a thin closed loop).
+        let mut outline: Vec<Vector> = centerline.iter().map(|p| Vector::new(p.x, p.y)).collect();
+        outline.push(outline[0]);
+        entity.insert((
+            CollisionEventsEnabled,
+            RigidBody::Static,
+            Collider::polyline(outline, None),
+            Restitution::from(rubber.elasticity),
+            Friction::from(rubber.friction),
+        ));
+    }
 }
 
 /// Build a closed band mesh of the given half width around a closed centerline (treated
