@@ -6,16 +6,16 @@
 use bevy::prelude::*;
 use std::path::{Path, PathBuf};
 
-mod ball;
+pub(crate) mod ball;
 mod ballcontrol;
 mod bumper;
-mod flipper;
+pub(crate) mod flipper;
 mod kicker;
 pub mod level;
 mod light;
 mod nudge;
 pub mod playfield;
-mod plunger;
+pub(crate) mod plunger;
 mod rubber;
 mod scripts;
 pub mod table;
