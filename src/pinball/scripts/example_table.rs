@@ -1,11 +1,13 @@
 //! Visual Pinball example table, re-implemented in Rust.
 //!
 //! Behaviour is generic and configured declaratively via the sound resources
-//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`], [`SlingshotSounds`], [`TargetSounds`]).
+//! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`], [`SlingshotSounds`], [`TargetSounds`],
+//! [`SpinnerSounds`]).
 
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
+use crate::pinball::spinner::SpinnerSounds;
 use crate::pinball::targets::TargetSounds;
 use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds, Wall};
 use bevy::prelude::*;
@@ -40,6 +42,9 @@ pub(super) fn plugin(app: &mut App) {
     ]));
     app.insert_resource(TargetSounds {
         hit: vec!["target".to_string()],
+    });
+    app.insert_resource(SpinnerSounds {
+        spin: vec!["fx_spinner".to_string()],
     });
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),

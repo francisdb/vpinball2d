@@ -7,6 +7,7 @@ use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
+use crate::pinball::spinner::spawn_spinner;
 use crate::pinball::targets::spawn_target;
 use crate::pinball::trigger::spawn_trigger;
 use crate::pinball::wall::spawn_wall;
@@ -162,6 +163,14 @@ pub fn spawn_level(
                     vpx_asset,
                     vpx_to_bevy_transform,
                     target,
+                ),
+                GameItemEnum::Spinner(spinner) => spawn_spinner(
+                    parent,
+                    &mut meshes,
+                    &mut materials,
+                    vpx_asset,
+                    vpx_to_bevy_transform,
+                    spinner,
                 ),
                 _ => (),
             });
