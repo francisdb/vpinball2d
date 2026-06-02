@@ -68,8 +68,15 @@ pub(crate) fn ball(
         // physics components
         RigidBody::Dynamic,
         Mass::from(BALL_MASS_KG),
-        Restitution::new(0.4),
-        Friction::from(0.2),
+        // vpinball applies the *hit object's* elasticity and friction alone in a ball/wall
+        // collision (see HitBall::Collide3DWall); the ball contributes neither. We mirror that by
+        // making the ball "transparent": coefficient 1.0 with a `Min` combine rule, so the result
+        // is always the surface's own value (`min(1.0, surface) == surface`). Otherwise avian's
+        // default `Average` mixes the ball's restitution into every surface, making metal rails
+        // (elasticity ~0.3) feel like rubber (0.35+) so the ball bounces in lanes instead of
+        // sliding.
+        Restitution::new(1.0).with_combine_rule(CoefficientCombine::Min),
+        Friction::new(1.0).with_combine_rule(CoefficientCombine::Min),
         Collider::circle(BALL_RADIUS_M),
         SleepingDisabled,
         CollisionEventsEnabled,
