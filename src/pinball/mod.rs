@@ -18,6 +18,7 @@ pub mod playfield;
 pub(crate) mod plunger;
 mod rubber;
 mod scripts;
+mod spinner;
 pub mod table;
 mod targets;
 mod trigger;
@@ -52,5 +53,6 @@ pub(super) fn plugin(app: &mut App) {
         kicker::plugin,
         wall::plugin,
         targets::plugin,
+        spinner::plugin,
     ));
 }
