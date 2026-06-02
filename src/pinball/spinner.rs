@@ -8,7 +8,7 @@
 //! from the vpx slows it), and a click sound plays each half-rotation, like a real spinner.
 //!
 //! The plate is rendered as vpin's spinner plate front-face mesh (its real shape and texture UVs,
-//! see [`PLATE_POS`]), so the vpx `image` maps correctly rather than the whole texture atlas being
+//! see [`plate_mesh`]), so the vpx `image` maps correctly rather than the whole texture atlas being
 //! stretched over a rectangle. The collider lives on the parent (a fixed sensor) while the blade
 //! is a child that carries the foreshortening, so spinning never resizes the collider.
 
@@ -26,12 +26,12 @@ use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use core::f32::consts::PI;
 use vpin::vpx::gameitem;
+use vpin::vpx::mesh::spinners::{SPINNER_PLATE_INDICES, SPINNER_PLATE_MESH};
 use vpin::vpx::units::vpu_to_m;
 
-/// Plate half-extents (mesh units) along the shaft (x) and across it (z), from [`PLATE_POS`]; used
-/// to size the sensor.
-const PLATE_HALF_X: f32 = 0.363;
-const PLATE_HALF_Z: f32 = 0.281;
+/// A plate-mesh vertex with this normal.y or more belongs to the front face (the flat disk facing
+/// out of the playfield); the rest is the back face and the rim, which the 2D blade does not use.
+const FRONT_FACE_NY: f32 = 0.9;
 /// How much of the ball's speed across the shaft (m/s) becomes spin (rad/s). High: a real
 /// spinner's plate radius is tiny (~1.5 cm), so `omega = v / r` whirrs it fast. TODO calibrate.
 const BALL_COUPLING: f32 = 30.0;
@@ -92,6 +92,7 @@ pub(super) fn spawn_spinner(
     }
     // Mesh-unit -> metres scale (vpin scales the plate mesh by `length`).
     let scale = vpu_to_m(spinner.length);
+    let half = plate_half_extents();
     // vpx rotates around +Z; this game flips the y axis, so the bevy angle is negated.
     let shaft_angle = -spinner.rotation.to_radians();
     let transform = Transform {
@@ -130,7 +131,7 @@ pub(super) fn spawn_spinner(
         // A sensor over the plate footprint: the ball passes over the spinner without being
         // blocked. It is on the (unscaled) parent so the blade's foreshortening never resizes it.
         RigidBody::Static,
-        Collider::rectangle(2.0 * PLATE_HALF_X * scale, 2.0 * PLATE_HALF_Z * scale),
+        Collider::rectangle(2.0 * half.x * scale, 2.0 * half.y * scale),
         Sensor,
         CollisionEventsEnabled,
         children![(
@@ -143,9 +144,56 @@ pub(super) fn spawn_spinner(
     ));
 }
 
+/// The spinner plate's front-face triangles, extracted from vpin's plate mesh in mesh units:
+/// `(positions [x along shaft, z across], texture uvs, indices)`.
+///
+/// vpin's plate mesh is a full 3D disk; we keep only the triangles whose every vertex faces out of
+/// the playfield (`ny > FRONT_FACE_NY`), which is the flat front disk without the back face or rim.
+/// Filtering by triangle (not just by vertex) matters: stray front-facing verts on the rim and
+/// wire sit well outside the disk, so a per-vertex bound would oversize it.
+fn front_face() -> (Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<u32>) {
+    let mut positions: Vec<[f32; 2]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+    let mut remap: Vec<Option<u32>> = vec![None; SPINNER_PLATE_MESH.len()];
+
+    let is_front = |i: u16| SPINNER_PLATE_MESH[i as usize].ny > FRONT_FACE_NY;
+    for tri in SPINNER_PLATE_INDICES.chunks_exact(3) {
+        if !tri.iter().all(|&i| is_front(i)) {
+            continue;
+        }
+        for &i in tri {
+            // `remap[i]` is a `Copy` Option, so the match takes a copy and the None arm is free to
+            // push to / mutate the buffers without a lingering borrow of `remap`.
+            let next = match remap[i as usize] {
+                Some(n) => n,
+                None => {
+                    let v = &SPINNER_PLATE_MESH[i as usize];
+                    positions.push([v.x, v.z]);
+                    uvs.push([v.tu, v.tv]);
+                    let new = positions.len() as u32 - 1;
+                    remap[i as usize] = Some(new);
+                    new
+                }
+            };
+            indices.push(next);
+        }
+    }
+    (positions, uvs, indices)
+}
+
+/// Half-extents (mesh units) of the plate's front face along the shaft (x) and across it (z); used
+/// to size the sensor.
+fn plate_half_extents() -> Vec2 {
+    front_face().0.iter().fold(Vec2::ZERO, |half, [x, z]| {
+        half.max(Vec2::new(x.abs(), z.abs()))
+    })
+}
+
 /// Build the spinner plate's front-face mesh (real shape and texture UVs), scaled to metres.
 fn plate_mesh(scale: f32) -> Mesh {
-    let positions: Vec<[f32; 3]> = PLATE_POS
+    let (positions, uvs, indices) = front_face();
+    let positions: Vec<[f32; 3]> = positions
         .iter()
         .map(|[x, z]| [x * scale, z * scale, 0.0])
         .collect();
@@ -154,8 +202,8 @@ fn plate_mesh(scale: f32) -> Mesh {
         RenderAssetUsages::default(),
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, PLATE_UV.to_vec());
-    mesh.insert_indices(Indices::U32(PLATE_IDX.to_vec()));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
     mesh
 }
 
@@ -247,61 +295,26 @@ fn spin_spinners(
     }
 }
 
-/// Front face of vpin's spinner plate mesh (21 verts, 20 tris): local (x along
-/// shaft, z perpendicular) positions in mesh units, the texture UVs, and triangle indices.
-#[rustfmt::skip]
-const PLATE_POS: &[[f32; 2]] = &[
-    [0.32006, 0.27602],
-    [-0.00000, -0.00000],
-    [0.29377, 0.28126],
-    [0.34236, 0.26111],
-    [0.35727, 0.23881],
-    [0.36252, 0.21251],
-    [-0.29378, 0.28126],
-    [-0.32006, 0.27602],
-    [-0.34236, 0.26111],
-    [-0.35727, 0.23881],
-    [-0.36253, 0.21251],
-    [-0.36253, -0.21251],
-    [-0.35727, -0.23881],
-    [-0.34236, -0.26111],
-    [-0.32006, -0.27602],
-    [-0.29378, -0.28126],
-    [0.29378, -0.28126],
-    [0.32006, -0.27602],
-    [0.34236, -0.26111],
-    [0.35727, -0.23881],
-    [0.36253, -0.21251],
-];
-#[rustfmt::skip]
-const PLATE_UV: &[[f32; 2]] = &[
-    [0.77368, 0.01397],
-    [0.50000, 0.25000],
-    [0.75120, 0.00949],
-    [0.79276, 0.02672],
-    [0.80550, 0.04579],
-    [0.80999, 0.06828],
-    [0.24879, 0.00949],
-    [0.22631, 0.01397],
-    [0.20724, 0.02672],
-    [0.19450, 0.04579],
-    [0.19000, 0.06828],
-    [0.19000, 0.43172],
-    [0.19450, 0.45421],
-    [0.20724, 0.47328],
-    [0.22631, 0.48602],
-    [0.24879, 0.49051],
-    [0.75121, 0.49051],
-    [0.77368, 0.48602],
-    [0.79276, 0.47328],
-    [0.80550, 0.45421],
-    [0.81000, 0.43172],
-];
-#[rustfmt::skip]
-const PLATE_IDX: &[u32] = &[
-    0, 1, 2, 1, 0, 3, 1, 6, 2, 1, 3, 4,
-    6, 1, 7, 1, 4, 5, 7, 1, 8, 1, 5, 20,
-    8, 1, 9, 19, 1, 20, 1, 10, 9, 18, 1, 19,
-    10, 1, 11, 17, 1, 18, 11, 1, 12, 16, 1, 17,
-    12, 1, 13, 15, 1, 16, 13, 1, 14, 14, 1, 15,
-];
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// vpin's plate front face is a flat fan: 21 vertices and 20 triangles. Guards against an
+    /// upstream mesh change silently altering the rendered plate.
+    #[test]
+    fn plate_front_face_shape() {
+        let mesh = plate_mesh(1.0);
+        let Some(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+            panic!("plate mesh has no positions");
+        };
+        assert_eq!(positions.len(), 21, "front-face vertex count");
+        let Some(Indices::U32(indices)) = mesh.indices() else {
+            panic!("plate mesh has no u32 indices");
+        };
+        assert_eq!(indices.len(), 60, "20 front-face triangles");
+        // Half-extents stay close to the disk the embedded data described (~0.36 x ~0.28).
+        let half = plate_half_extents();
+        assert!((half.x - 0.363).abs() < 0.01, "half x was {}", half.x);
+        assert!((half.y - 0.281).abs() < 0.01, "half z was {}", half.y);
+    }
+}
