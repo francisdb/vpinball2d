@@ -12,6 +12,7 @@ use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::math::Affine2;
+use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem::dragpoint::DragPoint;
@@ -229,10 +230,27 @@ pub(super) fn mesh_collider(mesh: &Mesh) -> Collider {
         .iter()
         .map(|v| Vector::new(v[0], v[1]))
         .collect();
-    // we have to duplicate the first vertex at the end to close the loop
-    let mut vertices = vertices;
-    vertices.push(vertices[0]);
-    Collider::polyline(vertices, None)
+    // Build a *solid* trimesh from the wall's own triangulation (the mesh already carries it). A
+    // `polyline` collider has no inside, so it collides from both sides: when the wall is thinner
+    // than the ball (rails are ~3 mm, Wall78 ~19 mm, vs the 27 mm ball) the ball engulfs the strip
+    // and gets conflicting contacts from both edges - it ricochets instead of sliding ("bounces off
+    // an unreachable corner"). A solid trimesh makes the ball hit one surface and slide. We use the
+    // exact triangulation rather than `convex_decomposition`, whose VHACD voxelises at ~8 mm and so
+    // bulges thin rails, catching the ball mid-roll.
+    let tris: Vec<[u32; 3]> = match mesh.indices() {
+        Some(Indices::U32(idx)) => idx.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+        Some(Indices::U16(idx)) => idx
+            .chunks_exact(3)
+            .map(|c| [c[0] as u32, c[1] as u32, c[2] as u32])
+            .collect(),
+        None => Vec::new(),
+    };
+    if vertices.len() < 3 || tris.is_empty() {
+        let mut vertices = vertices;
+        vertices.push(vertices[0]);
+        return Collider::polyline(vertices, None);
+    }
+    Collider::trimesh(vertices, tris)
 }
 
 /// World-space centre of a wall's drag points (vpx coords -> bevy, like the mesh).
