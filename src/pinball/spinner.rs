@@ -32,13 +32,16 @@ use vpin::vpx::units::vpu_to_m;
 /// to size the sensor.
 const PLATE_HALF_X: f32 = 0.363;
 const PLATE_HALF_Z: f32 = 0.281;
-/// How much of the ball's speed across the shaft (m/s) becomes spin (rad/s). TODO calibrate.
-const BALL_COUPLING: f32 = 10.0;
+/// How much of the ball's speed across the shaft (m/s) becomes spin (rad/s). High: a real
+/// spinner's plate radius is tiny (~1.5 cm), so `omega = v / r` whirrs it fast. TODO calibrate.
+const BALL_COUPLING: f32 = 30.0;
 /// Gravity restoring the plate to flat. Weak, so a free spinner spins many turns before settling
 /// (escape speed is sqrt(4 * this)). TODO calibrate.
-const SPINNER_GRAVITY: f32 = 4.0;
+const SPINNER_GRAVITY: f32 = 2.0;
 /// Floor for the foreshortening scale so the plate never fully disappears.
 const MIN_SCALE: f32 = 0.05;
+/// Minimum time between click sounds, so a fast whirr does not spawn dozens of sounds a second.
+const MIN_CLICK_INTERVAL: f32 = 0.045;
 
 /// Sounds a table plays as a spinner spins (one per half-rotation). A table enables them by
 /// inserting this resource.
@@ -57,8 +60,10 @@ struct Spinner {
     damping: f32,
     /// Unit vector perpendicular to the shaft (bevy space); the ball's speed along it drives spin.
     shaft_perp: Vec2,
-    /// `floor(angle / PI)` last frame, to play a click each time the plate passes half a turn.
+    /// `floor(angle / PI)` last frame, to detect each time the plate passes half a turn.
     last_click: i32,
+    /// Earliest elapsed time the next click sound may play (throttles a fast whirr).
+    next_click_at: f32,
 }
 
 /// The plate child of a [`Spinner`]; its `Transform.scale.y` is foreshortened as the plate spins.
@@ -117,6 +122,7 @@ pub(super) fn spawn_spinner(
             damping: spinner.damping,
             shaft_perp,
             last_click: 0,
+            next_click_at: 0.0,
         },
         Name::from(format!("Spinner {}", spinner.name)),
         transform,
@@ -212,18 +218,23 @@ fn spin_spinners(
         spinner.angular_velocity *= spinner.damping.powf(dt * 60.0);
         spinner.angle += spinner.angular_velocity * dt;
 
-        // Click sound each time the plate passes a half-turn.
+        // Click sound each time the plate passes a half-turn, throttled so a fast whirr does not
+        // spawn a sound every frame.
         let click = (spinner.angle / PI).floor() as i32;
         if click != spinner.last_click {
             spinner.last_click = click;
-            if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {
-                play_sound_at(
-                    &mut commands,
-                    table_assets,
-                    &assets_vpx,
-                    entity,
-                    &sounds.spin,
-                );
+            let now = time.elapsed_secs();
+            if now >= spinner.next_click_at {
+                spinner.next_click_at = now + MIN_CLICK_INTERVAL;
+                if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {
+                    play_sound_at(
+                        &mut commands,
+                        table_assets,
+                        &assets_vpx,
+                        entity,
+                        &sounds.spin,
+                    );
+                }
             }
         }
 
