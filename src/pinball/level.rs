@@ -3,6 +3,7 @@
 use crate::pinball::ball::ball;
 use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
+use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::spawn_light;
 use crate::pinball::plunger::spawn_plunger;
@@ -171,6 +172,14 @@ pub fn spawn_level(
                     vpx_asset,
                     vpx_to_bevy_transform,
                     spinner,
+                ),
+                GameItemEnum::Gate(gate) => spawn_gate(
+                    parent,
+                    &mut meshes,
+                    &mut materials,
+                    vpx_asset,
+                    vpx_to_bevy_transform,
+                    gate,
                 ),
                 _ => (),
             });

@@ -10,6 +10,7 @@ pub(crate) mod ball;
 mod ballcontrol;
 mod bumper;
 pub(crate) mod flipper;
+pub(crate) mod gate;
 mod kicker;
 pub mod level;
 mod light;
@@ -54,5 +55,6 @@ pub(super) fn plugin(app: &mut App) {
         wall::plugin,
         targets::plugin,
         spinner::plugin,
+        gate::plugin,
     ));
 }
