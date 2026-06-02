@@ -112,15 +112,12 @@ jobs:
           cache: true
           save-cache-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Restore Rust cache
-        id: cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
+      # No `shared-key: ci` restore here: bevy_lint pins its own nightly and runs as a custom rustc
+      # driver, so its artifacts are fingerprinted separately from the main build. Restoring the
+      # `ci` cache would overwrite bevy_lint's own (correct-toolchain) cache with artifacts it cannot
+      # use, forcing a cold rebuild every run. The action's `cache: true` handles caching instead.
 
       - name: Install build dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev
 
       - name: Run Bevy lints
