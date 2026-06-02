@@ -35,6 +35,8 @@ dev = [
     "bevy/dynamic_linking",
     "bevy/bevy_dev_tools",
     "bevy/bevy_ui_debug",
+    # avian collider debug rendering (wireframe gizmos), toggled with `h`.
+    "avian2d/debug-plugin",
     # Improve error messages coming from Bevy
     "bevy/track_location",
 ]
