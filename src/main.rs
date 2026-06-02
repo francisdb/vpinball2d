@@ -71,6 +71,8 @@ impl Plugin for AppPlugin {
             // This is render-only and does not change the simulation.
             PhysicsPlugins::default()
                 .with_length_unit(0.1)
+                // One-way gates yield only in their open direction; see `pinball::gate`.
+                .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
             // crate::diagnostics::DiagnosticsPlugin,
         ));

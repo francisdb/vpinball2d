@@ -2,10 +2,11 @@
 //!
 //! Behaviour is generic and configured declaratively via the sound resources
 //! ([`DrainSounds`], [`FlipperSounds`], [`BumperSounds`], [`SlingshotSounds`], [`TargetSounds`],
-//! [`SpinnerSounds`]).
+//! [`SpinnerSounds`], [`GateSounds`]).
 
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
+use crate::pinball::gate::GateSounds;
 use crate::pinball::kicker::DrainSounds;
 use crate::pinball::spinner::SpinnerSounds;
 use crate::pinball::targets::TargetSounds;
@@ -45,6 +46,9 @@ pub(super) fn plugin(app: &mut App) {
     });
     app.insert_resource(SpinnerSounds {
         spin: vec!["fx_spinner".to_string()],
+    });
+    app.insert_resource(GateSounds {
+        hit: vec!["gate".to_string()],
     });
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),
