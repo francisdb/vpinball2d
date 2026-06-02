@@ -71,7 +71,9 @@ impl Plugin for AppPlugin {
             // This is render-only and does not change the simulation.
             PhysicsPlugins::default()
                 .with_length_unit(0.1)
-                // One-way gates yield only in their open direction; see `pinball::gate`.
+                // The single app collision hook (avian allows one): one-way gates yield in their
+                // open direction, and every other contact is filtered for avian's phantom
+                // speculative contacts at our small scale. See `pinball::gate` and `pinball::physics`.
                 .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
             // crate::diagnostics::DiagnosticsPlugin,

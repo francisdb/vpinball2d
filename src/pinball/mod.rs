@@ -15,6 +15,7 @@ mod kicker;
 pub mod level;
 mod light;
 mod nudge;
+pub(crate) mod physics;
 pub mod playfield;
 pub(crate) mod plunger;
 mod rubber;

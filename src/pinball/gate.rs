@@ -318,8 +318,9 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
         } else if self.gates.contains(contacts.collider2) {
             (contacts.collider2, contacts.collider1)
         } else {
-            // Not a gate contact; keep it.
-            return true;
+            // Not a gate contact: avian allows one hook per app, so this same hook also drops
+            // avian's phantom speculative contacts at our small scale. See `super::physics`.
+            return super::physics::contact_is_real(contacts);
         };
         let Ok(gate) = self.gates.get(gate_entity) else {
             return true;
