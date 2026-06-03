@@ -140,3 +140,10 @@ predictively, not reactively. Things learned writing one:
 - **Starting/keeping a rally going.** Use `launch` to put a ball into play (the ball-release lane
   holds it otherwise), and `tp` for exact, repeatable test shots. Watch `state.jsonl` rather than
   the snapshot if you must not miss a frame.
+
+## Known issues
+
+- [avianphysics/avian#990](https://github.com/avianphysics/avian/issues/990): at real (centimetre)
+  scale avian's speculative contacts deflect a fast ball off colliders it never touches - including
+  geometry buried inside another wall. The contact reach is an absolute distance that does not scale
+  with the world, so it shows up at pinball scale near tight features.
