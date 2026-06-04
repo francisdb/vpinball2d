@@ -5,7 +5,7 @@ use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
-use crate::pinball::light::spawn_light;
+use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::spinner::spawn_spinner;
@@ -21,8 +21,9 @@ use bevy::prelude::*;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::units::vpu_to_m;
 
-pub(super) fn plugin(_app: &mut App) {
+pub(super) fn plugin(app: &mut App) {
     //app.load_resource::<LevelAssets>();
+    app.add_plugins(crate::pinball::playfield::plugin);
 }
 
 #[derive(Resource, Asset, Clone, Reflect)]
@@ -46,6 +47,8 @@ pub fn spawn_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut glow_materials: ResMut<Assets<GlowMaterial>>,
+    lighting: Res<LightingAssets>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
@@ -129,7 +132,8 @@ pub fn spawn_level(
                 GameItemEnum::Light(light) => {
                     spawn_light(
                         &mut meshes,
-                        &mut materials,
+                        &mut glow_materials,
+                        &lighting.glow,
                         vpx_to_bevy_transform,
                         parent,
                         light,

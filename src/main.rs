@@ -156,6 +156,9 @@ fn spawn_camera(mut commands: Commands) {
     // The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
     let table_width_m = vpu_to_m(952.0);
     let table_depth_m = vpu_to_m(2162.0);
+    // TODO: switch this camera to HDR and add a `Bloom` component (+ tonemapping) so
+    // the additive light glows bloom and roll off instead of hard-clipping to white
+    // on the LDR pipeline. See `pinball::light::GlowMaterial`.
     commands.spawn((
         Name::new("Camera"),
         Camera2d,
