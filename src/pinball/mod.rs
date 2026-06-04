@@ -47,6 +47,7 @@ pub(super) fn plugin(app: &mut App) {
         ball::plugin,
         ballcontrol::plugin,
         bumper::plugin,
+        light::plugin,
         scripts::plugin,
         plunger::plugin,
         nudge::plugin,

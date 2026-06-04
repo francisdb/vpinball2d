@@ -5,7 +5,7 @@ use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
-use crate::pinball::light::spawn_light;
+use crate::pinball::light::{LightingAssets, spawn_light};
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::spinner::spawn_spinner;
@@ -46,6 +46,7 @@ pub fn spawn_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    lighting: Res<LightingAssets>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
@@ -130,6 +131,7 @@ pub fn spawn_level(
                     spawn_light(
                         &mut meshes,
                         &mut materials,
+                        &lighting.glow,
                         vpx_to_bevy_transform,
                         parent,
                         light,

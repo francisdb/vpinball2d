@@ -14,6 +14,10 @@ use vpin::vpx::units::vpu_to_m;
 #[reflect(Component)]
 pub struct Playfield;
 
+/// Default brightness multiplier for the playfield image. Dimming it lets the
+/// light glows read as actual light instead of washing out against bright art.
+const PLAYFIELD_BRIGHTNESS: f32 = 0.4;
+
 /// Build the playfield: a table-sized quad textured with the table image, marked with
 /// [`Playfield`].
 pub(crate) fn playfield(
@@ -32,6 +36,11 @@ pub(crate) fn playfield(
         .get(vpx_asset.raw.gamedata.image.as_str())
         .unwrap();
     let material = materials.add(ColorMaterial {
+        color: Color::srgb(
+            PLAYFIELD_BRIGHTNESS,
+            PLAYFIELD_BRIGHTNESS,
+            PLAYFIELD_BRIGHTNESS,
+        ),
         alpha_mode: AlphaMode2d::Opaque,
         texture: Some(playfield_image.clone()),
         ..default()
