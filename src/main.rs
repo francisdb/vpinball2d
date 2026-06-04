@@ -80,8 +80,15 @@ impl Plugin for AppPlugin {
         ));
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
-        // to improve physics stability
-        app.insert_resource(SubstepCount(50));
+        // Physics tick rate. avian runs in FixedPostUpdate (bevy default ~64 Hz). A higher rate
+        // shrinks the speculative-contact reach (frame_dt * velocity), so a fast ball stops bouncing
+        // off corners it never touches (the eject-hole "ghost") - the same reason Visual Pinball runs
+        // at 1000 Hz. Substeps don't help that (collision detection runs once per fixed step), so they
+        // are traded down to keep total work similar. Stopgap until avian's CCD rework lands
+        // (avianphysics/avian#990); raise the Hz if the ghost persists, and watch flipper feel as
+        // substeps drop.
+        app.insert_resource(Time::<Fixed>::from_hz(240.0));
+        app.insert_resource(SubstepCount(12));
 
         // #[cfg(feature = "dev")]
         // app.add_plugins((EguiPlugin::default(), WorldInspectorPlugin::new()));
