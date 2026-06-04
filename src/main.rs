@@ -71,7 +71,8 @@ impl Plugin for AppPlugin {
             // This is render-only and does not change the simulation.
             PhysicsPlugins::default()
                 .with_length_unit(0.1)
-                // One-way gates yield only in their open direction; see `pinball::gate`.
+                // The single app collision hook (avian allows one): one-way gates yield in their
+                // open direction. See `pinball::gate`.
                 .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
             // crate::diagnostics::DiagnosticsPlugin,
@@ -113,6 +114,11 @@ impl Plugin for AppPlugin {
         // Set up the `Pause` state.
         app.init_state::<Pause>();
         app.configure_sets(Update, PausableSystems.run_if(in_state(Pause(false))));
+        // Physics-schedule collision-response systems (e.g. slingshots) also honour pause.
+        app.configure_sets(
+            FixedPostUpdate,
+            PausableSystems.run_if(in_state(Pause(false))),
+        );
 
         // Spawn the main camera.
         app.add_systems(Startup, spawn_camera);

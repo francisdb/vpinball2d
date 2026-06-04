@@ -318,7 +318,9 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
         } else if self.gates.contains(contacts.collider2) {
             (contacts.collider2, contacts.collider1)
         } else {
-            // Not a gate contact; keep it.
+            // Not a gate contact; keep it. Phantom speculative contacts are now curbed by the higher
+            // physics tick rate (see `main`), not filtered here - filtering dropped the speculative
+            // approach contact that slingshots read for their inbound speed, breaking the kick.
             return true;
         };
         let Ok(gate) = self.gates.get(gate_entity) else {
