@@ -9,7 +9,7 @@
 //!
 //! Instead we drop the phantom contacts directly: a real touch has ~zero separation and is kept; a
 //! phantom/buried contact keeps its gap and is dropped. Velocities are never touched, so restitution
-//! survives. The ball's [`SweptCcd`](avian2d::prelude::SweptCcd) still covers genuinely fast hits.
+//! survives. The ball's [`SweptCcd`] still covers genuinely fast hits.
 //!
 //! avian allows a single [`CollisionHooks`] per app, so rather than its own hook this is a helper
 //! ([`contact_is_real`]) that [`GateCollisionHooks`](super::gate::GateCollisionHooks) applies to
