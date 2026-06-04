@@ -1,13 +1,18 @@
 use crate::pinball::ball::{BALL_RADIUS_M, Ball};
 use crate::screens::Screen;
-use bevy::asset::{Assets, RenderAssetUsages};
+use bevy::asset::{Asset, Assets, RenderAssetUsages};
 use bevy::color::Srgba;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::image::Image;
-use bevy::mesh::{Mesh, Mesh2d};
+use bevy::mesh::{Mesh, Mesh2d, MeshVertexBufferLayoutRef};
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::sprite_render::AlphaMode2d;
+use bevy::reflect::TypePath;
+use bevy::render::render_resource::{
+    AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, Extent3d,
+    RenderPipelineDescriptor, SpecializedMeshPipelineError, TextureDimension, TextureFormat,
+};
+use bevy::shader::ShaderRef;
+use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dKey, Material2dPlugin};
 use vpin::vpx;
 use vpin::vpx::units::vpu_to_m;
 
@@ -30,6 +35,14 @@ const SHADOW_ALPHA: f32 = 0.45;
 /// Z of the light glows: a flat surface effect just above the playfield, below
 /// the ball shadows and the ball. The vpx bulb height is irrelevant for 2D layering.
 const LIGHT_Z: f32 = 0.005;
+/// Additive glow alpha per unit of vpx light intensity. Pinball general
+/// illumination uses many low-power bulbs (intensity ~4); inserts are far
+/// brighter (~90). Scaling by intensity keeps GI gentle while lit inserts stand
+/// out. Halved from a brighter baseline so the many overlapping GI bulbs do not
+/// overbrighten.
+const INTENSITY_TO_ALPHA: f32 = 0.02;
+/// Cap so no single lamp blows the playfield to white on the LDR pipeline.
+const MAX_GLOW_ALPHA: f32 = 0.6;
 /// Z of the ball shadows: above the light glows, just below the ball itself.
 const SHADOW_Z: f32 = 0.012;
 /// One soft shadow per overhead light, offset away from that light. With the two
@@ -52,7 +65,52 @@ struct BallShadow {
     ball: Entity,
 }
 
+/// Additive material for light glows: light is added to the playfield rather than
+/// blended over it, so colours are brightened instead of washed out. Overlapping
+/// lights accumulate. The additive blend state is set in [`Material2d::specialize`].
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub(crate) struct GlowMaterial {
+    #[uniform(0)]
+    color: LinearRgba,
+    #[texture(1)]
+    #[sampler(2)]
+    texture: Handle<Image>,
+}
+
+impl Material2d for GlowMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/glow.wgsl".into()
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        // Additive: framebuffer += source. The shader premultiplies by the glow
+        // falloff so transparent edges contribute nothing.
+        const ADD_ONE: BlendComponent = BlendComponent {
+            src_factor: BlendFactor::One,
+            dst_factor: BlendFactor::One,
+            operation: BlendOperation::Add,
+        };
+        if let Some(target) = descriptor
+            .fragment
+            .as_mut()
+            .and_then(|fragment| fragment.targets.get_mut(0))
+            .and_then(|target| target.as_mut())
+        {
+            target.blend = Some(BlendState {
+                color: ADD_ONE,
+                alpha: ADD_ONE,
+            });
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn plugin(app: &mut App) {
+    app.add_plugins(Material2dPlugin::<GlowMaterial>::default());
     app.add_systems(Startup, setup_lighting);
     app.add_systems(
         Update,
@@ -109,18 +167,28 @@ fn radial_image(falloff: impl Fn(f32) -> f32) -> Image {
 
 pub(super) fn spawn_light(
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
+    glow_materials: &mut ResMut<Assets<GlowMaterial>>,
     glow_texture: &Handle<Image>,
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
 ) {
+    // General illumination is on whenever the table is powered, so always render
+    // GI bulbs. Other lamps (inserts) are switched by game logic that is not wired
+    // up yet, so only render them when the table ships them lit (state != 0).
+    // State 0 = off, 1 = on, 2 = blinking.
+    let is_gi = light.name.to_lowercase().starts_with("gi");
+    let is_on = light.state != Some(0.0);
+    if !is_gi && !is_on {
+        return;
+    }
     // Cover the falloff radius, but never collapse to nothing for lights that
     // only define a small core.
     let radius = vpu_to_m(light.falloff_radius).max(vpu_to_m(light.mesh_radius));
-    // Soft, diffuse glow tinted by the light colour. The radial texture provides
-    // the falloff; the material alpha keeps the overall glow light.
-    let glow_color = Srgba::rgb_u8(light.color.r, light.color.g, light.color.b).with_alpha(0.7);
+    // Glow tinted by the light colour; brightness scales with the lamp intensity
+    // (capped), so many low-power GI bulbs stay gentle.
+    let alpha = (light.intensity * INTENSITY_TO_ALPHA).clamp(0.0, MAX_GLOW_ALPHA);
+    let glow_color = Srgba::rgb_u8(light.color.r, light.color.g, light.color.b).with_alpha(alpha);
     parent.spawn((
         Light {
             name: light.name.clone(),
@@ -132,11 +200,9 @@ pub(super) fn spawn_light(
             LIGHT_Z,
         ),
         Mesh2d(meshes.add(Circle::new(radius))),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            color: glow_color.into(),
-            alpha_mode: AlphaMode2d::Blend,
-            texture: Some(glow_texture.clone()),
-            ..default()
+        MeshMaterial2d(glow_materials.add(GlowMaterial {
+            color: Color::from(glow_color).to_linear(),
+            texture: glow_texture.clone(),
         })),
     ));
 }

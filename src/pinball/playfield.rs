@@ -16,7 +16,7 @@ pub struct Playfield;
 
 /// Default brightness multiplier for the playfield image. Dimming it lets the
 /// light glows read as actual light instead of washing out against bright art.
-const PLAYFIELD_BRIGHTNESS: f32 = 0.4;
+const PLAYFIELD_BRIGHTNESS: f32 = 0.5;
 
 /// Build the playfield: a table-sized quad textured with the table image, marked with
 /// [`Playfield`].
