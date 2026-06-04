@@ -72,23 +72,15 @@ impl Plugin for AppPlugin {
             PhysicsPlugins::default()
                 .with_length_unit(0.1)
                 // The single app collision hook (avian allows one): one-way gates yield in their
-                // open direction, and every other contact is filtered for avian's phantom
-                // speculative contacts at our small scale. See `pinball::gate` and `pinball::physics`.
+                // open direction. See `pinball::gate`.
                 .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
             // crate::diagnostics::DiagnosticsPlugin,
         ));
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
-        // Physics tick rate. avian runs in FixedPostUpdate (bevy default ~64 Hz). A higher rate
-        // shrinks the speculative-contact reach (frame_dt * velocity), so a fast ball stops bouncing
-        // off corners it never touches (the eject-hole "ghost") - the same reason Visual Pinball runs
-        // at 1000 Hz. Substeps don't help that (collision detection runs once per fixed step), so they
-        // are traded down to keep total work similar. Stopgap until avian's CCD rework lands
-        // (avianphysics/avian#990); raise the Hz if the ghost persists, and watch flipper feel as
-        // substeps drop.
-        app.insert_resource(Time::<Fixed>::from_hz(240.0));
-        app.insert_resource(SubstepCount(12));
+        // to improve physics stability
+        app.insert_resource(SubstepCount(50));
 
         // #[cfg(feature = "dev")]
         // app.add_plugins((EguiPlugin::default(), WorldInspectorPlugin::new()));
@@ -122,6 +114,11 @@ impl Plugin for AppPlugin {
         // Set up the `Pause` state.
         app.init_state::<Pause>();
         app.configure_sets(Update, PausableSystems.run_if(in_state(Pause(false))));
+        // Physics-schedule collision-response systems (e.g. slingshots) also honour pause.
+        app.configure_sets(
+            FixedPostUpdate,
+            PausableSystems.run_if(in_state(Pause(false))),
+        );
 
         // Spawn the main camera.
         app.add_systems(Startup, spawn_camera);

@@ -30,11 +30,17 @@ const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (
-            strip_slingshot_rest_colliders,
-            handle_slingshot_collisions,
-            animate_slingshot_flash,
-        )
+        (strip_slingshot_rest_colliders, animate_slingshot_flash)
+            .in_set(PausableSystems)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    // Read contacts in the physics schedule (per fixed step, right after avian's step) so the
+    // slingshot sees the ball's approach speed. Read in `Update` it would be stale by many physics
+    // steps whenever the tick rate outpaces the frame rate, and the inbound speed reads as ~0.
+    app.add_systems(
+        FixedPostUpdate,
+        handle_slingshot_collisions
+            .after(PhysicsSystems::StepSimulation)
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );

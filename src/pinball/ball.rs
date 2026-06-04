@@ -81,8 +81,8 @@ pub(crate) fn ball(
             Collider::circle(BALL_RADIUS_M),
             SleepingDisabled,
             CollisionEventsEnabled,
-            // Run the app's collision hook on every ball contact: drops avian's phantom speculative
-            // contacts (see pinball::gate::GateCollisionHooks and pinball::physics::contact_is_real).
+            // Run the app's collision hook on every ball contact: the one-way gate logic
+            // (see pinball::gate::GateCollisionHooks).
             ActiveCollisionHooks::MODIFY_CONTACTS,
             // continuous collision detection to prevent tunneling at high speeds
             SweptCcd::default(),

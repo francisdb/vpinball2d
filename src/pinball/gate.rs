@@ -318,9 +318,10 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
         } else if self.gates.contains(contacts.collider2) {
             (contacts.collider2, contacts.collider1)
         } else {
-            // Not a gate contact: avian allows one hook per app, so this same hook also drops
-            // avian's phantom speculative contacts at our small scale. See `super::physics`.
-            return super::physics::contact_is_real(contacts);
+            // Not a gate contact; keep it. Phantom speculative contacts are now curbed by the higher
+            // physics tick rate (see `main`), not filtered here - filtering dropped the speculative
+            // approach contact that slingshots read for their inbound speed, breaking the kick.
+            return true;
         };
         let Ok(gate) = self.gates.get(gate_entity) else {
             return true;
