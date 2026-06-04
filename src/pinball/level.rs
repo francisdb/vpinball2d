@@ -21,8 +21,9 @@ use bevy::prelude::*;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::units::vpu_to_m;
 
-pub(super) fn plugin(_app: &mut App) {
+pub(super) fn plugin(app: &mut App) {
     //app.load_resource::<LevelAssets>();
+    app.add_plugins(crate::pinball::playfield::plugin);
 }
 
 #[derive(Resource, Asset, Clone, Reflect)]

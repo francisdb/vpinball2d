@@ -173,12 +173,13 @@ pub(super) fn spawn_light(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
 ) {
-    // General illumination is on whenever the table is powered, so always render
-    // GI bulbs. Other lamps (inserts) are switched by game logic that is not wired
-    // up yet, so only render them when the table ships them lit (state != 0).
-    // State 0 = off, 1 = on, 2 = blinking.
-    let is_gi = light.name.to_lowercase().starts_with("gi");
-    let is_on = light.state != Some(0.0);
+    // Tables ship with their lamps off; the ROM lights them during a game (and
+    // animates them in attract mode). We do not drive a ROM, so render only general
+    // illumination (GI / pfGI bulbs, on whenever the table is powered) plus any lamp
+    // the table ships explicitly lit. State 0 = off, 1 = on, 2 = blinking; None =
+    // unspecified, treated as off so insert-heavy tables do not light every lamp.
+    let is_gi = light.name.to_lowercase().contains("gi");
+    let is_on = light.state.is_some_and(|state| state != 0.0);
     if !is_gi && !is_on {
         return;
     }
@@ -206,6 +207,10 @@ pub(super) fn spawn_light(
         })),
     ));
 }
+
+// TODO: flippers also need a dynamic drop shadow that tracks their rotation, the
+// same way the ball gets one here. The flipper bat is a moving body, so its shadow
+// has to follow both position and angle (offset per overhead light).
 
 /// Spawns one drop shadow per ball: a small group of soft dark blobs, one offset
 /// per overhead light. Reuses the shared glow texture, tinted dark.
