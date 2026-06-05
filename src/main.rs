@@ -22,6 +22,7 @@ use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::audio::{AudioPlugin, SpatialScale};
+use bevy::render::render_resource::TextureFormat;
 use bevy::{asset::AssetMetaCheck, prelude::*};
 use vpin::vpx::units::vpu_to_m;
 // use bevy_inspector_egui::bevy_egui::EguiPlugin;
@@ -40,17 +41,42 @@ pub struct AppPlugin;
 
 impl Plugin for AppPlugin {
     fn build(&self, app: &mut App) {
-        // Add Bevy plugins.
-        app.add_plugins((
-            DefaultPlugins
-                .set(AssetPlugin {
-                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
-                    // This causes errors and even panics on web build on itch.
-                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
-                    meta_check: AssetMetaCheck::Never,
-                    ..default()
-                })
-                .set(WindowPlugin {
+        // Headless render mode (VPINBALL_HEADLESS=1): run without a window, rendering the
+        // main view to an offscreen image that the remote control `screenshot` command
+        // can save. Lets the output be inspected where a window cannot be presented
+        // (CI, sandboxes). Zero effect on normal runs.
+        let headless = std::env::var("VPINBALL_HEADLESS").is_ok();
+        app.insert_resource(Headless(headless));
+
+        let default_plugins = DefaultPlugins
+            .set(AssetPlugin {
+                // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                // This causes errors and even panics on web build on itch.
+                // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            })
+            .set(AudioPlugin {
+                default_spatial_scale: SpatialScale::new_2d(AUDIO_SCALE),
+                ..default()
+            });
+        if headless {
+            app.add_plugins(
+                default_plugins
+                    .set(WindowPlugin {
+                        primary_window: None,
+                        exit_condition: bevy::window::ExitCondition::DontExit,
+                        close_when_requested: false,
+                        ..default()
+                    })
+                    .disable::<bevy::winit::WinitPlugin>(),
+            );
+            app.add_plugins(bevy::app::ScheduleRunnerPlugin::run_loop(
+                core::time::Duration::from_millis(16),
+            ));
+        } else {
+            app.add_plugins(
+                default_plugins.set(WindowPlugin {
                     primary_window: Window {
                         title: "VPinball2D".to_string(),
                         fit_canvas_to_parent: true,
@@ -58,25 +84,21 @@ impl Plugin for AppPlugin {
                     }
                     .into(),
                     ..default()
-                })
-                .set(AudioPlugin {
-                    default_spatial_scale: SpatialScale::new_2d(AUDIO_SCALE),
-                    ..default()
                 }),
-            // One unit in bevy is one meter
-            // However I have the impression that this should be adjusted to the average object size
-            // in the scene? So we set it to 0.1 to have more reasonable values for debug rendering
-            // Interpolate rigid-body Transforms between fixed physics steps so rendering stays
-            // smooth when the step rate is low relative to the framerate (e.g. in slow motion).
-            // This is render-only and does not change the simulation.
+            );
+        }
+
+        // One unit in bevy is one meter
+        // Interpolate rigid-body Transforms between fixed physics steps so rendering stays
+        // smooth when the step rate is low relative to the framerate (e.g. in slow motion).
+        app.add_plugins(
             PhysicsPlugins::default()
                 .with_length_unit(0.1)
                 // The single app collision hook (avian allows one): one-way gates yield in their
                 // open direction. See `pinball::gate`.
                 .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
-            // crate::diagnostics::DiagnosticsPlugin,
-        ));
+        );
         // gravity of approx. 9.81 m/s² but with a table at 7° angle
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
         // to improve physics stability
@@ -152,22 +174,51 @@ struct PausableSystems;
 /// inverted compared to Bevy's coordinate system.
 /// Further the origin is at the top-left of the table in VPinball, while we use the
 /// center of the table as origin in Bevy.
-fn spawn_camera(mut commands: Commands) {
+fn spawn_camera(
+    mut commands: Commands,
+    headless: Res<Headless>,
+    mut images: ResMut<Assets<Image>>,
+) {
     // The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
     let table_width_m = vpu_to_m(952.0);
     let table_depth_m = vpu_to_m(2162.0);
     // TODO: switch this camera to HDR and add a `Bloom` component (+ tonemapping) so
     // the additive light glows bloom and roll off instead of hard-clipping to white
     // on the LDR pipeline. See `pinball::light::GlowMaterial`.
-    commands.spawn((
-        Name::new("Camera"),
-        Camera2d,
-        Projection::Orthographic(OrthographicProjection {
-            scaling_mode: bevy::camera::ScalingMode::AutoMin {
-                min_height: table_depth_m,
-                min_width: table_width_m,
-            },
-            ..OrthographicProjection::default_2d()
-        }),
-    ));
+    let camera = commands
+        .spawn((
+            Name::new("Camera"),
+            Camera2d,
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: bevy::camera::ScalingMode::AutoMin {
+                    min_height: table_depth_m,
+                    min_width: table_width_m,
+                },
+                ..OrthographicProjection::default_2d()
+            }),
+        ))
+        .id();
+    if headless.0 {
+        // No window to present to, so render the main view to an offscreen image that
+        // the `screenshot` command captures.
+        let image = images.add(Image::new_target_texture(
+            900,
+            2044,
+            TextureFormat::Rgba8UnormSrgb,
+            None,
+        ));
+        commands
+            .entity(camera)
+            .insert(bevy::camera::RenderTarget::Image(image.clone().into()));
+        commands.insert_resource(HeadlessImage(image));
+    }
 }
+
+/// Whether the app is running in headless render mode (no window).
+#[derive(Resource)]
+pub(crate) struct Headless(pub(crate) bool);
+
+/// In headless mode, the offscreen image the main camera renders to; the remote
+/// control `screenshot` command saves this instead of the (absent) window.
+#[derive(Resource)]
+pub(crate) struct HeadlessImage(pub(crate) Handle<Image>);

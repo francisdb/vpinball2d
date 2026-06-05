@@ -86,6 +86,7 @@ playfield is centred on the origin with `+y` up the table.
 | `release <left\|right\|plunge>` | release it |
 | `tap <left\|right\|plunge> [ms]` | press, then auto-release after `ms` (default 120) |
 | `nudge <left\|right\|bottom>` | shake the table once (`bottom` is the front nudge that jolts it upward) |
+| `screenshot [path]` | save the current frame to `path` (default `/tmp/vpinball2d_shot.png`) so an operator who cannot see the window can grab one |
 
 Flipper and plunger commands inject into the same keyboard input the gameplay systems read, so
 they behave exactly like a real key press.
@@ -93,6 +94,21 @@ they behave exactly like a real key press.
 ```bash
 echo "tp 0.0 0.45 0.05 0.0" > /tmp/vpinball2d_cmd   # drop a ball into play
 echo "tap left 110"         > /tmp/vpinball2d_cmd   # flip the left flipper
+echo "screenshot /tmp/shot.png" > /tmp/vpinball2d_cmd   # save the current frame
+```
+
+### Headless capture
+
+When there is no display to present a window to (CI, a container, a remote agent), set
+`VPINBALL_HEADLESS=1`. The game then runs without a window and renders the main view to an
+offscreen image; the `screenshot` command saves that image instead of the (absent) window, so the
+rendered output can still be inspected. In a normal windowed run the same command captures the
+window.
+
+```bash
+VPINBALL_HEADLESS=1 cargo run --features dev &      # render without a window
+sleep 6                                             # let the table load
+echo "screenshot /tmp/shot.png" > /tmp/vpinball2d_cmd
 ```
 
 ### Telemetry
