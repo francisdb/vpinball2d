@@ -148,16 +148,20 @@ fn handle_drain(
 
         // TODO we want to delay the kick
         // TODO get rid off all these dependencies to spawn a new ball
-        commands.spawn(spawn_ball(
-            0,
-            &table_assets,
-            &mut meshes,
-            &mut materials,
-            &assets_vpx,
-            Vec2 {
-                x: kicker_transform.translation.x,
-                y: kicker_transform.translation.y,
-            },
+        commands.spawn((
+            spawn_ball(
+                0,
+                &table_assets,
+                &mut meshes,
+                &mut materials,
+                &assets_vpx,
+                Vec2 {
+                    x: kicker_transform.translation.x,
+                    y: kicker_transform.translation.y,
+                },
+            ),
+            // Clean up with the session so released balls do not linger after exit.
+            DespawnOnExit(crate::screens::Screen::Gameplay),
         ));
     }
 }
