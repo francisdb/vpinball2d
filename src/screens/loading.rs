@@ -1,31 +1,48 @@
-//! A loading screen during which game assets are loaded if necessary.
-//! This reduces stuttering, especially for audio on Wasm.
+//! Loads the selected table's assets, then enters gameplay.
 
+use crate::pinball::TablePath;
+use crate::pinball::table::TableAssets;
+use crate::screens::Screen;
+use crate::theme::widget;
 use bevy::prelude::*;
 
-use crate::{asset_tracking::ResourceHandles, screens::Screen, theme::prelude::*};
-
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Loading), spawn_loading_screen);
-
     app.add_systems(
-        Update,
-        enter_game_setup_play_screen.run_if(in_state(Screen::Loading).and(all_assets_loaded)),
+        OnEnter(Screen::Loading),
+        (start_loading_table, spawn_loading_screen),
     );
+    app.add_systems(Update, enter_gameplay.run_if(in_state(Screen::Loading)));
+}
+
+/// Kick off loading the selected table's vpx (and its image/sound dependencies).
+fn start_loading_table(
+    mut commands: Commands,
+    table_path: Res<TablePath>,
+    assets: Res<AssetServer>,
+) {
+    commands.insert_resource(TableAssets {
+        file_name: table_path.path.to_string_lossy().to_string(),
+        vpx: assets.load(table_path.path.clone()),
+    });
 }
 
 fn spawn_loading_screen(mut commands: Commands) {
     commands.spawn((
-        widget::ui_root("Loading Screen"),
+        widget::ui_root("Loading"),
         DespawnOnExit(Screen::Loading),
         children![widget::label("Loading...")],
     ));
 }
 
-fn enter_game_setup_play_screen(mut next_screen: ResMut<NextState<Screen>>) {
-    next_screen.set(Screen::GameSetup);
-}
-
-fn all_assets_loaded(resource_handles: Res<ResourceHandles>) -> bool {
-    resource_handles.is_all_done()
+/// Enter gameplay once the table and all its dependencies are loaded.
+fn enter_gameplay(
+    table_assets: Option<Res<TableAssets>>,
+    assets: Res<AssetServer>,
+    mut next_screen: ResMut<NextState<Screen>>,
+) {
+    if let Some(table_assets) = table_assets
+        && assets.is_loaded_with_dependencies(&table_assets.vpx)
+    {
+        next_screen.set(Screen::Gameplay);
+    }
 }

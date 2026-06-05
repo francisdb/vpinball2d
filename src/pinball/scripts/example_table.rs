@@ -13,23 +13,33 @@ use crate::pinball::targets::TargetSounds;
 use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds, Wall};
 use bevy::prelude::*;
 
+const TABLE: &str = "exampleTable.vpx";
+
 pub(super) fn plugin(app: &mut App) {
-    app.insert_resource(DrainSounds {
+    app.add_systems(
+        OnEnter(crate::screens::Screen::Gameplay),
+        (setup, remove_plunger_wall).run_if(super::is_table(TABLE)),
+    );
+}
+
+/// Insert the table's sound/animation config when this table enters gameplay.
+fn setup(mut commands: Commands) {
+    commands.insert_resource(DrainSounds {
         drain: vec!["drain".to_string()],
         release: vec!["ballrelease".to_string()],
     });
-    app.insert_resource(FlipperSounds {
+    commands.insert_resource(FlipperSounds {
         up: vec!["fx_Flipperup".to_string()],
         down: vec!["fx_Flipperdown".to_string()],
     });
-    app.insert_resource(BumperSounds {
+    commands.insert_resource(BumperSounds {
         hit: vec!["fx_bumper4".to_string()],
     });
-    app.insert_resource(SlingshotSounds {
+    commands.insert_resource(SlingshotSounds {
         hit: vec!["left_slingshot".to_string(), "right_slingshot".to_string()],
     });
     // Slingshot rubbers: the rest band plus a flexed frame shown briefly on a hit.
-    app.insert_resource(SlingshotAnimations(vec![
+    commands.insert_resource(SlingshotAnimations(vec![
         SlingshotAnimation {
             slingshot: "LeftSlingShot".to_string(),
             rest: "LSling".to_string(),
@@ -41,19 +51,15 @@ pub(super) fn plugin(app: &mut App) {
             flexed: "RSling1".to_string(),
         },
     ]));
-    app.insert_resource(TargetSounds {
+    commands.insert_resource(TargetSounds {
         hit: vec!["target".to_string()],
     });
-    app.insert_resource(SpinnerSounds {
+    commands.insert_resource(SpinnerSounds {
         spin: vec!["fx_spinner".to_string()],
     });
-    app.insert_resource(GateSounds {
+    commands.insert_resource(GateSounds {
         hit: vec!["gate".to_string()],
     });
-    app.add_systems(
-        OnEnter(crate::screens::Screen::Gameplay),
-        remove_plunger_wall,
-    );
 }
 
 // TODO temporary hack: this wall keeps the ball in the lane and lets the plunger pass

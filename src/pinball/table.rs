@@ -1,7 +1,5 @@
 //! Table-specific behavior.
 
-use crate::asset_tracking::LoadResource;
-use crate::pinball::TablePath;
 use crate::pinball::lightmap::PlayfieldLightMaterial;
 use crate::pinball::playfield::playfield;
 use crate::vpx::VpxAsset;
@@ -14,16 +12,9 @@ use vpin::vpx::units::vpu_to_m;
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
 
-pub(super) fn plugin(app: &mut App) {
-    app.load_resource::<TableAssets>();
-
-    // // Record directional input as movement controls.
-    // app.add_systems(
-    //     Update,
-    //     record_player_directional_input
-    //         .in_set(AppSystems::RecordInput)
-    //         .in_set(PausableSystems),
-    // );
+pub(super) fn plugin(_app: &mut App) {
+    // `TableAssets` is inserted by the loading screen once a table is chosen; see
+    // `screens::loading`.
 }
 
 /// The pinball table
@@ -169,24 +160,10 @@ pub(crate) fn table(
 #[reflect(Component)]
 struct Table;
 
-#[derive(Resource, Asset, Clone, Reflect)]
-#[reflect(Resource)]
+/// The currently loaded table; inserted by the loading screen once a table is
+/// chosen, and read by everything that builds the playfield.
+#[derive(Resource, Clone)]
 pub struct TableAssets {
     pub(crate) file_name: String,
-    #[dependency]
     pub(crate) vpx: Handle<VpxAsset>,
-}
-
-impl FromWorld for TableAssets {
-    fn from_world(world: &mut World) -> Self {
-        let table_path = world
-            .get_resource::<TablePath>()
-            .expect("Failed to get table path");
-        let assets = world.resource::<AssetServer>();
-        let file_name = table_path.path.to_string_lossy().to_string();
-        Self {
-            file_name: file_name.clone(),
-            vpx: assets.load(file_name),
-        }
-    }
 }

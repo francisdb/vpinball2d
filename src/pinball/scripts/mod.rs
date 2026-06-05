@@ -2,6 +2,9 @@
 //! However, we don't want to implement a full VBScript interpreter in Rust.
 //! Instead, we want to use a still supported and widely used language like Lua.
 //! For now however we re-implement the script in Rust directly as a proof of concept.
+//!
+//! The table is chosen at runtime, so every table's script is registered and each
+//! one only activates for its own table via [`is_table`].
 
 use crate::pinball::TablePath;
 use bevy::prelude::*;
@@ -11,19 +14,14 @@ mod north_pole;
 mod tna;
 
 pub(super) fn plugin(app: &mut App) {
-    let table_path = app.world().resource::<TablePath>();
-    match table_path.path.file_name().unwrap().to_str().unwrap() {
-        "exampleTable.vpx" => {
-            app.add_plugins((example_table::plugin,));
-        }
-        "North Pole (Playmatic 1967) v600.vpx" => {
-            app.add_plugins((north_pole::plugin,));
-        }
-        "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx" => {
-            app.add_plugins((tna::plugin,));
-        }
-        other => {
-            warn!("No script available for table file: {}", other);
-        }
+    app.add_plugins((example_table::plugin, north_pole::plugin, tna::plugin));
+}
+
+/// Run condition: true when the currently selected table is `file_name`.
+pub(super) fn is_table(file_name: &'static str) -> impl Fn(Option<Res<TablePath>>) -> bool + Clone {
+    move |table_path: Option<Res<TablePath>>| {
+        table_path.is_some_and(|table_path| {
+            table_path.path.file_name().and_then(|n| n.to_str()) == Some(file_name)
+        })
     }
 }

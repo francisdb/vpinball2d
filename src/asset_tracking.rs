@@ -47,13 +47,6 @@ pub struct ResourceHandles {
     finished: Vec<UntypedHandle>,
 }
 
-impl ResourceHandles {
-    /// Returns true if all requested [`Asset`]s have finished loading and are available as [`Resource`]s.
-    pub fn is_all_done(&self) -> bool {
-        self.waiting.is_empty()
-    }
-}
-
 fn load_resource_assets(world: &mut World) {
     world.resource_scope(|world, mut resource_handles: Mut<ResourceHandles>| {
         world.resource_scope(|world, assets: Mut<AssetServer>| {
