@@ -164,7 +164,8 @@ fn ball_collision_sounds(
             let center_pos = (transform1.translation + transform2.translation) / 2.0;
             commands.spawn((
                 AudioPlayer::new(sound_ball_collision.clone()),
-                PlaybackSettings::ONCE
+                // DESPAWN (not ONCE) so the one-shot entity cleans itself up.
+                PlaybackSettings::DESPAWN
                     .with_spatial(true)
                     .with_volume(Volume::Linear(volume)),
                 Transform::from_translation(center_pos),

@@ -10,8 +10,19 @@ use crate::pinball::kicker::DrainSounds;
 use crate::pinball::wall::{SlingshotSounds, Wall};
 use bevy::prelude::*;
 
+const TABLE: &str = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
+
 pub(super) fn plugin(app: &mut App) {
-    app.insert_resource(DrainSounds {
+    // TODO there's also a ramp that brings the ball over the loop side rail which we need
+    //   to somehow ignore collisions with until the ball is fully launched.
+    app.add_systems(
+        OnEnter(crate::screens::Screen::Gameplay),
+        (setup, remove_plunger_wall).run_if(super::is_table(TABLE)),
+    );
+}
+
+fn setup(mut commands: Commands) {
+    commands.insert_resource(DrainSounds {
         drain: (1..=6)
             .map(|i| format!("SY_TNA_REV02_Trough_Drain_{i}"))
             .collect(),
@@ -28,8 +39,8 @@ pub(super) fn plugin(app: &mut App) {
         .map(|i| format!("SY_TNA_REV02_Flipper_Lower_Left_Down_{i}"))
         .collect();
     down.extend((1..=7).map(|i| format!("SY_TNA_REV02_Flipper_Lower_Right_Down_{i}")));
-    app.insert_resource(FlipperSounds { up, down });
-    app.insert_resource(BumperSounds {
+    commands.insert_resource(FlipperSounds { up, down });
+    commands.insert_resource(BumperSounds {
         hit: (1..=7)
             .map(|i| format!("SY_TNA_REV03_Pop_Bumper_{i}"))
             .collect(),
@@ -39,13 +50,7 @@ pub(super) fn plugin(app: &mut App) {
         .map(|i| format!("SY_TNA_REV03_Slingshot_Main_Left_{i}"))
         .collect();
     sling.extend((1..=7).map(|i| format!("SY_TNA_REV03_Slingshot_Main_Right_{i}")));
-    app.insert_resource(SlingshotSounds { hit: sling });
-    // TODO there's also a ramp that brings the ball over the loop side rail which we need
-    //   to somehow ignore collisions with until the ball is fully launched.
-    app.add_systems(
-        OnEnter(crate::screens::Screen::Gameplay),
-        remove_plunger_wall,
-    );
+    commands.insert_resource(SlingshotSounds { hit: sling });
 }
 
 // TODO temporary hack, see example_table.rs.

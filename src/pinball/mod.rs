@@ -39,10 +39,8 @@ impl TablePath {
 }
 
 pub(super) fn plugin(app: &mut App) {
-    let file_name = "exampleTable.vpx";
-    //let file_name = "North Pole (Playmatic 1967) v600.vpx";
-    //let file_name = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
-    app.insert_resource(TablePath::new(file_name)).add_plugins((
+    // The table is chosen at runtime (table picker or command line); see `screens`.
+    app.add_plugins((
         level::plugin,
         table::plugin,
         ball::plugin,

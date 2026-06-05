@@ -7,7 +7,6 @@ mod asset_tracking;
 mod audio;
 #[cfg(feature = "dev")]
 mod dev_tools;
-mod menus;
 mod pinball;
 #[cfg(any(feature = "remote_control", feature = "telemetry"))]
 mod play;
@@ -117,10 +116,18 @@ impl Plugin for AppPlugin {
             dev_tools::plugin,
             #[cfg(any(feature = "remote_control", feature = "telemetry"))]
             play::plugin,
-            menus::plugin,
             screens::plugin,
             theme::plugin,
         ));
+
+        // A table given on the command line (e.g. `vpinball2d "My Table.vpx"`) is an
+        // external frontend driving us: skip the picker, load it straight away, and
+        // make Esc exit the game instead of returning to selection.
+        if let Some(table) = std::env::args().nth(1).filter(|arg| !arg.starts_with('-')) {
+            app.insert_resource(crate::pinball::TablePath::new(table));
+            app.insert_resource(crate::screens::ExternalFrontend(true));
+            app.insert_state(crate::screens::Screen::Loading);
+        }
 
         // Order new `AppSystems` variants by adding them here:
         app.configure_sets(
@@ -189,6 +196,9 @@ fn spawn_camera(
         .spawn((
             Name::new("Camera"),
             Camera2d,
+            // Explicit UI camera so the menus render to this camera (and its target)
+            // even when there is no primary window (headless capture).
+            IsDefaultUiCamera,
             Projection::Orthographic(OrthographicProjection {
                 scaling_mode: bevy::camera::ScalingMode::AutoMin {
                     min_height: table_depth_m,

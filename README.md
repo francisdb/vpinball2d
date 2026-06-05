@@ -2,12 +2,11 @@
 
 Visual Pinball 2D engine
 
-## Vpinball demo table
+## Tables
 
-Currently only a simple demo table is supported.
-Copy
-the [The Visual Pinball example table](https://github.com/vpinball/vpinball/raw/refs/heads/master/src/assets/exampleTable.vpx)
-to the assets folder before running the application.
+Put Visual Pinball `.vpx` table files in the `assets/` folder; the game lists them
+in a picker at startup. A good starting point is
+the [Visual Pinball example table](https://github.com/vpinball/vpinball/raw/refs/heads/master/src/assets/exampleTable.vpx).
 
 ## Build & Run
 
@@ -19,7 +18,17 @@ command in your terminal:
 cargo run --release
 ```
 
-This will compile the project and launch the application.
+This launches a **table picker** listing the `.vpx` files in `assets/`; choose one
+to play. Esc returns to the picker, and Esc in the picker exits the game.
+
+To open a specific table directly - for example when launched by an external
+frontend - pass its file name (relative to `assets/`):
+
+```bash
+cargo run --release -- "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx"
+```
+
+In this mode there is no picker, so Esc exits the game.
 
 ## Controls
 
