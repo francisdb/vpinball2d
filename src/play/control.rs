@@ -1,12 +1,14 @@
 //! Remote control: read commands from [`CMD_PATH`] each frame and inject them as keyboard / ball
 //! input, so an operator who cannot see the pixels can drive the game. Commands: `tp`, `launch`,
-//! `clear`, flipper/plunger `hold`/`release`/`tap`, and `nudge`. Enabled by the `remote_control`
-//! feature.
+//! `clear`, flipper/plunger `hold`/`release`/`tap`, `nudge`, and `screenshot [path]` (save the
+//! current frame so the operator can see it). Enabled by the `remote_control` feature.
 
 use crate::pinball::ball::Ball;
 use crate::screens::Screen;
 use avian2d::prelude::*;
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use std::fs;
 
 /// File polled for commands; written by the operator, truncated by us once read.
@@ -76,6 +78,8 @@ fn read_commands(
     // gameplay input systems read, so they react exactly as to a real key.
     mut keyboard: ResMut<ButtonInput<KeyCode>>,
     mut pending: ResMut<PendingReleases>,
+    // In headless mode the main view renders to this image instead of a window.
+    headless_image: Option<Res<crate::HeadlessImage>>,
 ) {
     let Ok(contents) = fs::read_to_string(CMD_PATH) else {
         return;
@@ -217,6 +221,19 @@ fn read_commands(
                 keyboard.press(key);
                 pending.0.push((key, time.elapsed_secs() + 0.05));
                 info!("play: nudge {dir}");
+            }
+            // Save a screenshot of the current frame. Captures the offscreen image in
+            // headless mode, otherwise the primary window.
+            ["screenshot"] | ["screenshot", _] => {
+                let path = tokens.get(1).copied().unwrap_or("/tmp/vpinball2d_shot.png");
+                // The save observer outlives `contents`, so it must own the path.
+                let owned_path = std::path::PathBuf::from(path);
+                let screenshot = match &headless_image {
+                    Some(image) => Screenshot(RenderTarget::Image(image.0.clone().into())),
+                    None => Screenshot::primary_window(),
+                };
+                commands.spawn(screenshot).observe(save_to_disk(owned_path));
+                info!("play: screenshot -> {path}");
             }
             other => warn!("play: unknown command: {other:?}"),
         }
