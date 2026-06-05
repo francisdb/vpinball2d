@@ -81,6 +81,12 @@ pub(super) fn spawn_rubber(
         visibility,
     ));
 
+    // Visible rubbers drop a shadow into the light map (hidden slingshot-flex rubbers
+    // do not, since they are not drawn at rest).
+    if rubber.is_visible {
+        entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+    }
+
     // Only collidable rubbers get a collider. The slingshots' flexed-frame rubbers are
     // visual-only (is_collidable = false): the contact surface stays the flat rest band,
     // not the extended frame shown during the flex animation.

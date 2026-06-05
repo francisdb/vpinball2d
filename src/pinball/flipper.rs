@@ -173,8 +173,9 @@ pub(super) fn spawn_flipper(
             Mass::from(1.0),
             // the rubber makes the flipper bouncy
             Restitution::from(0.4),
-            // start at the pivot so the body never overlaps the ball at the world origin
-            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.0),
+            // start at the pivot so the body never overlaps the ball at the world origin;
+            // z above the playfield (0.0) so the rubber is not hidden by it
+            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.1),
         ))
         // the rigid bat sits just above the rubber and moves with it
         .with_child((

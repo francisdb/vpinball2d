@@ -6,6 +6,7 @@ use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
+use crate::pinball::lightmap::{PlayfieldLightMaterial, lightmap_camera, lightmap_image};
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::spinner::spawn_spinner;
@@ -48,6 +49,8 @@ pub fn spawn_level(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
+    mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     lighting: Res<LightingAssets>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
@@ -57,6 +60,14 @@ pub fn spawn_level(
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
     let vpx_to_bevy_transform = Transform::from_xyz(-table_width_m / 2.0, table_depth_m / 2.0, 0.0);
+
+    // Offscreen light/shadow map, rendered by its own camera over the playfield rect
+    // and composited onto the playfield by `PlayfieldLightMaterial`.
+    let light_map = lightmap_image(&mut images, table_width_m, table_depth_m);
+    commands.spawn((
+        lightmap_camera(light_map.clone(), table_width_m, table_depth_m),
+        DespawnOnExit(Screen::Gameplay),
+    ));
 
     // TODO the walls should probably be children of the table
     commands
@@ -69,6 +80,8 @@ pub fn spawn_level(
                 &table_assets,
                 &mut meshes,
                 &mut materials,
+                &mut playfield_materials,
+                light_map.clone(),
                 &assets_vpx,
                 camera_q,
             )],

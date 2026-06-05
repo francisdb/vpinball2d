@@ -129,6 +129,10 @@ pub(super) fn spawn_bumper(
         CollisionEventsEnabled,
         RigidBody::Static,
         Collider::circle(base_radius),
+        // Drop a shadow into the light map; scale it past the wider cap so it shows.
+        crate::pinball::light::ShadowCaster {
+            scale: (cap_radius / base_radius) * 1.3,
+        },
         children![(
             Name::from(format!("Bumper Cap {}", bumper.name)),
             Mesh2d(meshes.add(Mesh::from(Circle { radius: cap_radius }))),

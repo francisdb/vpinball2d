@@ -14,6 +14,7 @@ pub(crate) mod gate;
 mod kicker;
 pub mod level;
 mod light;
+pub(crate) mod lightmap;
 mod nudge;
 pub mod playfield;
 pub(crate) mod plunger;
@@ -48,6 +49,7 @@ pub(super) fn plugin(app: &mut App) {
         ballcontrol::plugin,
         bumper::plugin,
         light::plugin,
+        lightmap::plugin,
         scripts::plugin,
         plunger::plugin,
         nudge::plugin,
@@ -56,6 +58,6 @@ pub(super) fn plugin(app: &mut App) {
         wall::plugin,
         targets::plugin,
         spinner::plugin,
-        gate::plugin,
     ));
+    app.add_plugins(gate::plugin);
 }

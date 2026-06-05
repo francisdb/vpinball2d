@@ -76,7 +76,13 @@ fn close_menu(mut next_menu: ResMut<NextState<Menu>>) {
 }
 
 fn fit_camera(
-    mut cameras: Query<&mut Projection, With<Camera2d>>,
+    mut cameras: Query<
+        &mut Projection,
+        (
+            With<Camera2d>,
+            Without<crate::pinball::lightmap::LightmapCamera>,
+        ),
+    >,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {

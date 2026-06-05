@@ -4,22 +4,18 @@
 //! plane, so there is no floor collider. It carries the [`Playfield`] marker so tooling
 //! can treat it as the backdrop (e.g. keep it visible when hiding non-collider meshes).
 
+use crate::pinball::lightmap::PlayfieldLightMaterial;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use bevy::asset::AssetId;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
-use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::units::vpu_to_m;
 
 /// Marker for the playfield surface entity.
 #[derive(Component, Debug, Clone, Copy, Default, Reflect)]
 #[reflect(Component)]
 pub struct Playfield;
-
-/// Default brightness multiplier for the playfield image. Dimming it lets the
-/// light glows read as actual light instead of washing out against bright art.
-const PLAYFIELD_BRIGHTNESS: f32 = 0.5;
 
 /// Brightness multiplier applied to every non-playfield object material, so table
 /// objects sit a touch above the dimmed playfield without popping at full
@@ -69,27 +65,24 @@ fn dim_objects(
 pub(crate) fn playfield(
     vpx_asset: &VpxAsset,
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
+    playfield_materials: &mut ResMut<Assets<PlayfieldLightMaterial>>,
+    light_map: Handle<Image>,
 ) -> (
     Playfield,
     Name,
     Mesh2d,
-    MeshMaterial2d<ColorMaterial>,
+    MeshMaterial2d<PlayfieldLightMaterial>,
     Transform,
 ) {
     let playfield_image = vpx_asset
         .named_images
         .get(vpx_asset.raw.gamedata.image.as_str())
         .unwrap();
-    let material = materials.add(ColorMaterial {
-        color: Color::srgb(
-            PLAYFIELD_BRIGHTNESS,
-            PLAYFIELD_BRIGHTNESS,
-            PLAYFIELD_BRIGHTNESS,
-        ),
-        alpha_mode: AlphaMode2d::Opaque,
-        texture: Some(playfield_image.clone()),
-        ..default()
+    // The light map (rendered over the same rect) modulates the table image:
+    // ambient where unlit, brighter where lit, darker where shadowed.
+    let material = playfield_materials.add(PlayfieldLightMaterial {
+        playfield: playfield_image.clone(),
+        light_map,
     });
     let width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
