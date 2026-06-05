@@ -2,6 +2,7 @@
 
 use crate::asset_tracking::LoadResource;
 use crate::pinball::TablePath;
+use crate::pinball::lightmap::PlayfieldLightMaterial;
 use crate::pinball::playfield::playfield;
 use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
@@ -12,12 +13,6 @@ use vpin::vpx::units::vpu_to_m;
 
 // Typical pinball wall thickness is 3/4 inch = 19.05mm
 const WALL_THICKNESS_M: f32 = 0.01905;
-
-/// Dark surround drawn on top of the light glows, just outside the playfield, so
-/// glows near the edge do not bleed past the table into the margins.
-const MATTE_COLOR: Color = Color::srgb(0.02, 0.02, 0.02);
-/// Above the light glows and ball shadows, below the table walls.
-const MATTE_Z: f32 = 0.05;
 
 pub(super) fn plugin(app: &mut App) {
     app.load_resource::<TableAssets>();
@@ -38,6 +33,8 @@ pub(crate) fn table(
     // texture_atlas_layouts: &mut Assets<TextureAtlasLayout>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    playfield_materials: &mut ResMut<Assets<PlayfieldLightMaterial>>,
+    light_map: Handle<Image>,
     assets_vpx: &Res<Assets<VpxAsset>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) -> impl Bundle {
@@ -101,23 +98,6 @@ pub(crate) fn table(
     let backglass_height = table_depth_m;
     let backglass_mesh = Mesh::from(Rectangle::new(backglass_width, backglass_height));
 
-    // Dark surround that frames the playfield and caps the light glows. The bars
-    // reach well past the visible margins regardless of window aspect ratio.
-    let matte_material = materials.add(ColorMaterial {
-        color: MATTE_COLOR,
-        alpha_mode: AlphaMode2d::Opaque,
-        texture: None,
-        ..default()
-    });
-    let matte_reach = table_depth_m;
-    let matte_h_bar = meshes.add(Rectangle::new(
-        table_width_m + 2.0 * matte_reach,
-        matte_reach,
-    ));
-    let matte_v_bar = meshes.add(Rectangle::new(matte_reach, table_depth_m));
-    let matte_half_w = table_width_m / 2.0 + matte_reach / 2.0;
-    let matte_half_d = table_depth_m / 2.0 + matte_reach / 2.0;
-
     (
         Table,
         Name::from("Table"),
@@ -136,31 +116,7 @@ pub(crate) fn table(
                 MeshMaterial2d(materials.add(Color::from(css::RED))),
                 Transform::from_xyz(0.0, 0.0, 1.0),
             ),
-            playfield(vpx_asset, meshes, materials),
-            (
-                Name::from("Matte Top"),
-                Mesh2d(matte_h_bar.clone()),
-                MeshMaterial2d(matte_material.clone()),
-                Transform::from_xyz(0.0, matte_half_d, MATTE_Z),
-            ),
-            (
-                Name::from("Matte Bottom"),
-                Mesh2d(matte_h_bar),
-                MeshMaterial2d(matte_material.clone()),
-                Transform::from_xyz(0.0, -matte_half_d, MATTE_Z),
-            ),
-            (
-                Name::from("Matte Left"),
-                Mesh2d(matte_v_bar.clone()),
-                MeshMaterial2d(matte_material.clone()),
-                Transform::from_xyz(-matte_half_w, 0.0, MATTE_Z),
-            ),
-            (
-                Name::from("Matte Right"),
-                Mesh2d(matte_v_bar),
-                MeshMaterial2d(matte_material),
-                Transform::from_xyz(matte_half_w, 0.0, MATTE_Z),
-            ),
+            playfield(vpx_asset, meshes, playfield_materials, light_map),
             (
                 Name::from("Bottom Wall"),
                 Mesh2d(meshes.add(Rectangle::new(

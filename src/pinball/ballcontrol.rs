@@ -30,7 +30,10 @@ fn mouse_ball_control(
     window: Single<&Window, With<PrimaryWindow>>,
     gravity: Res<Gravity>,
     mut ball_query: Query<(Entity, &Transform, &Mass, &mut LinearVelocity), With<Ball>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera_query: Query<
+        (&Camera, &GlobalTransform),
+        (With<Camera2d>, Without<super::lightmap::LightmapCamera>),
+    >,
 ) {
     if mouse_buttons.pressed(MouseButton::Left) {
         if let Some((camera, camera_transform)) = camera_query.single().ok()

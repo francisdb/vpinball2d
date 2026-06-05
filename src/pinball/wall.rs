@@ -214,6 +214,9 @@ pub(super) fn spawn_wall(
                 // mesh so we don't draw the band twice (rest rubber + extended wall sliver).
                 Visibility::Hidden,
             ));
+        } else {
+            // Visible walls drop a shadow into the light map (1:1 mesh copy).
+            entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
         }
     } else {
         parent.spawn((
@@ -222,6 +225,7 @@ pub(super) fn spawn_wall(
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             vpx_to_bevy_transform,
+            crate::pinball::light::ShadowCaster { scale: 1.0 },
         ));
     }
 }

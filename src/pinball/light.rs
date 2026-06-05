@@ -1,4 +1,5 @@
 use crate::pinball::ball::{BALL_RADIUS_M, Ball};
+use crate::pinball::lightmap::lightmap_layer;
 use crate::screens::Screen;
 use bevy::asset::{Asset, Assets, RenderAssetUsages};
 use bevy::color::Srgba;
@@ -23,34 +24,39 @@ pub(crate) struct LightingAssets {
     /// Soft radial gradient: white, brightest at the center, fading to fully
     /// transparent at the edge. Tinted bright per light.
     pub(crate) glow: Handle<Image>,
-    /// Harder radial gradient with a solid core and a quick fade, tinted dark for
-    /// ball shadows so they read clearly without being soft and washed out.
-    shadow: Handle<Image>,
 }
 
-/// Radius of a ball drop shadow blob relative to the ball.
-const SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
-/// How dark each shadow blob is at most.
-const SHADOW_ALPHA: f32 = 0.45;
-/// Z of the light glows: a flat surface effect just above the playfield, below
-/// the ball shadows and the ball. The vpx bulb height is irrelevant for 2D layering.
+/// Z of the light glows: a flat surface effect just above the playfield, below the
+/// shadows and the ball. The vpx bulb height is irrelevant for 2D layering.
 const LIGHT_Z: f32 = 0.005;
 /// Additive glow alpha per unit of vpx light intensity. Pinball general
 /// illumination uses many low-power bulbs (intensity ~4); inserts are far
 /// brighter (~90). Scaling by intensity keeps GI gentle while lit inserts stand
-/// out. Halved from a brighter baseline so the many overlapping GI bulbs do not
-/// overbrighten.
-const INTENSITY_TO_ALPHA: f32 = 0.02;
-/// Cap so no single lamp blows the playfield to white on the LDR pipeline.
-const MAX_GLOW_ALPHA: f32 = 0.6;
-/// Z of the ball shadows: above the light glows, just below the ball itself.
+/// out. The light map multiplies the playfield, so over-bright clips to full
+/// playfield brightness (not white), letting us push this without washout.
+const INTENSITY_TO_ALPHA: f32 = 0.1;
+/// Cap so no single lamp dominates.
+const MAX_GLOW_ALPHA: f32 = 0.9;
+
+// --- Shadows: tune every shadow here, in one place ---
+// Ball and static-object shadows both render plain dark shapes into the light map
+// and are softened *uniformly* by the map's resolution, so they always match. The
+// two values below are the only knobs for how every shadow reads.
+/// How dark every shadow is (0 = none, 1 = black).
+const SHADOW_ALPHA: f32 = 0.22;
+/// Softness of every shadow: the light map is rendered at this height (px) and
+/// upscaled onto the playfield, so a lower value blurs all shadows (and glows)
+/// more. `lightmap` reads this so it stays the single shadow-softness knob.
+pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
+/// Z of the shadows in the light map: above the glows, below the ball.
 const SHADOW_Z: f32 = 0.012;
-/// One soft shadow per overhead light, offset away from that light. With the two
-/// lights roughly overhead, the offsets are small and point "down" the table.
-const SHADOW_OFFSETS: [Vec2; 2] = [
-    Vec2::new(-BALL_RADIUS_M * 0.5, -BALL_RADIUS_M * 0.7),
-    Vec2::new(BALL_RADIUS_M * 0.5, -BALL_RADIUS_M * 0.7),
-];
+/// Direction each of the two overhead lights throws a shadow (away from the light).
+const SHADOW_DIRS: [Vec2; 2] = [Vec2::new(-0.5, -0.7), Vec2::new(0.5, -0.7)];
+/// Ball shadow blob radius relative to the ball, and its offset per overhead light.
+const SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
+const BALL_SHADOW_OFFSET: f32 = BALL_RADIUS_M;
+/// Static-object shadow offset per overhead light (metres).
+const MESH_SHADOW_OFFSET: f32 = 0.014;
 
 #[derive(Component)]
 pub struct Light {
@@ -63,6 +69,17 @@ pub struct Light {
 #[derive(Component)]
 struct BallShadow {
     ball: Entity,
+}
+
+/// Marks a static object that drops a shadow into the light map. A dark copy of the
+/// object's mesh is rendered into the map, offset per overhead light, so the shadow
+/// matches the object's shape. `scale` enlarges the shadow about the object centre
+/// (e.g. so a bumper's shadow clears its wider cap); use 1.0 for a 1:1 copy. Spawn
+/// the object as a direct child of the level (so its `Transform` is world space) for
+/// the shadow to land in the right place.
+#[derive(Component)]
+pub(crate) struct ShadowCaster {
+    pub(crate) scale: f32,
 }
 
 /// Additive material for light glows: light is added to the playfield rather than
@@ -118,6 +135,10 @@ pub(super) fn plugin(app: &mut App) {
             .chain()
             .run_if(in_state(Screen::Gameplay)),
     );
+    app.add_systems(
+        Update,
+        spawn_static_shadows.run_if(in_state(Screen::Gameplay)),
+    );
 }
 
 fn setup_lighting(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
@@ -125,11 +146,17 @@ fn setup_lighting(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let glow = images.add(radial_image(|distance| {
         (1.0 - distance).clamp(0.0, 1.0).powf(2.0)
     }));
-    // Hard shadow: solid core out to half the radius, then a quick linear fade.
-    let shadow = images.add(radial_image(|distance| {
-        ((1.0 - distance) * 2.0).clamp(0.0, 1.0)
-    }));
-    commands.insert_resource(LightingAssets { glow, shadow });
+    commands.insert_resource(LightingAssets { glow });
+}
+
+/// The flat-dark material every shadow uses; its soft look comes entirely from the
+/// low-resolution light map, so ball and static shadows match.
+fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMaterial> {
+    materials.add(ColorMaterial {
+        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
+        alpha_mode: AlphaMode2d::Blend,
+        ..default()
+    })
 }
 
 /// Builds a white radial texture whose alpha is `falloff(distance)`, where
@@ -205,6 +232,8 @@ pub(super) fn spawn_light(
             color: Color::from(glow_color).to_linear(),
             texture: glow_texture.clone(),
         })),
+        // Render into the light map only, not directly on screen.
+        lightmap_layer(),
     ));
 }
 
@@ -212,23 +241,17 @@ pub(super) fn spawn_light(
 // same way the ball gets one here. The flipper bat is a moving body, so its shadow
 // has to follow both position and angle (offset per overhead light).
 
-/// Spawns one drop shadow per ball: a small group of soft dark blobs, one offset
-/// per overhead light. Reuses the shared glow texture, tinted dark.
+/// Spawns one drop shadow per ball: a plain dark disc per overhead light, softened
+/// by the low-res light map exactly like the static shadows.
 fn spawn_ball_shadows(
     mut commands: Commands,
-    lighting: Res<LightingAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     balls: Query<(Entity, &Transform), Added<Ball>>,
 ) {
     for (ball, ball_transform) in balls.iter() {
         let shadow_mesh = meshes.add(Circle::new(SHADOW_RADIUS));
-        let shadow_material = materials.add(ColorMaterial {
-            color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
-            alpha_mode: AlphaMode2d::Blend,
-            texture: Some(lighting.shadow.clone()),
-            ..default()
-        });
+        let material = shadow_material(&mut materials);
         let position = ball_transform.translation;
         commands.spawn((
             BallShadow { ball },
@@ -239,13 +262,23 @@ fn spawn_ball_shadows(
             children![
                 (
                     Mesh2d(shadow_mesh.clone()),
-                    MeshMaterial2d(shadow_material.clone()),
-                    Transform::from_xyz(SHADOW_OFFSETS[0].x, SHADOW_OFFSETS[0].y, 0.0),
+                    MeshMaterial2d(material.clone()),
+                    Transform::from_xyz(
+                        SHADOW_DIRS[0].x * BALL_SHADOW_OFFSET,
+                        SHADOW_DIRS[0].y * BALL_SHADOW_OFFSET,
+                        0.0,
+                    ),
+                    lightmap_layer(),
                 ),
                 (
                     Mesh2d(shadow_mesh),
-                    MeshMaterial2d(shadow_material),
-                    Transform::from_xyz(SHADOW_OFFSETS[1].x, SHADOW_OFFSETS[1].y, 0.0),
+                    MeshMaterial2d(material),
+                    Transform::from_xyz(
+                        SHADOW_DIRS[1].x * BALL_SHADOW_OFFSET,
+                        SHADOW_DIRS[1].y * BALL_SHADOW_OFFSET,
+                        0.0,
+                    ),
+                    lightmap_layer(),
                 ),
             ],
         ));
@@ -268,6 +301,38 @@ fn update_ball_shadows(
             Err(_) => {
                 commands.entity(entity).despawn();
             }
+        }
+    }
+}
+
+/// Bakes static drop shadows into the light map: a dark copy of each new
+/// [`ShadowCaster`]'s mesh, one per overhead light, offset so it reads as a drop
+/// shadow that matches the object's shape. Static, so spawned once.
+fn spawn_static_shadows(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    casters: Query<(&Transform, &Mesh2d, &ShadowCaster), Added<ShadowCaster>>,
+) {
+    if casters.is_empty() {
+        return;
+    }
+    let material = shadow_material(&mut materials);
+    for (transform, mesh, caster) in casters.iter() {
+        for dir in SHADOW_DIRS {
+            let mut shadow_transform = *transform;
+            // Enlarge about the object centre (e.g. so a bumper shadow clears its cap).
+            shadow_transform.scale *= caster.scale;
+            shadow_transform.translation.x += dir.x * MESH_SHADOW_OFFSET;
+            shadow_transform.translation.y += dir.y * MESH_SHADOW_OFFSET;
+            shadow_transform.translation.z = SHADOW_Z;
+            commands.spawn((
+                Name::from("Static shadow"),
+                Mesh2d(mesh.0.clone()),
+                MeshMaterial2d(material.clone()),
+                shadow_transform,
+                DespawnOnExit(Screen::Gameplay),
+                lightmap_layer(),
+            ));
         }
     }
 }

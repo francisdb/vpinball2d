@@ -87,7 +87,7 @@ fn apply_nudge(
     time: Res<Time>,
     mut nudge: ResMut<Nudge>,
     mut gravity: ResMut<Gravity>,
-    mut cameras: Query<&mut Transform, With<Camera2d>>,
+    mut cameras: Query<&mut Transform, (With<Camera2d>, Without<super::lightmap::LightmapCamera>)>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
