@@ -9,7 +9,7 @@ use crate::pinball::kicker::DrainSounds;
 use crate::pinball::wall::{SlingshotSounds, Wall};
 use bevy::prelude::*;
 
-const TABLE: &str = "North Pole (Playmatic 1967) v600.vpx";
+pub(super) const TABLE: &str = "North Pole (Playmatic 1967) v600.vpx";
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(

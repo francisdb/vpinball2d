@@ -11,15 +11,18 @@ mod pinball;
 #[cfg(any(feature = "remote_control", feature = "telemetry"))]
 mod play;
 mod screens;
+mod tables;
 mod theme;
 mod vpx;
 
 // mod diagnostics;
 
+use crate::tables::{TABLES_SOURCE, TablesDir, resolve_tables};
 use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
+use bevy::asset::io::{AssetSource, AssetSourceBuilder};
 use bevy::audio::{AudioPlugin, SpatialScale};
 use bevy::render::render_resource::TextureFormat;
 use bevy::{asset::AssetMetaCheck, prelude::*};
@@ -46,6 +49,20 @@ impl Plugin for AppPlugin {
         // (CI, sandboxes). Zero effect on normal runs.
         let headless = std::env::var("VPINBALL_HEADLESS").is_ok();
         app.insert_resource(Headless(headless));
+
+        // Tables are read from a folder on the filesystem (default `~/vpinball/tables`)
+        // rather than the app's `assets` folder. Register that folder as the read-only
+        // `tables` asset source; this must happen before `AssetPlugin` (added by
+        // `DefaultPlugins`). No file watcher: `.vpx` files are not hot-edited, and
+        // recursively watching a large tables library can exhaust inotify watches.
+        let (tables_dir, cli_table) = resolve_tables();
+        app.register_asset_source(
+            TABLES_SOURCE,
+            AssetSourceBuilder::new(AssetSource::get_default_reader(
+                tables_dir.to_string_lossy().into_owned(),
+            )),
+        );
+        app.insert_resource(TablesDir(tables_dir));
 
         let default_plugins = DefaultPlugins
             .set(AssetPlugin {
@@ -109,6 +126,7 @@ impl Plugin for AppPlugin {
         // Add other plugins.
         app.add_plugins((
             VpxPlugin,
+            tables::plugin,
             asset_tracking::plugin,
             audio::plugin,
             pinball::plugin,
@@ -123,7 +141,7 @@ impl Plugin for AppPlugin {
         // A table given on the command line (e.g. `vpinball2d "My Table.vpx"`) is an
         // external frontend driving us: skip the picker, load it straight away, and
         // make Esc exit the game instead of returning to selection.
-        if let Some(table) = std::env::args().nth(1).filter(|arg| !arg.starts_with('-')) {
+        if let Some(table) = cli_table {
             app.insert_resource(crate::pinball::TablePath::new(table));
             app.insert_resource(crate::screens::ExternalFrontend(true));
             app.insert_state(crate::screens::Screen::Loading);
