@@ -81,6 +81,7 @@ pub fn spawn_level(
                 &mut meshes,
                 &mut materials,
                 &mut playfield_materials,
+                &mut images,
                 light_map.clone(),
                 &assets_vpx,
                 camera_q,

@@ -65,7 +65,8 @@ fn dim_objects(
 pub(crate) fn playfield(
     vpx_asset: &VpxAsset,
     meshes: &mut ResMut<Assets<Mesh>>,
-    playfield_materials: &mut ResMut<Assets<PlayfieldLightMaterial>>,
+    materials: &mut ResMut<Assets<PlayfieldLightMaterial>>,
+    images: &mut ResMut<Assets<Image>>,
     light_map: Handle<Image>,
 ) -> (
     Playfield,
@@ -74,14 +75,23 @@ pub(crate) fn playfield(
     MeshMaterial2d<PlayfieldLightMaterial>,
     Transform,
 ) {
-    let playfield_image = vpx_asset
-        .named_images
-        .get(vpx_asset.raw.gamedata.image.as_str())
-        .unwrap();
+    // Best effort: some tables reference an image we could not load or none at
+    // all. Fall back to a blank texture so the table still renders instead of
+    // crashing.
+    let playfield_image = match vpx_asset.image(vpx_asset.raw.gamedata.image.as_str()) {
+        Some(handle) => handle.clone(),
+        None => {
+            warn!(
+                "Playfield image '{}' not found; rendering a blank playfield",
+                vpx_asset.raw.gamedata.image
+            );
+            images.add(blank_image())
+        }
+    };
     // The light map (rendered over the same rect) modulates the table image:
     // ambient where unlit, brighter where lit, darker where shadowed.
-    let material = playfield_materials.add(PlayfieldLightMaterial {
-        playfield: playfield_image.clone(),
+    let material = materials.add(PlayfieldLightMaterial {
+        playfield: playfield_image,
         light_map,
     });
     let width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
@@ -95,5 +105,23 @@ pub(crate) fn playfield(
         Mesh2d(mesh),
         MeshMaterial2d(material),
         Transform::from_xyz(0.0, 0.0, 0.0),
+    )
+}
+
+/// A 1x1 white texture used as a stand-in when a table's playfield image is
+/// missing or could not be loaded.
+fn blank_image() -> Image {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[255, 255, 255, 255],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
     )
 }

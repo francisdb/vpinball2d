@@ -25,6 +25,7 @@ pub(crate) fn table(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     playfield_materials: &mut ResMut<Assets<PlayfieldLightMaterial>>,
+    images: &mut ResMut<Assets<Image>>,
     light_map: Handle<Image>,
     assets_vpx: &Res<Assets<VpxAsset>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
@@ -46,10 +47,7 @@ pub(crate) fn table(
             ..default()
         }),
         _ => {
-            match vpx_asset
-                .named_images
-                .get(vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str())
-            {
+            match vpx_asset.image(vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str()) {
                 None => {
                     warn!(
                         "Backglass image '{}' not found in table '{}'",
@@ -107,7 +105,7 @@ pub(crate) fn table(
                 MeshMaterial2d(materials.add(Color::from(css::RED))),
                 Transform::from_xyz(0.0, 0.0, 1.0),
             ),
-            playfield(vpx_asset, meshes, playfield_materials, light_map),
+            playfield(vpx_asset, meshes, playfield_materials, images, light_map),
             (
                 Name::from("Bottom Wall"),
                 Mesh2d(meshes.add(Rectangle::new(

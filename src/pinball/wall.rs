@@ -154,7 +154,7 @@ pub(super) fn spawn_wall(
     } else {
         css::PINK
     };
-    let texture = vpx_asset.named_images.get(wall.image.as_str()).cloned();
+    let texture = vpx_asset.image(wall.image.as_str()).cloned();
     let mut mat = ColorMaterial {
         color: color.into(),
         alpha_mode: AlphaMode2d::Opaque,
