@@ -10,7 +10,7 @@ use crate::pinball::gate::GateSounds;
 use crate::pinball::kicker::DrainSounds;
 use crate::pinball::spinner::SpinnerSounds;
 use crate::pinball::targets::TargetSounds;
-use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds, Wall};
+use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds};
 use bevy::prelude::*;
 
 pub(super) const TABLE: &str = "exampleTable.vpx";
@@ -18,7 +18,7 @@ pub(super) const TABLE: &str = "exampleTable.vpx";
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),
-        (setup, remove_plunger_wall).run_if(super::is_table(TABLE)),
+        setup.run_if(super::is_table(TABLE)),
     );
 }
 
@@ -60,18 +60,4 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(GateSounds {
         hit: vec!["gate".to_string()],
     });
-}
-
-// TODO temporary hack: this wall keeps the ball in the lane and lets the plunger pass
-//   through. We can't model that one-way behaviour yet, so we remove it for now. See:
-//   https://github.com/avianphysics/avian/blob/main/crates/avian2d/examples/one_way_platform_2d.rs
-//   The best option would be replacing the single wall with a left and right part that
-//   leaves a gap for the plunger in the center.
-fn remove_plunger_wall(mut commands: Commands, wall_query: Query<(Entity, &Wall)>) {
-    let name = "Wall15";
-    if let Some((plunger_wall_entity, _wall)) = wall_query.iter().find(|(_, k)| k.name == name) {
-        commands.entity(plunger_wall_entity).despawn();
-    } else {
-        warn!("Plunger centering wall {name} not found, could not remove it");
-    }
 }

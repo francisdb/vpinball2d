@@ -193,14 +193,7 @@ fn write_telemetry(
     // Plunger: report position plus `pulled` (0 resting .. 1 fully drawn back).
     for (plunger, t, name) in &plungers {
         let p = t.translation.truncate();
-        // `start_point` is the fully-drawn (bottom) anchor; rest is `start_point.y + stroke`.
-        // Pulling moves the plunger down from rest toward `start_point`, so measure from rest.
-        let rest_y = plunger.start_point.y + plunger.stroke;
-        let pulled = if plunger.stroke > 1e-6 {
-            ((rest_y - t.translation.y) / plunger.stroke).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        let pulled = plunger.pulled();
         j_plungers.push(format!(
             "{{\"name\":{},\"pos\":[{:.3},{:.3}],\"pulled\":{:.3}}}",
             json_str(name.as_str()),

@@ -308,11 +308,20 @@ fn swing_gates(
 #[derive(SystemParam)]
 pub struct GateCollisionHooks<'w, 's> {
     gates: Query<'w, 's, &'static Gate>,
+    launching: Query<'w, 's, (), With<crate::pinball::plunger::Launching>>,
     balls: Query<'w, 's, &'static LinearVelocity, With<Ball>>,
 }
 
 impl CollisionHooks for GateCollisionHooks<'_, '_> {
     fn modify_contacts(&self, contacts: &mut ContactPair, commands: &mut Commands) -> bool {
+        // A ball mid-launch passes through everything (walls capping the plunger lane)
+        // until it has cleared the lane; see `pinball::plunger`.
+        if self.launching.contains(contacts.collider1)
+            || self.launching.contains(contacts.collider2)
+        {
+            return false;
+        }
+
         let (gate_entity, ball_entity) = if self.gates.contains(contacts.collider1) {
             (contacts.collider1, contacts.collider2)
         } else if self.gates.contains(contacts.collider2) {

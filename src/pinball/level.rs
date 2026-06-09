@@ -166,6 +166,8 @@ pub fn spawn_level(
                 GameItemEnum::Plunger(plunger) => spawn_plunger(
                     &mut meshes,
                     &mut materials,
+                    &mut images,
+                    vpx_asset,
                     vpx_to_bevy_transform,
                     parent,
                     plunger,
