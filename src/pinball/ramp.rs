@@ -40,7 +40,9 @@ use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::math::Affine2;
 use bevy::prelude::*;
-use bevy::sprite_render::AlphaMode2d;
+use bevy::render::render_resource::{AsBindGroup, ShaderType};
+use bevy::shader::ShaderRef;
+use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 use vpin::vpx::gameitem::ramp;
 use vpin::vpx::gameitem::ramp::RampType;
 use vpin::vpx::units::vpu_to_m;
@@ -50,7 +52,70 @@ use vpin::vpx::units::vpu_to_m;
 /// North Pole's `MetalGuide001`/`3` inlane rails, width 2) are guides.
 const GUIDE_MAX_WIDTH_VPU: f32 = 15.0;
 
-pub(super) fn plugin(_app: &mut App) {}
+// Chrome wire shading, mirroring the ball's overhead lights so wires and ball catch the
+// same highlights (see `ball::BALL_LIGHTS`).
+const WIRE_LIGHTS: [Vec2; 2] = [Vec2::new(0.5, 0.7), Vec2::new(-0.5, 0.7)];
+const WIRE_LIGHT_ELEVATION: f32 = 0.8;
+const WIRE_LIGHT_INTENSITY: f32 = 0.6;
+const WIRE_SHININESS: f32 = 60.0;
+const WIRE_TINT: Vec3 = Vec3::new(0.95, 0.96, 1.0);
+
+pub(super) fn plugin(app: &mut App) {
+    app.add_plugins(Material2dPlugin::<WireMaterial>::default());
+}
+
+/// Shader inputs for [`WireMaterial`]; see `shaders/wire.wgsl`.
+#[derive(Clone, Copy, ShaderType)]
+struct WireUniform {
+    /// rgb = reflection tint, a = specular shininess.
+    tint: Vec4,
+    /// xy = screen-space light direction (y up), z = elevation, w = intensity.
+    light0: Vec4,
+    light1: Vec4,
+}
+
+/// Renders a wire ramp as polished chrome: the fragment fakes a cylinder normal across
+/// the ribbon and reflects the same distant environment map the ball uses.
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub(crate) struct WireMaterial {
+    #[uniform(0)]
+    uniform: WireUniform,
+    #[texture(1)]
+    #[sampler(2)]
+    env: Handle<Image>,
+}
+
+impl WireMaterial {
+    fn chrome(env: Handle<Image>) -> Self {
+        let light = |dir: Vec2| {
+            dir.normalize()
+                .extend(WIRE_LIGHT_ELEVATION)
+                .extend(WIRE_LIGHT_INTENSITY)
+        };
+        Self {
+            uniform: WireUniform {
+                tint: WIRE_TINT.extend(WIRE_SHININESS),
+                light0: light(WIRE_LIGHTS[0]),
+                light1: light(WIRE_LIGHTS[1]),
+            },
+            env,
+        }
+    }
+}
+
+impl Material2d for WireMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/wire.wgsl".into()
+    }
+    fn fragment_shader() -> ShaderRef {
+        "shaders/wire.wgsl".into()
+    }
+}
+
+/// Whether a ramp is a wire ramp (any wire type), rendered as a chrome ribbon.
+fn is_wire(ramp: &ramp::Ramp) -> bool {
+    !matches!(ramp.ramp_type, RampType::Flat)
+}
 
 #[derive(Component)]
 pub struct Ramp {
@@ -71,10 +136,13 @@ fn is_guide(ramp: &ramp::Ramp) -> bool {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_ramp(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     meshes: &ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    wire_materials: &mut ResMut<Assets<WireMaterial>>,
+    env: &Handle<Image>,
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     ramp: &ramp::Ramp,
@@ -87,58 +155,64 @@ pub(super) fn spawn_ramp(
         return;
     };
 
-    // Colour/transparency from the ramp material, mirroring how walls resolve their top
-    // material (base colour tinted, alpha blending when the material opacity is active).
-    let material = vpx_asset
-        .raw
-        .gamedata
-        .materials
-        .iter()
-        .flatten()
-        .find(|m| m.name == ramp.material);
-    let texture = vpx_asset.image(ramp.image.as_str()).cloned();
-    let (color, alpha_mode) = if let Some(mat) = material {
-        let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
-        let texture_has_alpha = !vpx_asset
-            .raw
-            .images
-            .iter()
-            .find(|i| i.name.eq_ignore_ascii_case(ramp.image.as_str()))
-            .and_then(|i| i.is_opaque)
-            .unwrap_or(true);
-        let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
-        let color = Srgba {
-            alpha,
-            ..Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
-        };
-        (
-            color,
-            if blend {
-                AlphaMode2d::Blend
-            } else {
-                AlphaMode2d::Opaque
-            },
-        )
-    } else {
-        (css::SLATE_GRAY, AlphaMode2d::Opaque)
-    };
-
-    let material = materials.add(ColorMaterial {
-        color: color.into(),
-        alpha_mode,
-        texture,
-        uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
-    });
-
     let mut entity = parent.spawn((
         Name::from(format!("Ramp {}", ramp.name)),
         Ramp {
             name: ramp.name.clone(),
         },
         Mesh2d(mesh_handle.clone()),
-        MeshMaterial2d(material),
         vpx_to_bevy_transform,
     ));
+
+    // Wire ramps render as polished chrome reflecting the same environment as the ball;
+    // flat ramps use a plain tinted/textured material from their vpx material (base colour
+    // tinted, alpha blending when the material opacity is active, like walls).
+    if is_wire(ramp) {
+        entity.insert(MeshMaterial2d(
+            wire_materials.add(WireMaterial::chrome(env.clone())),
+        ));
+    } else {
+        let material = vpx_asset
+            .raw
+            .gamedata
+            .materials
+            .iter()
+            .flatten()
+            .find(|m| m.name == ramp.material);
+        let texture = vpx_asset.image(ramp.image.as_str()).cloned();
+        let (color, alpha_mode) = if let Some(mat) = material {
+            let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
+            let texture_has_alpha = !vpx_asset
+                .raw
+                .images
+                .iter()
+                .find(|i| i.name.eq_ignore_ascii_case(ramp.image.as_str()))
+                .and_then(|i| i.is_opaque)
+                .unwrap_or(true);
+            let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
+            let color = Srgba {
+                alpha,
+                ..Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
+            };
+            (
+                color,
+                if blend {
+                    AlphaMode2d::Blend
+                } else {
+                    AlphaMode2d::Opaque
+                },
+            )
+        } else {
+            (css::SLATE_GRAY, AlphaMode2d::Opaque)
+        };
+        entity.insert(MeshMaterial2d(materials.add(ColorMaterial {
+            color: color.into(),
+            alpha_mode,
+            texture,
+            uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
+        })));
+    }
+
     if ramp.is_visible {
         entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
     } else {

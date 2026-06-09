@@ -135,6 +135,51 @@ fn append_band(
     }
 }
 
+/// Append one wire ribbon: a thin band (`half_dia` each side) along `path`, carrying the
+/// data the chrome wire shader needs. UV.x is the across-ribbon coordinate (0 on the
+/// `+normal` edge, 1 on the `-normal` edge) and UV.y runs 0..1 along the wire; the vertex
+/// normal stores the ribbon's in-plane cross direction (bevy space) from which the shader
+/// rebuilds a cylinder normal. `z` is the per-point render height.
+fn append_wire_ribbon(
+    positions: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    normals: &mut Vec<[f32; 3]>,
+    indices: &mut Vec<u32>,
+    path: &[Vec2],
+    perp: &[Vec2],
+    half_dia: f32,
+    z: &[f32],
+) {
+    let base = positions.len() as u32;
+    let n = path.len();
+    let total: f32 = (0..n.saturating_sub(1))
+        .map(|i| path[i].distance(path[i + 1]))
+        .sum();
+    let mut cum = 0.0f32;
+    for i in 0..n {
+        if i > 0 {
+            cum += path[i - 1].distance(path[i]);
+        }
+        let along = if total > 0.0 { cum / total } else { 0.0 };
+        let a = path[i] + perp[i] * half_dia;
+        let b = path[i] - perp[i] * half_dia;
+        // The cross direction in bevy space (positions negate y), used by the shader as
+        // the axis the cylinder normal bows around.
+        let cross = Vec2::new(perp[i].x, -perp[i].y).normalize_or_zero();
+        let nrm = [cross.x, cross.y, 0.0];
+        positions.push([vpu_to_m(a.x), -vpu_to_m(a.y), z[i]]);
+        uvs.push([0.0, along]);
+        normals.push(nrm);
+        positions.push([vpu_to_m(b.x), -vpu_to_m(b.y), z[i]]);
+        uvs.push([1.0, along]);
+        normals.push(nrm);
+    }
+    for i in 0..n - 1 {
+        let a = base + (i as u32) * 2;
+        indices.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+    }
+}
+
 /// Build the top-down ramp mesh, or `None` if the ramp is degenerate.
 ///
 /// `centerline` is the smoothed drag-point centerline in vpx units (open, not looped).
@@ -174,34 +219,29 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
 
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
 
     if is_wire(ramp) {
         // Wire ramps: render a thin ribbon (wire_diameter wide) along each wire path. The
         // wire paths sit at the centerline (1-wire) or at +/- wire_distance_x/2 (others).
         // Upper wires of 3/4-wire ramps overlap their lower wires in top-down view, so we
-        // only draw the distinct ground paths.
+        // only draw the distinct ground paths. Ribbons carry cross-direction normals so
+        // the chrome wire shader can fake a cylinder.
         let paths: Vec<Vec<Vec2>> = match ramp.ramp_type {
             RampType::OneWire => vec![spine.mid.clone()],
             _ => vec![offset(1.0, 1.0), offset(-1.0, 1.0)],
         };
         for path in &paths {
-            // Build thin ribbon edges by offsetting the path along the shared normals.
-            let edge_a: Vec<Vec2> = (0..n)
-                .map(|i| path[i] + spine.normal[i] * (ramp.wire_diameter * 0.5))
-                .collect();
-            let edge_b: Vec<Vec2> = (0..n)
-                .map(|i| path[i] - spine.normal[i] * (ramp.wire_diameter * 0.5))
-                .collect();
-            append_band(
+            append_wire_ribbon(
                 &mut positions,
                 &mut uvs,
+                &mut normals,
                 &mut indices,
-                table_size,
-                &edge_a,
-                &edge_b,
-                &z,
                 path,
+                &spine.normal,
+                ramp.wire_diameter * 0.5,
+                &z,
             );
         }
     } else {
@@ -230,6 +270,11 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    // Wire ribbons carry the cross-direction normal the chrome shader needs; flat ramps
+    // use a plain colour material and need none.
+    if !normals.is_empty() {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    }
     mesh.insert_indices(Indices::U32(indices));
     Some(mesh)
 }

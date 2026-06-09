@@ -8,7 +8,7 @@ use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
 use crate::pinball::lightmap::{PlayfieldLightMaterial, lightmap_camera, lightmap_image};
 use crate::pinball::plunger::spawn_plunger;
-use crate::pinball::ramp::spawn_ramp;
+use crate::pinball::ramp::{WireMaterial, spawn_ramp};
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::spinner::spawn_spinner;
 use crate::pinball::targets::spawn_target;
@@ -50,6 +50,7 @@ pub fn spawn_level(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut ball_materials: ResMut<Assets<BallMaterial>>,
+    mut wire_materials: ResMut<Assets<WireMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -209,6 +210,8 @@ pub fn spawn_level(
                     parent,
                     &meshes,
                     &mut materials,
+                    &mut wire_materials,
+                    &ball_assets.default_env(),
                     vpx_asset,
                     vpx_to_bevy_transform,
                     ramp,
