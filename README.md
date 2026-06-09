@@ -4,9 +4,16 @@ Visual Pinball 2D engine
 
 ## Tables
 
-Put Visual Pinball `.vpx` table files in the `assets/` folder; the game lists them
-in a picker at startup. A good starting point is
+Tables are read from a folder on the filesystem, defaulting to `~/vpinball/tables`
+(override with the `VPINBALL_TABLES` environment variable). The standard Visual
+Pinball layout - each table in its own sub-folder alongside its media - is scanned
+recursively for `.vpx` files. A good starting point is
 the [Visual Pinball example table](https://github.com/vpinball/vpinball/raw/refs/heads/master/src/assets/exampleTable.vpx).
+
+At startup the picker shows only the tables that ship with a hand-written script
+(the curated set that renders best); use **Show all tables** to browse every table
+found on disk in a scrollable list (`*` marks the ones with a script). Table names
+come from each `.vpx`'s own metadata, read in the background.
 
 ## Build & Run
 
@@ -18,14 +25,15 @@ command in your terminal:
 cargo run --release
 ```
 
-This launches a **table picker** listing the `.vpx` files in `assets/`; choose one
-to play. Esc returns to the picker, and Esc in the picker exits the game.
+This launches the **table picker**; choose one to play. Esc returns to the picker,
+and Esc in the picker exits the game.
 
 To open a specific table directly - for example when launched by an external
-frontend - pass its file name (relative to `assets/`):
+frontend - pass its file name (relative to the tables folder) or a full path to a
+`.vpx` file anywhere on disk:
 
 ```bash
-cargo run --release -- "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx"
+cargo run --release -- "Total Nuclear Annihilation (Spooky 2017)/Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx"
 ```
 
 In this mode there is no picker, so Esc exits the game.

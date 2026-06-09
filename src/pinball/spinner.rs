@@ -108,7 +108,7 @@ pub(super) fn spawn_spinner(
     let (sin, cos) = shaft_angle.sin_cos();
     let shaft_perp = Vec2::new(-sin, cos);
 
-    let texture = vpx_asset.named_images.get(spinner.image.as_str()).cloned();
+    let texture = vpx_asset.image(spinner.image.as_str()).cloned();
     let material = materials.add(ColorMaterial {
         color: material_color(vpx_asset, &spinner.material),
         alpha_mode: AlphaMode2d::Opaque,

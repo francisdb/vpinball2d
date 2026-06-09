@@ -13,7 +13,7 @@ use crate::pinball::targets::TargetSounds;
 use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds, Wall};
 use bevy::prelude::*;
 
-const TABLE: &str = "exampleTable.vpx";
+pub(super) const TABLE: &str = "exampleTable.vpx";
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(

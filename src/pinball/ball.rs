@@ -41,8 +41,7 @@ pub(crate) fn ball(
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let ball_image = vpx_asset
-        .named_images
-        .get(vpx_asset.raw.gamedata.ball_image.as_str())
+        .image(vpx_asset.raw.gamedata.ball_image.as_str())
         .unwrap();
     let ball_material = materials.add(ColorMaterial {
         texture: Some(ball_image.clone()),

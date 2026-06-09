@@ -19,7 +19,7 @@ mod nudge;
 pub mod playfield;
 pub(crate) mod plunger;
 mod rubber;
-mod scripts;
+pub(crate) mod scripts;
 mod spinner;
 pub mod table;
 mod targets;

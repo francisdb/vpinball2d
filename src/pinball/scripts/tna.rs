@@ -10,7 +10,7 @@ use crate::pinball::kicker::DrainSounds;
 use crate::pinball::wall::{SlingshotSounds, Wall};
 use bevy::prelude::*;
 
-const TABLE: &str = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
+pub(super) const TABLE: &str = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
 
 pub(super) fn plugin(app: &mut App) {
     // TODO there's also a ramp that brings the ball over the loop side rail which we need

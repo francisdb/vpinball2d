@@ -3,6 +3,7 @@ use crate::vpx::triangulate::triangulate_polygon;
 use bevy::asset::{LoadDirectError, RenderAssetUsages};
 use bevy::image::{CompressedImageFormats, ImageLoader, ImageLoaderError};
 use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::{
     asset::{AssetLoader, LoadContext, io::Reader},
     prelude::*,
@@ -92,29 +93,36 @@ impl VpxLoader {
         let mut named_image_handles = HashMap::new();
         if settings.load_images {
             for image in &vpx.images {
-                if let Some(jpeg) = &image.jpeg {
-                    let bytes = jpeg.data.clone();
-                    let handle =
-                        load_image(format!("images/{}", image.name), load_context, image, bytes)
-                            .await;
-                    match handle {
-                        Ok(handle) => {
-                            if !image.name.is_empty() {
-                                named_image_handles
-                                    .insert(image.name.clone().into_boxed_str(), handle.clone());
-                            }
-                            image_handles.push(handle);
-                        }
+                let label = format!("images/{}", image.name);
+                // VPX stores images either as a compressed blob (`jpeg`, despite the
+                // name this can be JPEG/PNG/etc.) or as a raw bitmap (`bits`, always
+                // BGRA). Load whichever is present.
+                let handle = if let Some(jpeg) = &image.jpeg {
+                    match load_image(label, load_context, image, jpeg.data.clone()).await {
+                        Ok(handle) => Some(handle),
                         Err(e) => {
-                            // TODO we could retry loading the image and let the image loader guess the format
-                            //   sometimes vpx files have images with the wrong extension.
+                            // TODO we could retry loading the image and let the image loader guess the
+                            //   format; sometimes vpx files have images with the wrong extension.
                             error!("Failed to load image {}: {}", image.name, e);
-                            continue;
+                            None
                         }
                     }
+                } else if let Some(bits) = &image.bits {
+                    load_bitmap(label, load_context, image, bits)
                 } else {
-                    warn!("Image: {} Path: {} No JPEG data", image.name, image.path);
+                    warn!("Image: {} Path: {} No image data", image.name, image.path);
+                    None
+                };
+                let Some(handle) = handle else {
+                    continue;
+                };
+                if !image.name.is_empty() {
+                    // VPinball matches image names case-insensitively; store a
+                    // lowercased key and look up the same way (see VpxAsset::image).
+                    named_image_handles
+                        .insert(image.name.to_lowercase().into_boxed_str(), handle.clone());
                 }
+                image_handles.push(handle);
             }
         }
 
@@ -218,6 +226,41 @@ async fn load_image(
     let loaded = labeled.finish(image);
     let handle = load_context.add_loaded_labeled_asset(label, loaded);
     Ok(handle)
+}
+
+/// Build a Bevy image from a VPX raw bitmap (`bits`): LZW-compressed BGRA pixels.
+/// Returns `None` (best effort: skip just this image) if the decoded data does
+/// not match the declared dimensions.
+fn load_bitmap(
+    label: String,
+    load_context: &mut LoadContext<'_>,
+    image_data: &ImageData,
+    bits: &vpin::vpx::image::ImageDataBits,
+) -> Option<Handle<Image>> {
+    let bgra = vpin::vpx::lzw::from_lzw_blocks(&bits.lzw_compressed_data);
+    let expected = image_data.width as usize * image_data.height as usize * 4;
+    if bgra.len() != expected {
+        error!(
+            "Bitmap '{}' is {}x{} but decoded to {} bytes (expected {expected})",
+            image_data.name,
+            image_data.width,
+            image_data.height,
+            bgra.len(),
+        );
+        return None;
+    }
+    let image = Image::new(
+        Extent3d {
+            width: image_data.width,
+            height: image_data.height,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        bgra,
+        TextureFormat::Bgra8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    Some(load_context.add_labeled_asset(label, image))
 }
 
 async fn load_sound(

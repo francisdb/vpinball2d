@@ -59,6 +59,7 @@ where
         text,
         action,
         40.0,
+        BUTTON_BACKGROUND,
         Node {
             width: px(380),
             height: px(80),
@@ -81,6 +82,7 @@ where
         text,
         action,
         40.0,
+        BUTTON_BACKGROUND,
         Node {
             width: px(30),
             height: px(30),
@@ -92,16 +94,24 @@ where
 }
 
 /// A wide, auto-height button for a (possibly long) table name in the picker.
-pub fn table_button<E, B, M, I>(text: impl Into<String>, action: I) -> impl Bundle
+/// When `selected`, it rests in a highlighted colour so the player can see which
+/// table they last opened.
+pub fn table_button<E, B, M, I>(text: impl Into<String>, selected: bool, action: I) -> impl Bundle
 where
     E: EntityEvent,
     B: Bundle,
     I: IntoObserverSystem<E, B, M>,
 {
+    let background = if selected {
+        BUTTON_SELECTED_BACKGROUND
+    } else {
+        BUTTON_BACKGROUND
+    };
     button_base(
         text,
         action,
         22.0,
+        background,
         Node {
             width: px(640),
             padding: UiRect::axes(px(24), px(12)),
@@ -118,6 +128,7 @@ fn button_base<E, B, M, I>(
     text: impl Into<String>,
     action: I,
     font_size: f32,
+    background: Color,
     button_bundle: impl Bundle,
 ) -> impl Bundle
 where
@@ -135,9 +146,9 @@ where
                 .spawn((
                     Name::new("Button Inner"),
                     Button,
-                    BackgroundColor(BUTTON_BACKGROUND),
+                    BackgroundColor(background),
                     InteractionPalette {
-                        none: BUTTON_BACKGROUND,
+                        none: background,
                         hovered: BUTTON_HOVERED_BACKGROUND,
                         pressed: BUTTON_PRESSED_BACKGROUND,
                     },

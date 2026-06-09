@@ -17,6 +17,15 @@ pub(super) fn plugin(app: &mut App) {
     app.add_plugins((example_table::plugin, north_pole::plugin, tna::plugin));
 }
 
+/// File names of the tables that ship with a hand-written Rust script. The table
+/// picker uses this to offer a "scripted only" view.
+pub(crate) const SCRIPTED_TABLES: &[&str] = &[example_table::TABLE, north_pole::TABLE, tna::TABLE];
+
+/// Whether the table with the given file name has a hand-written script.
+pub(crate) fn has_script(file_name: &str) -> bool {
+    SCRIPTED_TABLES.contains(&file_name)
+}
+
 /// Run condition: true when the currently selected table is `file_name`.
 pub(super) fn is_table(file_name: &'static str) -> impl Fn(Option<Res<TablePath>>) -> bool + Clone {
     move |table_path: Option<Res<TablePath>>| {

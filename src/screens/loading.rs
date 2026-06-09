@@ -20,9 +20,11 @@ fn start_loading_table(
     table_path: Res<TablePath>,
     assets: Res<AssetServer>,
 ) {
+    let file_name = table_path.path.to_string_lossy().to_string();
     commands.insert_resource(TableAssets {
-        file_name: table_path.path.to_string_lossy().to_string(),
-        vpx: assets.load(table_path.path.clone()),
+        // Load through the `tables` asset source rooted at the tables folder.
+        vpx: assets.load(format!("{}://{}", crate::tables::TABLES_SOURCE, file_name)),
+        file_name,
     });
 }
 
