@@ -6,7 +6,7 @@
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
-use crate::pinball::wall::SlingshotSounds;
+use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds};
 use bevy::prelude::*;
 
 pub(super) const TABLE: &str = "North Pole (Playmatic 1967) v600.vpx";
@@ -34,4 +34,19 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(SlingshotSounds {
         hit: vec!["fx_slingshot".to_string()],
     });
+    // The slingshots flex through rest band `*Sling1` -> flex frames `*Sling2..4` (the
+    // table script cycles a 4-frame animation plus a rotating arm primitive `Lemk`/`Remk`).
+    // Our two-state model briefly shows the most-flexed frame (`*Sling4`) on a hit.
+    commands.insert_resource(SlingshotAnimations(vec![
+        SlingshotAnimation {
+            slingshot: "LeftSlingshot".to_string(),
+            rest: "LeftSling1".to_string(),
+            flexed: "LeftSling4".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "RightSlingshot".to_string(),
+            rest: "RightSling1".to_string(),
+            flexed: "RightSling4".to_string(),
+        },
+    ]));
 }
