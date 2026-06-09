@@ -1,4 +1,5 @@
 use crate::vpx::VpxAsset;
+use crate::vpx::primitive_mesh;
 use crate::vpx::ramp_mesh;
 use crate::vpx::triangulate::triangulate_polygon;
 use bevy::asset::{LoadDirectError, RenderAssetUsages};
@@ -182,6 +183,19 @@ impl VpxLoader {
                     if let Some(mesh) = ramp_mesh::build_ramp_mesh_2d(table_size, ramp, centerline)
                     {
                         let path = VpxAsset::ramp_mesh_sub_path(&ramp.name);
+                        let labeled = load_context.begin_labeled_asset();
+                        let handle = load_context
+                            .add_loaded_labeled_asset(path.clone(), labeled.finish(mesh));
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
+                } else if let GameItemEnum::Primitive(primitive) = item {
+                    // Visible primitives are projected to their top-down silhouette (only the
+                    // upward-facing faces). Invisible primitives are skipped.
+                    if primitive.is_visible
+                        && let Some(mesh) = primitive_mesh::build_primitive_mesh_2d(primitive)
+                    {
+                        let path = VpxAsset::primitive_mesh_sub_path(&primitive.name);
                         let labeled = load_context.begin_labeled_asset();
                         let handle = load_context
                             .add_loaded_labeled_asset(path.clone(), labeled.finish(mesh));
