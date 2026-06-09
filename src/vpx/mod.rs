@@ -3,6 +3,7 @@ use loader::VpxLoader;
 
 pub mod assets;
 mod loader;
+mod ramp_mesh;
 // TODO make this private again after the code has been moved
 pub mod triangulate;
 

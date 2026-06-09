@@ -8,6 +8,7 @@ use crate::pinball::kicker::spawn_kicker;
 use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
 use crate::pinball::lightmap::{PlayfieldLightMaterial, lightmap_camera, lightmap_image};
 use crate::pinball::plunger::spawn_plunger;
+use crate::pinball::ramp::spawn_ramp;
 use crate::pinball::rubber::spawn_rubber;
 use crate::pinball::spinner::spawn_spinner;
 use crate::pinball::targets::spawn_target;
@@ -203,6 +204,14 @@ pub fn spawn_level(
                     vpx_asset,
                     vpx_to_bevy_transform,
                     gate,
+                ),
+                GameItemEnum::Ramp(ramp) => spawn_ramp(
+                    parent,
+                    &meshes,
+                    &mut materials,
+                    vpx_asset,
+                    vpx_to_bevy_transform,
+                    ramp,
                 ),
                 _ => (),
             });

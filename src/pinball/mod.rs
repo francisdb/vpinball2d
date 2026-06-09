@@ -18,6 +18,7 @@ pub(crate) mod lightmap;
 mod nudge;
 pub mod playfield;
 pub(crate) mod plunger;
+mod ramp;
 mod rubber;
 pub(crate) mod scripts;
 mod spinner;
@@ -58,4 +59,5 @@ pub(super) fn plugin(app: &mut App) {
         spinner::plugin,
     ));
     app.add_plugins(gate::plugin);
+    app.add_plugins(ramp::plugin);
 }
