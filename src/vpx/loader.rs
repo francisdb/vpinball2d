@@ -1,4 +1,5 @@
 use crate::vpx::VpxAsset;
+use crate::vpx::ramp_mesh;
 use crate::vpx::triangulate::triangulate_polygon;
 use bevy::asset::{LoadDirectError, RenderAssetUsages};
 use bevy::image::{CompressedImageFormats, ImageLoader, ImageLoaderError};
@@ -171,6 +172,22 @@ impl VpxLoader {
                     );
                     named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
                     mesh_handles.push(handle);
+                } else if let GameItemEnum::Ramp(ramp) = item {
+                    // Ramps are open paths (not looped); build their top-down silhouette.
+                    let centerline =
+                        vpin::vpx::mesh::smooth_drag_points_2d(&ramp.drag_points, 4.0, false)
+                            .into_iter()
+                            .map(|(x, y)| Vec2::new(x, y))
+                            .collect();
+                    if let Some(mesh) = ramp_mesh::build_ramp_mesh_2d(table_size, ramp, centerline)
+                    {
+                        let path = VpxAsset::ramp_mesh_sub_path(&ramp.name);
+                        let labeled = load_context.begin_labeled_asset();
+                        let handle = load_context
+                            .add_loaded_labeled_asset(path.clone(), labeled.finish(mesh));
+                        named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
+                        mesh_handles.push(handle);
+                    }
                 }
             }
         }
