@@ -6,7 +6,7 @@
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
-use crate::pinball::wall::{SlingshotSounds, Wall};
+use crate::pinball::wall::SlingshotSounds;
 use bevy::prelude::*;
 
 pub(super) const TABLE: &str = "North Pole (Playmatic 1967) v600.vpx";
@@ -14,7 +14,7 @@ pub(super) const TABLE: &str = "North Pole (Playmatic 1967) v600.vpx";
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(crate::screens::Screen::Gameplay),
-        (setup, remove_plunger_wall).run_if(super::is_table(TABLE)),
+        setup.run_if(super::is_table(TABLE)),
     );
 }
 
@@ -34,14 +34,4 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(SlingshotSounds {
         hit: vec!["fx_slingshot".to_string()],
     });
-}
-
-// TODO temporary hack, see example_table.rs.
-fn remove_plunger_wall(mut commands: Commands, wall_query: Query<(Entity, &Wall)>) {
-    let name = "Wall6";
-    if let Some((plunger_wall_entity, _wall)) = wall_query.iter().find(|(_, k)| k.name == name) {
-        commands.entity(plunger_wall_entity).despawn();
-    } else {
-        warn!("Plunger centering wall {name} not found, could not remove it");
-    }
 }

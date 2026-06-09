@@ -71,6 +71,8 @@ fn strip_slingshot_rest_colliders(
 
 #[derive(Component)]
 pub struct Wall {
+    /// The vpx wall name; kept for debugging and tooling even when nothing reads it.
+    #[allow(dead_code)]
     pub name: String,
 }
 
@@ -155,18 +157,16 @@ pub(super) fn spawn_wall(
         css::PINK
     };
     let texture = vpx_asset.image(wall.image.as_str()).cloned();
-    let mut mat = ColorMaterial {
+    let material = materials.add(ColorMaterial {
         color: color.into(),
         alpha_mode: AlphaMode2d::Opaque,
         texture,
         // TODO adjust UV scale properly, how doe vpinball do this?
         uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
-    };
-    if !wall.is_top_bottom_visible && !wall.is_side_visible {
-        mat.alpha_mode = AlphaMode2d::Blend;
-        mat.color = color.with_alpha(0.5).into();
-    }
-    let material = materials.add(mat);
+    });
+    // A wall with neither face visible is a collision-only guide (e.g. the plunger
+    // ball-centering wall); it collides but is not drawn.
+    let visible = wall.is_top_bottom_visible || wall.is_side_visible;
     let name_component = Name::from(format!("Wall {}", wall.name));
     let wall_component = Wall {
         name: wall.name.clone(),
@@ -214,11 +214,14 @@ pub(super) fn spawn_wall(
                 // mesh so we don't draw the band twice (rest rubber + extended wall sliver).
                 Visibility::Hidden,
             ));
-        } else {
+        } else if visible {
             // Visible walls drop a shadow into the light map (1:1 mesh copy).
             entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+        } else {
+            // Invisible guide wall: collide but don't draw or cast a shadow.
+            entity.insert(Visibility::Hidden);
         }
-    } else {
+    } else if visible {
         parent.spawn((
             name_component,
             wall_component,
@@ -226,6 +229,15 @@ pub(super) fn spawn_wall(
             MeshMaterial2d(material),
             vpx_to_bevy_transform,
             crate::pinball::light::ShadowCaster { scale: 1.0 },
+        ));
+    } else {
+        parent.spawn((
+            name_component,
+            wall_component,
+            Mesh2d(mesh_handle.clone()),
+            MeshMaterial2d(material),
+            vpx_to_bevy_transform,
+            Visibility::Hidden,
         ));
     }
 }
