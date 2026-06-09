@@ -16,8 +16,8 @@ use bevy::ui::ScrollPosition;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<ShowAll>();
+    app.init_resource::<PickerMemory>();
     app.add_systems(OnEnter(Screen::TableSelect), spawn_table_select);
-    app.add_systems(OnExit(Screen::TableSelect), reset_show_all);
     app.add_systems(
         Update,
         (rebuild_content, scroll_list).run_if(in_state(Screen::TableSelect)),
@@ -32,6 +32,16 @@ pub(super) fn plugin(app: &mut App) {
 /// Whether the picker shows every table (`true`) or only scripted ones (`false`).
 #[derive(Resource, Default)]
 struct ShowAll(bool);
+
+/// View state that outlives leaving the picker, so returning to it (e.g. by
+/// pressing Esc in a game) lands back on the same spot: the list scroll offset
+/// and the table that was last opened (highlighted on return). Kept separate from
+/// [`ShowAll`] so updating the scroll offset does not trigger a list rebuild.
+#[derive(Resource, Default)]
+struct PickerMemory {
+    scroll_y: f32,
+    selected: Option<String>,
+}
 
 /// The node holding the toggle, status line and table list. Its children are
 /// rebuilt whenever the view mode or the (background-filled) index changes.
@@ -69,6 +79,7 @@ fn rebuild_content(
     show_all: Res<ShowAll>,
     index: Res<TableIndex>,
     tables_dir: Res<TablesDir>,
+    memory: Res<PickerMemory>,
     content: Query<(Entity, Option<&Children>), With<TableContent>>,
 ) {
     let Ok((content, children)) = content.single() else {
@@ -97,8 +108,13 @@ fn rebuild_content(
         };
         parent.spawn(widget::table_button(
             toggle,
-            |_: On<Pointer<Click>>, mut show_all: ResMut<ShowAll>| {
+            false,
+            |_: On<Pointer<Click>>,
+             mut show_all: ResMut<ShowAll>,
+             mut memory: ResMut<PickerMemory>| {
                 show_all.0 = !show_all.0;
+                // The two lists differ, so the saved offset no longer applies.
+                memory.scroll_y = 0.0;
             },
         ));
 
@@ -125,6 +141,8 @@ fn rebuild_content(
                     overflow: Overflow::scroll_y(),
                     ..default()
                 },
+                // Restore the previous scroll offset; layout clamps it to range.
+                ScrollPosition(Vec2::new(0.0, memory.scroll_y)),
             ))
             .with_children(|list| {
                 let mut shown = 0;
@@ -135,13 +153,17 @@ fn rebuild_content(
                     } else {
                         entry.title.clone()
                     };
+                    let selected = memory.selected.as_deref() == Some(entry.rel_path.as_str());
                     // Each button picks its own table, then starts loading it.
                     let rel_path = entry.rel_path.clone();
                     list.spawn(widget::table_button(
                         label,
+                        selected,
                         move |_: On<Pointer<Click>>,
                               mut commands: Commands,
-                              mut next: ResMut<NextState<Screen>>| {
+                              mut next: ResMut<NextState<Screen>>,
+                              mut memory: ResMut<PickerMemory>| {
+                            memory.selected = Some(rel_path.clone());
                             commands.insert_resource(TablePath::new(&rel_path));
                             next.set(Screen::Loading);
                         },
@@ -161,6 +183,7 @@ fn rebuild_content(
 fn scroll_list(
     mut wheel: MessageReader<MouseWheel>,
     mut list: Query<&mut ScrollPosition, With<TableList>>,
+    mut memory: ResMut<PickerMemory>,
 ) {
     let Ok(mut scroll) = list.single_mut() else {
         return;
@@ -172,11 +195,8 @@ fn scroll_list(
         };
         scroll.0.y = (scroll.0.y - delta).max(0.0);
     }
-}
-
-/// Default back to the scripted-only view when leaving the picker.
-fn reset_show_all(mut show_all: ResMut<ShowAll>) {
-    show_all.0 = false;
+    // Remember where we are so returning to the picker lands here again.
+    memory.scroll_y = scroll.0.y;
 }
 
 fn exit_on_escape(mut app_exit: MessageWriter<AppExit>) {
