@@ -7,7 +7,7 @@
 use crate::pinball::bumper::BumperSounds;
 use crate::pinball::flipper::FlipperSounds;
 use crate::pinball::kicker::DrainSounds;
-use crate::pinball::wall::SlingshotSounds;
+use crate::pinball::wall::{SlingshotAnimation, SlingshotAnimations, SlingshotSounds};
 use bevy::prelude::*;
 
 pub(super) const TABLE: &str = "Total Nuclear Annihilation (Spooky 2017) VPW v2.3.vpx";
@@ -51,4 +51,34 @@ fn setup(mut commands: Commands) {
         .collect();
     sling.extend((1..=7).map(|i| format!("SY_TNA_REV03_Slingshot_Main_Right_{i}")));
     commands.insert_resource(SlingshotSounds { hit: sling });
+    // TNA has five slingshots (two lower, three around the upper reactor), each flexing
+    // through rest band `*1` -> flex frames `*2..4` plus a rotating arm primitive in the
+    // table script. Our two-state model briefly shows the most-flexed frame (`*4`) on a hit.
+    commands.insert_resource(SlingshotAnimations(vec![
+        SlingshotAnimation {
+            slingshot: "Leftslingshot".to_string(),
+            rest: "LeftSling1".to_string(),
+            flexed: "LeftSling4".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "Rightslingshot".to_string(),
+            rest: "RightSling1".to_string(),
+            flexed: "RightSling4".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "SlingShot1".to_string(),
+            rest: "LeftUpSling1".to_string(),
+            flexed: "LeftUpSling4".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "SlingShot2".to_string(),
+            rest: "RightUpSling1".to_string(),
+            flexed: "RightUpSling4".to_string(),
+        },
+        SlingshotAnimation {
+            slingshot: "SlingShot3".to_string(),
+            rest: "LeftLeftSling1".to_string(),
+            flexed: "LeftLeftSling4".to_string(),
+        },
+    ]));
 }
