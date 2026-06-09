@@ -1,5 +1,5 @@
 use crate::audio::play_sound_at;
-use crate::pinball::ball::{Ball, ball as spawn_ball};
+use crate::pinball::ball::{Ball, BallAssets, BallMaterial, ball as spawn_ball};
 use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
@@ -85,7 +85,8 @@ fn handle_drain(
     mut commands: Commands,
     table_assets: Res<TableAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut ball_materials: ResMut<Assets<BallMaterial>>,
+    ball_assets: Res<BallAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {
     for collision in collision_reader.read() {
@@ -153,7 +154,8 @@ fn handle_drain(
                 0,
                 &table_assets,
                 &mut meshes,
-                &mut materials,
+                &mut ball_materials,
+                &ball_assets,
                 &assets_vpx,
                 Vec2 {
                     x: kicker_transform.translation.x,

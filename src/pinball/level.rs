@@ -1,6 +1,6 @@
 //! Spawn the main level.
 
-use crate::pinball::ball::ball;
+use crate::pinball::ball::{BallAssets, BallMaterial, ball};
 use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
@@ -48,9 +48,11 @@ pub fn spawn_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut ball_materials: ResMut<Assets<BallMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    ball_assets: Res<BallAssets>,
     lighting: Res<LightingAssets>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
@@ -92,7 +94,8 @@ pub fn spawn_level(
                 0,
                 &table_assets,
                 &mut meshes,
-                &mut materials,
+                &mut ball_materials,
+                &ball_assets,
                 &assets_vpx,
                 Vec2::default(),
             ));
