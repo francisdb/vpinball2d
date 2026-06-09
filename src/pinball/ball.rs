@@ -13,6 +13,9 @@ pub const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 // A typical pinball ball mass is around 80 grams
 const BALL_MASS_KG: f32 = 0.08;
 
+// Fallback colour for tables that ship no ball image: a light steel grey.
+const STEEL_BALL_COLOR: Color = Color::srgb(0.8, 0.81, 0.84);
+
 #[derive(Component, Debug)]
 pub struct Ball {
     #[allow(unused)]
@@ -42,13 +45,21 @@ pub(crate) fn ball(
     location: Vec2,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-    let ball_image = vpx_asset
-        .image(vpx_asset.raw.gamedata.ball_image.as_str())
-        .unwrap();
-    let ball_material = materials.add(ColorMaterial {
-        texture: Some(ball_image.clone()),
-        ..default()
-    });
+    // Best effort: not every table ships a ball image; fall back to a plain steel
+    // colour so the ball still renders.
+    let ball_material = match vpx_asset.image(vpx_asset.raw.gamedata.ball_image.as_str()) {
+        Some(ball_image) => materials.add(ColorMaterial {
+            texture: Some(ball_image.clone()),
+            ..default()
+        }),
+        None => {
+            warn!(
+                "Ball image '{}' not found in table '{}'; using a plain steel ball",
+                vpx_asset.raw.gamedata.ball_image, table_assets.file_name
+            );
+            materials.add(ColorMaterial::from(STEEL_BALL_COLOR))
+        }
+    };
     let ball_mesh = meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)));
 
     (
