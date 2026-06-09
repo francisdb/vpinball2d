@@ -203,7 +203,10 @@ fn ball_collision_sounds(
             let transform1 = ball_query.get(entity1).unwrap();
             let transform2 = ball_query.get(entity2).unwrap();
             let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-            let sound_ball_collision = vpx_asset.named_sounds.get("fx_collide").unwrap();
+            // Best effort: not every table ships this collision sound.
+            let Some(sound_ball_collision) = vpx_asset.named_sounds.get("fx_collide") else {
+                continue;
+            };
             let Some(collision) = collisions.get(entity1, entity2) else {
                 warn!(
                     "No collision info found for entities {:?} and {:?}",
