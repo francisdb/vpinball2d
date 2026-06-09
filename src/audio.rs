@@ -56,19 +56,27 @@ pub(crate) fn pick_sound(names: &[String]) -> Option<&str> {
     Some(&names[index])
 }
 
-/// Load a named sound from the loaded table asset.
+/// Load a named sound from the loaded table asset. Best effort: returns `None`
+/// (with a warning) when the table ships no sound by that name, rather than
+/// panicking, so an unknown sound just stays silent.
 pub(crate) fn load_sound(
     table_assets: &TableAssets,
     assets_vpx: &Assets<VpxAsset>,
     name: &str,
-) -> Handle<AudioSource> {
-    assets_vpx
+) -> Option<Handle<AudioSource>> {
+    let handle = assets_vpx
         .get(&table_assets.vpx)
         .unwrap()
         .named_sounds
         .get(name)
-        .unwrap_or_else(|| panic!("Sound {name} not found"))
-        .clone()
+        .cloned();
+    if handle.is_none() {
+        warn!(
+            "Sound '{name}' not found in table '{}'; skipping it",
+            table_assets.file_name
+        );
+    }
+    handle
 }
 
 /// Play a random sound from `names` (if any) as a spatial child of `entity`.
@@ -79,8 +87,9 @@ pub(crate) fn play_sound_at(
     entity: Entity,
     names: &[String],
 ) {
-    if let Some(name) = pick_sound(names) {
-        let handle = load_sound(table_assets, assets_vpx, name);
+    if let Some(name) = pick_sound(names)
+        && let Some(handle) = load_sound(table_assets, assets_vpx, name)
+    {
         commands
             .entity(entity)
             .with_child(spatial_sound_effect(handle));
