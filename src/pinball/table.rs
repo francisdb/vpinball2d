@@ -99,12 +99,6 @@ pub(crate) fn table(
                 MeshMaterial2d(backglass_material),
                 Transform::from_xyz(0.0, 0.0, -20.0)
             ),
-            (
-                Name::from("Origin"),
-                Mesh2d(meshes.add(Mesh::from(Circle::new(0.01)))),
-                MeshMaterial2d(materials.add(Color::from(css::RED))),
-                Transform::from_xyz(0.0, 0.0, 1.0),
-            ),
             playfield(vpx_asset, meshes, playfield_materials, images, light_map),
             (
                 Name::from("Bottom Wall"),
