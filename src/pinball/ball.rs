@@ -3,7 +3,7 @@ use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use crate::{AppSystems, PausableSystems, Pause};
 use avian2d::prelude::*;
-use bevy::audio::Volume;
+use bevy::audio::{AudioSource, Volume};
 use bevy::prelude::*;
 
 // A typical pinball ball is
@@ -12,6 +12,9 @@ pub const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 
 // A typical pinball ball mass is around 80 grams
 const BALL_MASS_KG: f32 = 0.08;
+
+// Fallback colour for tables that ship no ball image: a light steel grey.
+const STEEL_BALL_COLOR: Color = Color::srgb(0.8, 0.81, 0.84);
 
 #[derive(Component, Debug)]
 pub struct Ball {
@@ -29,6 +32,8 @@ pub(super) fn plugin(app: &mut App) {
             .run_if(in_state(Screen::Gameplay)),
     );
     app.add_systems(Update, mute_rolling.run_if(in_state(Pause(true))));
+    // Attach the looping rolling sound when a ball spawns, if the table ships one.
+    app.add_observer(attach_rolling_sound);
 }
 
 pub(crate) fn ball(
@@ -40,23 +45,22 @@ pub(crate) fn ball(
     location: Vec2,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-    let ball_image = vpx_asset
-        .image(vpx_asset.raw.gamedata.ball_image.as_str())
-        .unwrap();
-    let ball_material = materials.add(ColorMaterial {
-        texture: Some(ball_image.clone()),
-        ..default()
-    });
+    // Best effort: not every table ships a ball image; fall back to a plain steel
+    // colour so the ball still renders.
+    let ball_material = match vpx_asset.image(vpx_asset.raw.gamedata.ball_image.as_str()) {
+        Some(ball_image) => materials.add(ColorMaterial {
+            texture: Some(ball_image.clone()),
+            ..default()
+        }),
+        None => {
+            warn!(
+                "Ball image '{}' not found in table '{}'; using a plain steel ball",
+                vpx_asset.raw.gamedata.ball_image, table_assets.file_name
+            );
+            materials.add(ColorMaterial::from(STEEL_BALL_COLOR))
+        }
+    };
     let ball_mesh = meshes.add(Mesh::from(Circle::new(BALL_RADIUS_M)));
-    // TODO add ball wall collision sound effects
-    // We'll have to be a bit more creative here since ball sounds are actually handled by the script in vpinball.
-    // Example / JPSalas => fx_ballrolling0
-    // TNA => SY_TNA_REV02_Ball_Roll_0
-    let sound_roll = vpx_asset
-        .named_sounds
-        .get("fx_ballrolling0")
-        .or(vpx_asset.named_sounds.get("SY_TNA_REV02_Ball_Roll_0"))
-        .expect("Ball rolling sound not found in VPX asset");
 
     (
         Name::from(format!("Ball {id}")),
@@ -86,10 +90,59 @@ pub(crate) fn ball(
             // continuous collision detection to prevent tunneling at high speeds
             SweptCcd::default(),
         ),
-        // sound component
-        AudioPlayer::new(sound_roll.clone()),
-        PlaybackSettings::LOOP.with_spatial(true),
+        // The looping rolling sound is attached separately by `attach_rolling_sound`,
+        // since not every table ships one (best effort: a missing sound is not fatal).
     )
+}
+
+/// On ball spawn, attach the looping rolling sound the table ships, if any.
+///
+/// Ball sounds are normally driven by the table script in vpinball; until that
+/// is in place we just loop whatever "ball rolling" sound the table provides.
+/// Tables name it inconsistently (`fx_ballrolling0`, `SY_TNA_REV02_Ball_Roll_0`,
+/// ...), so we match on the name rather than a fixed key. A table without such a
+/// sound simply rolls silently.
+fn attach_rolling_sound(
+    add: On<Add, Ball>,
+    mut commands: Commands,
+    table_assets: Option<Res<TableAssets>>,
+    assets_vpx: Res<Assets<VpxAsset>>,
+) {
+    let Some(table_assets) = table_assets else {
+        return;
+    };
+    let Some(vpx_asset) = assets_vpx.get(&table_assets.vpx) else {
+        return;
+    };
+    let Some(sound) = find_rolling_sound(vpx_asset) else {
+        warn!(
+            "No ball rolling sound found in table '{}'; the ball will roll silently",
+            table_assets.file_name
+        );
+        return;
+    };
+    commands.entity(add.entity).insert((
+        AudioPlayer::new(sound.clone()),
+        PlaybackSettings::LOOP.with_spatial(true),
+    ));
+}
+
+/// Best-effort lookup of a table's "ball rolling" sound by name. Sound names are
+/// normalised (non-alphanumerics dropped, lowercased) and matched on containing
+/// `ballroll`, which catches `fx_ballrolling0`, `SY_..._Ball_Roll_0`, etc.
+fn find_rolling_sound(vpx_asset: &VpxAsset) -> Option<&Handle<AudioSource>> {
+    vpx_asset
+        .named_sounds
+        .iter()
+        .find(|(name, _)| {
+            let normalized: String = name
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .flat_map(|c| c.to_lowercase())
+                .collect();
+            normalized.contains("ballroll")
+        })
+        .map(|(_, handle)| handle)
 }
 
 fn ball_roll(mut ball_query: Query<(&LinearVelocity, &mut SpatialAudioSink), With<Ball>>) {
