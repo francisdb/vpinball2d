@@ -151,15 +151,40 @@ pub(super) fn spawn_wall(
         .iter()
         .flatten()
         .find(|m| m.name == wall.top_material);
-    let color = if let Some(mat) = top_material {
-        Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
-    } else {
-        css::PINK
-    };
     let texture = vpx_asset.image(wall.image.as_str()).cloned();
+    // Mirror vpinball's surface-top rendering (Shader::SetMaterial): the base colour
+    // carries the material opacity as its alpha, and alpha blending is enabled only
+    // when the material has opacity active and either the texture has an alpha channel
+    // or the opacity is meaningfully below 1. Without this a plastics sheet (a texture
+    // with transparent areas around each plastic) renders the gaps as solid base colour
+    // instead of letting the playfield show through.
+    let (color, alpha_mode) = if let Some(mat) = top_material {
+        let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
+        // vpinball's `has_alpha` = the image is not opaque (see Shader::SetBasic).
+        let texture_has_alpha = !vpx_asset
+            .raw
+            .images
+            .iter()
+            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()))
+            .and_then(|i| i.is_opaque)
+            .unwrap_or(true);
+        let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
+        let color = Srgba {
+            alpha,
+            ..Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
+        };
+        let alpha_mode = if blend {
+            AlphaMode2d::Blend
+        } else {
+            AlphaMode2d::Opaque
+        };
+        (color, alpha_mode)
+    } else {
+        (css::PINK, AlphaMode2d::Opaque)
+    };
     let material = materials.add(ColorMaterial {
         color: color.into(),
-        alpha_mode: AlphaMode2d::Opaque,
+        alpha_mode,
         texture,
         // TODO adjust UV scale properly, how doe vpinball do this?
         uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
