@@ -148,6 +148,14 @@ pub(crate) struct BallAssets {
     default_env: Handle<Image>,
 }
 
+impl BallAssets {
+    /// The neutral studio environment map, reused by other chrome surfaces (e.g. wire
+    /// ramps) so they reflect the same surroundings as the ball.
+    pub(crate) fn default_env(&self) -> Handle<Image> {
+        self.default_env.clone()
+    }
+}
+
 fn setup_ball_assets(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(BallAssets {
         default_env: images.add(default_env_image()),
