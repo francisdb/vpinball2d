@@ -35,6 +35,10 @@ impl VpxAsset {
         format!("meshes/ramp/{name}")
     }
 
+    pub fn primitive_mesh_sub_path(name: &str) -> String {
+        format!("meshes/primitive/{name}")
+    }
+
     /// Look up a loaded image by name, case-insensitively (VPinball treats image
     /// names case-insensitively, and tables often differ only in case).
     pub fn image(&self, name: &str) -> Option<&Handle<Image>> {

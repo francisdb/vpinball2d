@@ -49,30 +49,6 @@ pub(super) fn spawn_bumper(
     let mesh = Mesh::from(Circle {
         radius: vpu_to_m(bumper.radius),
     });
-    let vpx_cap_material_base_color = if bumper.cap_material.is_empty() {
-        Srgba::rgb_u8(200, 200, 200)
-    } else {
-        match vpx_asset
-            .raw
-            .gamedata
-            .materials
-            .iter()
-            .flatten()
-            .find(|m| m.name == bumper.cap_material)
-        {
-            None => {
-                warn!(
-                    "Bumper cap material '{}' not found, using default color",
-                    bumper.cap_material
-                );
-                Srgba::rgb_u8(200, 200, 200)
-            }
-            Some(m) => {
-                let base_color = m.base_color;
-                Srgba::rgb_u8(base_color.r, base_color.g, base_color.b)
-            }
-        }
-    };
     let vpx_base_material_color = if bumper.base_material.is_empty() {
         Srgba::rgb_u8(150, 150, 150)
     } else {
@@ -104,13 +80,6 @@ pub(super) fn spawn_bumper(
         texture: None,
         ..default()
     });
-    let cap_material = materials.add(ColorMaterial {
-        color: vpx_cap_material_base_color.into(),
-        // TODO we want to create a proper transparent plastic material type
-        alpha_mode: AlphaMode2d::Blend,
-        texture: None,
-        ..default()
-    });
 
     // use bumper.center to modify the transform
     let transform = Transform::from_xyz(
@@ -120,7 +89,7 @@ pub(super) fn spawn_bumper(
     );
     // not sure what vpinball uses as force but we want newtons
     let force = bumper.force * 0.008;
-    parent.spawn((
+    let mut entity = parent.spawn((
         Bumper { force },
         Name::from(format!("Bumper{}", bumper.name)),
         Mesh2d(meshes.add(mesh)),
@@ -133,13 +102,43 @@ pub(super) fn spawn_bumper(
         crate::pinball::light::ShadowCaster {
             scale: (cap_radius / base_radius) * 1.3,
         },
-        children![(
-            Name::from(format!("Bumper Cap {}", bumper.name)),
-            Mesh2d(meshes.add(Mesh::from(Circle { radius: cap_radius }))),
-            MeshMaterial2d(cap_material),
-            Transform::from_xyz(0.0, 0.0, 0.01),
-        ),],
     ));
+    // The built-in flat cap is only drawn when the table uses it. Many tables hide it
+    // (`is_cap_visible = false`) and place a textured cap primitive instead, which is
+    // rendered separately (see pinball::primitive); drawing both would double the cap.
+    if bumper.is_cap_visible {
+        let cap_color = bumper
+            .cap_material
+            .is_empty()
+            .then_some(Srgba::rgb_u8(200, 200, 200))
+            .or_else(|| {
+                vpx_asset
+                    .raw
+                    .gamedata
+                    .materials
+                    .iter()
+                    .flatten()
+                    .find(|m| m.name == bumper.cap_material)
+                    .map(|m| Srgba::rgb_u8(m.base_color.r, m.base_color.g, m.base_color.b))
+            })
+            .unwrap_or(Srgba::rgb_u8(200, 200, 200));
+        let cap_material = materials.add(ColorMaterial {
+            color: cap_color.into(),
+            // TODO we want to create a proper transparent plastic material type
+            alpha_mode: AlphaMode2d::Blend,
+            texture: None,
+            ..default()
+        });
+        let cap_mesh = meshes.add(Mesh::from(Circle { radius: cap_radius }));
+        entity.with_children(|parent| {
+            parent.spawn((
+                Name::from(format!("Bumper Cap {}", bumper.name)),
+                Mesh2d(cap_mesh),
+                MeshMaterial2d(cap_material),
+                Transform::from_xyz(0.0, 0.0, 0.01),
+            ));
+        });
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
