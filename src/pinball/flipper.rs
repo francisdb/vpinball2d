@@ -43,39 +43,59 @@ use vpin::vpx::gameitem::primitive::Primitive;
 use vpin::vpx::units::vpu_to_m;
 
 /// A flipper bat is a textured primitive placed on the flipper pivot. Within this distance
-/// (vpx units) a visible textured primitive is treated as the bat.
-const FLIPPER_BAT_MAX_DIST_VPU: f32 = 40.0;
+/// (vpx units) a visible textured primitive is a bat candidate. Bats sit essentially on
+/// the pivot (0-3 vpu in practice); keep this below the distance of fastening screws and
+/// posts around the flipper (~33 vpu upwards).
+const FLIPPER_BAT_MAX_DIST_VPU: f32 = 10.0;
 
-/// The textured primitive that is a flipper's bat (its top art, often with text), if any.
-/// Modern tables model the bat as a primitive on the pivot; we render it rotating with the
-/// flipper instead of as a static, distorted top-down projection.
+/// The textured primitive that is a flipper's bat (its top art, often with text), if any,
+/// with its projected top-down mesh. Modern tables model the bat as a primitive on the
+/// pivot; we render it rotating with the flipper instead of as a static projection.
+///
+/// Tables often stack a flat shadow primitive on the same pivot (e.g. A-Go-Go's
+/// `priFlipperShadow*` under `priLLFlip`); the bat is the raised one, so among the
+/// candidates pick the one whose projected mesh centre is highest.
 fn flipper_bat_primitive<'a>(
-    gameitems: &'a [GameItemEnum],
+    vpx_asset: &'a VpxAsset,
     flipper: &vpx::gameitem::flipper::Flipper,
-) -> Option<&'a Primitive> {
+) -> Option<(&'a Primitive, Handle<Mesh>)> {
     let c = &flipper.center;
     let dist2 = |p: &Primitive| (p.position.x - c.x).powi(2) + (p.position.y - c.y).powi(2);
-    gameitems
+    vpx_asset
+        .raw
+        .gameitems
         .iter()
         .filter_map(|it| match it {
             GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
             _ => None,
         })
         .filter(|p| dist2(p) < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
-        .min_by(|a, b| dist2(a).total_cmp(&dist2(b)))
+        .filter_map(|p| {
+            // Only primitives with a projected mesh can be drawn as the bat.
+            let path = VpxAsset::primitive_mesh_sub_path(&p.name);
+            let mesh = vpx_asset.named_meshes.get(path.as_str())?;
+            let center_z = vpx_asset
+                .named_mesh_centers
+                .get(path.as_str())
+                .copied()
+                .unwrap_or(0.0);
+            Some((p, mesh.clone(), center_z))
+        })
+        .max_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(p, mesh, _)| (p, mesh))
 }
 
-/// Whether a primitive is a flipper bat, so the general primitive renderer can skip it (the
-/// flipper renders it rotating instead).
-pub(crate) fn is_flipper_bat(gameitems: &[GameItemEnum], primitive: &Primitive) -> bool {
+/// Whether a primitive is a flipper bat, so the general primitive renderer can skip it
+/// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat is
+/// skipped; co-located decor like a printed flipper shadow still renders statically.
+pub(crate) fn is_flipper_bat(vpx_asset: &VpxAsset, primitive: &Primitive) -> bool {
     if !primitive.is_visible || primitive.image.is_empty() {
         return false;
     }
-    gameitems.iter().any(|it| {
+    vpx_asset.raw.gameitems.iter().any(|it| {
         matches!(it, GameItemEnum::Flipper(f)
-            if (f.center.x - primitive.position.x).powi(2)
-                + (f.center.y - primitive.position.y).powi(2)
-                < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
+            if flipper_bat_primitive(vpx_asset, f)
+                .is_some_and(|(bat, _)| std::ptr::eq(bat, primitive)))
     })
 }
 
@@ -197,12 +217,7 @@ pub(super) fn spawn_flipper(
     // The bat sits just above the rubber and moves with it. If the table models the bat as
     // a textured primitive on the pivot (e.g. North Pole's lettered bats), draw that art
     // rotating with the flipper; otherwise draw the flat material-coloured bat shape.
-    let bat_primitive = flipper_bat_primitive(&vpx_asset.raw.gameitems, flipper).and_then(|p| {
-        vpx_asset
-            .named_meshes
-            .get(VpxAsset::primitive_mesh_sub_path(&p.name).as_str())
-            .map(|mesh| (p, mesh.clone()))
-    });
+    let bat_primitive = flipper_bat_primitive(vpx_asset, flipper);
     let bat_child = if let Some((prim, mesh)) = bat_primitive {
         let material = materials.add(ColorMaterial {
             color: Color::WHITE,

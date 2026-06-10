@@ -38,7 +38,7 @@ pub(super) fn spawn_primitive(
 
     // Flipper bats are textured primitives the flipper draws rotating with it; skip them
     // here so they are not also drawn statically.
-    if crate::pinball::flipper::is_flipper_bat(&vpx_asset.raw.gameitems, primitive) {
+    if crate::pinball::flipper::is_flipper_bat(vpx_asset, primitive) {
         return;
     }
 
