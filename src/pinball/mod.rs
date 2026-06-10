@@ -12,6 +12,7 @@ mod bumper;
 pub(crate) mod flipper;
 pub(crate) mod gate;
 mod kicker;
+mod layer;
 pub mod level;
 mod light;
 pub(crate) mod lightmap;

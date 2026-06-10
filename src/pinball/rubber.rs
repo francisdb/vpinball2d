@@ -23,6 +23,7 @@ pub(super) fn spawn_rubber(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     rubber: &vpx::gameitem::rubber::Rubber,
+    item_index: usize,
 ) {
     // A rubber is a band (ring) following its drag points with width rubber.thickness,
     // like Visual Pinball - not a filled shape.
@@ -53,8 +54,9 @@ pub(super) fn spawn_rubber(
         rubber.thickness
     };
     let half_width = vpu_to_m(thickness as f32) * 0.5;
-    // Lift the band above the playfield (at z 0) so it renders on top.
-    let top_height = vpu_to_m(rubber.height + thickness as f32 / 2.0);
+    // The band draws at its centre height (see layer.rs); rubbers have no depth bias.
+    let render_z =
+        crate::pinball::layer::render_z(rubber.height + thickness as f32 / 2.0, 0.0, item_index);
 
     let mesh = meshes.add(rubber_ring_mesh(&centerline, half_width));
 
@@ -74,7 +76,7 @@ pub(super) fn spawn_rubber(
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x,
             vpx_to_bevy_transform.translation.y,
-            top_height,
+            render_z,
         ),
         Mesh2d(mesh),
         MeshMaterial2d(materials.add(Color::from(RUBER_COLOR))),

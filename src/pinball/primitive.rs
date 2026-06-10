@@ -27,7 +27,15 @@ pub(super) fn spawn_primitive(
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     primitive: &primitive::Primitive,
+    item_index: usize,
 ) {
+    // A primitive named "playfield_mesh" replaces the playfield plane in vpinball and
+    // is textured with the table image; our playfield quad already draws that, so
+    // rendering it here would cover the table with an untextured sheet.
+    if primitive.name.eq_ignore_ascii_case("playfield_mesh") {
+        return;
+    }
+
     // Flipper bats are textured primitives the flipper draws rotating with it; skip them
     // here so they are not also drawn statically.
     if crate::pinball::flipper::is_flipper_bat(&vpx_asset.raw.gameitems, primitive) {
@@ -41,12 +49,23 @@ pub(super) fn spawn_primitive(
     }
 
     // A top-down mesh is only generated for visible primitives with upward-facing geometry.
-    let Some(mesh_handle) = vpx_asset
-        .named_meshes
-        .get(VpxAsset::primitive_mesh_sub_path(&primitive.name).as_str())
-    else {
+    let mesh_sub_path = VpxAsset::primitive_mesh_sub_path(&primitive.name);
+    let Some(mesh_handle) = vpx_asset.named_meshes.get(mesh_sub_path.as_str()) else {
         return;
     };
+    // The primitive draws at its projected mesh's centre height minus its depth bias
+    // (see layer.rs), so e.g. screws fastening a plastic sort above it; the mesh
+    // vertices carry z offsets relative to that centre.
+    let center_z_vpu = vpx_asset
+        .named_mesh_centers
+        .get(mesh_sub_path.as_str())
+        .copied()
+        .unwrap_or(0.0);
+    let transform = Transform::from_xyz(
+        vpx_to_bevy_transform.translation.x,
+        vpx_to_bevy_transform.translation.y,
+        crate::pinball::layer::render_z(center_z_vpu, primitive.depth_bias, item_index),
+    );
 
     // Colour/transparency from the primitive material, mirroring walls and ramps (base
     // colour tinted, alpha blending when the material opacity is active or the image has
@@ -101,6 +120,6 @@ pub(super) fn spawn_primitive(
         },
         Mesh2d(mesh_handle.clone()),
         MeshMaterial2d(material),
-        vpx_to_bevy_transform,
+        transform,
     ));
 }

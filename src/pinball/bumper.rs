@@ -22,6 +22,11 @@ const BUMPER_CAP_MAX_DIST_VPU: f32 = 30.0;
 /// The textured primitive sitting on a bumper (its cap), if any. Tables hide the built-in
 /// cap (`is_cap_visible = false`) and place a textured primitive there; we render that flat
 /// (a textured disc) rather than as a distorted top-down dome projection.
+///
+/// Only a single textured primitive on the bumper is treated as cap art. Several stacked
+/// primitives (e.g. a passive bumper modelled as cap + skirt + rubber, with a texture
+/// that wraps around each mesh) are left to the projected-primitive renderer; slicing
+/// such a wrap-around texture flat would show an arbitrary region of it.
 pub(super) fn cap_primitive_for<'a>(
     gameitems: &'a [GameItemEnum],
     bumper: &gameitem::bumper::Bumper,
@@ -29,14 +34,15 @@ pub(super) fn cap_primitive_for<'a>(
     let center = &bumper.center;
     let dist2 =
         |p: &Primitive| (p.position.x - center.x).powi(2) + (p.position.y - center.y).powi(2);
-    gameitems
+    let mut candidates = gameitems
         .iter()
         .filter_map(|it| match it {
             GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
             _ => None,
         })
-        .filter(|p| dist2(p) < BUMPER_CAP_MAX_DIST_VPU.powi(2))
-        .min_by(|a, b| dist2(a).total_cmp(&dist2(b)))
+        .filter(|p| dist2(p) < BUMPER_CAP_MAX_DIST_VPU.powi(2));
+    let cap = candidates.next()?;
+    candidates.next().is_none().then_some(cap)
 }
 
 /// Whether a primitive is a bumper cap, so the general primitive renderer can skip it (the
@@ -47,9 +53,8 @@ pub(crate) fn is_bumper_cap(gameitems: &[GameItemEnum], primitive: &Primitive) -
     }
     gameitems.iter().any(|it| {
         matches!(it, GameItemEnum::Bumper(b)
-            if (b.center.x - primitive.position.x).powi(2)
-                + (b.center.y - primitive.position.y).powi(2)
-                < BUMPER_CAP_MAX_DIST_VPU.powi(2))
+            if cap_primitive_for(gameitems, b)
+                .is_some_and(|cap| std::ptr::eq(cap, primitive)))
     })
 }
 

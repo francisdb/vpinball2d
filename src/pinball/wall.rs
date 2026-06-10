@@ -11,7 +11,6 @@ use core::time::Duration;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::math::Affine2;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
@@ -138,6 +137,7 @@ pub(super) fn spawn_wall(
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     wall: &wall::Wall,
+    item_index: usize,
 ) {
     let mesh_handle = vpx_asset
         .named_meshes
@@ -161,20 +161,26 @@ pub(super) fn spawn_wall(
     let (color, alpha_mode) = if let Some(mat) = top_material {
         let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
         // vpinball's `has_alpha` = the image is not opaque (see Shader::SetBasic).
-        let texture_has_alpha = !vpx_asset
+        let image_data = vpx_asset
             .raw
             .images
             .iter()
-            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()))
-            .and_then(|i| i.is_opaque)
-            .unwrap_or(true);
+            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()));
+        let texture_has_alpha = !image_data.and_then(|i| i.is_opaque).unwrap_or(true);
         let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
         let color = Srgba {
             alpha,
             ..Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
         };
+        // Without blending, vpinball still alpha-tests a non-opaque texture when the
+        // image has a test value set (Shader::SetBasic), discarding pixels with
+        // alpha <= value/255. That is how cut-out plastics sheets on a wall top get
+        // their holes; map it to AlphaMode2d::Mask.
+        let alpha_test = image_data.map(|i| i.alpha_test_value).unwrap_or(-1.0);
         let alpha_mode = if blend {
             AlphaMode2d::Blend
+        } else if texture_has_alpha && alpha_test >= 0.0 {
+            AlphaMode2d::Mask(alpha_test / 255.0)
         } else {
             AlphaMode2d::Opaque
         };
@@ -186,12 +192,24 @@ pub(super) fn spawn_wall(
         color: color.into(),
         alpha_mode,
         texture,
-        // TODO adjust UV scale properly, how doe vpinball do this?
-        uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
+        ..default()
     });
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
     let visible = wall.is_top_bottom_visible || wall.is_side_visible;
+    // The wall top draws at the wall's centre height (see layer.rs): transparent 2D
+    // sorting only sees the entity transform, so the height must live there (not in
+    // the mesh vertices) for e.g. an apron at 52 vpu to cover the ball (drawn at its
+    // radius) rolling underneath. Walls have no depth bias in vpx.
+    let transform = Transform::from_xyz(
+        vpx_to_bevy_transform.translation.x,
+        vpx_to_bevy_transform.translation.y,
+        crate::pinball::layer::render_z(
+            (wall.height_bottom + wall.height_top) * 0.5,
+            0.0,
+            item_index,
+        ),
+    );
     let name_component = Name::from(format!("Wall {}", wall.name));
     let wall_component = Wall {
         name: wall.name.clone(),
@@ -212,7 +230,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             RigidBody::Static,
             Restitution::from(wall.elasticity),
             Friction::from(wall.friction),
@@ -252,7 +270,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             crate::pinball::light::ShadowCaster { scale: 1.0 },
         ));
     } else {
@@ -261,7 +279,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             Visibility::Hidden,
         ));
     }

@@ -17,6 +17,7 @@ use thiserror::Error;
 use vpin::vpx::gameitem::GameItemEnum;
 use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::image::ImageData;
+use vpin::vpx::material::{Material, MaterialType, SaveMaterial};
 use vpin::vpx::sound::write_sound;
 use vpin::vpx::units::vpu_to_m;
 
@@ -84,24 +85,45 @@ impl VpxLoader {
         load_context: &mut LoadContext<'_>,
         settings: &VpxLoaderSettings,
     ) -> Result<VpxAsset, VpxError> {
-        let vpx = vpin::vpx::from_bytes(bytes).map_err(|e| {
+        let mut vpx = vpin::vpx::from_bytes(bytes).map_err(|e| {
             VpxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to parse VPX file: {e}"),
             ))
         })?;
 
+        // Tables saved before VPX 10.8 store materials only in the legacy MATE format.
+        // Convert them into the regular list so the rest of the code has a single
+        // material source, like vpinball does on load.
+        if vpx.gamedata.materials.is_none() {
+            vpx.gamedata.materials = Some(
+                vpx.gamedata
+                    .materials_old
+                    .iter()
+                    .map(material_from_save_material)
+                    .collect(),
+            );
+        }
+
         let mut image_handles = Vec::new();
         let mut named_image_handles = HashMap::new();
         if settings.load_images {
-            for image in &vpx.images {
+            for image in &mut vpx.images {
                 let label = format!("images/{}", image.name);
                 // VPX stores images either as a compressed blob (`jpeg`, despite the
                 // name this can be JPEG/PNG/etc.) or as a raw bitmap (`bits`, always
                 // BGRA). Load whichever is present.
                 let handle = if let Some(jpeg) = &image.jpeg {
                     match load_image(label, load_context, image, jpeg.data.clone()).await {
-                        Ok(handle) => Some(handle),
+                        Ok((handle, computed_opaque)) => {
+                            // Old tables do not store the opaque flag; fill it in from the
+                            // decoded pixels like vpinball (BaseTexture::IsOpaque) so the
+                            // renderers can rely on it for alpha handling.
+                            if image.is_opaque.is_none() {
+                                image.is_opaque = computed_opaque;
+                            }
+                            Some(handle)
+                        }
                         Err(e) => {
                             // TODO we could retry loading the image and let the image loader guess the
                             //   format; sometimes vpx files have images with the wrong extension.
@@ -110,7 +132,11 @@ impl VpxLoader {
                         }
                     }
                 } else if let Some(bits) = &image.bits {
-                    load_bitmap(label, load_context, image, bits)
+                    let (handle, computed_opaque) = load_bitmap(label, load_context, image, bits);
+                    if image.is_opaque.is_none() {
+                        image.is_opaque = computed_opaque;
+                    }
+                    handle
                 } else {
                     warn!("Image: {} Path: {} No image data", image.name, image.path);
                     None
@@ -152,34 +178,44 @@ impl VpxLoader {
 
         let mut mesh_handles = Vec::new();
         let mut named_mesh_handles = HashMap::new();
-        // TODO where does the 100.0 factor come from?
+        let mut named_mesh_centers = HashMap::new();
+        // Table size in vpx units; wall/ramp world-aligned UVs are normalized by it.
         let table_size = Vec2::new(
-            (vpx.gamedata.right - vpx.gamedata.left) / 100.0,
-            (vpx.gamedata.bottom - vpx.gamedata.top) / 100.0,
+            vpx.gamedata.right - vpx.gamedata.left,
+            vpx.gamedata.bottom - vpx.gamedata.top,
         );
         if settings.load_meshes {
             for item in &vpx.gameitems {
                 // Walls get a generated 2D mesh; rubbers build their own ring mesh at spawn
                 // time (see pinball::rubber) and other items have no generated mesh.
                 if let GameItemEnum::Wall(wall) = item {
-                    let top_height = vpu_to_m(wall.height_top);
                     let path = VpxAsset::wall_mesh_sub_path(&wall.name);
                     let handle = load_mesh_2d_from_drag_points(
                         table_size,
                         path.clone(),
                         &wall.drag_points,
-                        top_height,
                         load_context,
                     );
                     named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
                     mesh_handles.push(handle);
                 } else if let GameItemEnum::Ramp(ramp) = item {
                     // Ramps are open paths (not looped); build their top-down silhouette.
-                    let centerline =
+                    let mut centerline: Vec<Vec2> =
                         vpin::vpx::mesh::smooth_drag_points_2d(&ramp.drag_points, 4.0, false)
                             .into_iter()
                             .map(|(x, y)| Vec2::new(x, y))
                             .collect();
+                    // vpin's open-curve smoothing drops the final drag point (vpinball
+                    // appends it explicitly, see dragpoint.h "Add the very last point").
+                    // Without it a straight 2-point ramp (e.g. an apron score card)
+                    // collapses to a single point and gets no mesh.
+                    // TODO fix upstream in vpin and drop this.
+                    if let Some(last) = ramp.drag_points.last() {
+                        let end = Vec2::new(last.x, last.y);
+                        if centerline.last() != Some(&end) {
+                            centerline.push(end);
+                        }
+                    }
                     if let Some(mesh) = ramp_mesh::build_ramp_mesh_2d(table_size, ramp, centerline)
                     {
                         let path = VpxAsset::ramp_mesh_sub_path(&ramp.name);
@@ -193,12 +229,14 @@ impl VpxLoader {
                     // Visible primitives are projected to their top-down silhouette (only the
                     // upward-facing faces). Invisible primitives are skipped.
                     if primitive.is_visible
-                        && let Some(mesh) = primitive_mesh::build_primitive_mesh_2d(primitive)
+                        && let Some((mesh, center_z)) =
+                            primitive_mesh::build_primitive_mesh_2d(primitive)
                     {
                         let path = VpxAsset::primitive_mesh_sub_path(&primitive.name);
                         let labeled = load_context.begin_labeled_asset();
                         let handle = load_context
                             .add_loaded_labeled_asset(path.clone(), labeled.finish(mesh));
+                        named_mesh_centers.insert(path.clone().into_boxed_str(), center_z);
                         named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
                         mesh_handles.push(handle);
                     }
@@ -213,10 +251,59 @@ impl VpxLoader {
             named_sounds: named_sound_handles,
             meshes: mesh_handles,
             named_meshes: named_mesh_handles,
+            named_mesh_centers,
             raw: vpx,
         };
 
         Ok(custom_asset)
+    }
+}
+
+/// Convert a legacy (pre 10.8) [`SaveMaterial`] to a [`Material`], inverting the
+/// quantization vpinball applies when saving (see `From<&Material> for SaveMaterial`
+/// in vpin and `Material::Material(const SaveMaterial&)` in vpinball). The physics
+/// fields are private on [`Material`] and stay at their defaults; physics comes from
+/// the game items themselves.
+fn material_from_save_material(save: &SaveMaterial) -> Material {
+    // Material has private fields, so a struct literal is not possible; start from
+    // the default and overwrite the visual fields.
+    let mut material = Material::default();
+    material.name = save.name.clone();
+    material.type_ = if save.is_metal {
+        MaterialType::Metal
+    } else {
+        MaterialType::Basic
+    };
+    material.wrap_lighting = save.wrap_lighting;
+    material.roughness = save.roughness;
+    // Saved as `255 - quantize_u8(8, lerp)` for compatibility with old table versions.
+    material.glossy_image_lerp = f32::from(255 - save.glossy_image_lerp) / 255.0;
+    material.thickness = f32::from(save.thickness) / 255.0;
+    material.edge = save.edge;
+    material.opacity = save.opacity;
+    material.base_color = save.base_color;
+    material.glossy_color = save.glossy_color;
+    material.clearcoat_color = save.clearcoat_color;
+    // Bit 0 is the opacity-active flag, the upper 7 bits hold the quantized edge alpha.
+    material.opacity_active = save.opacity_active_edge_alpha & 1 != 0;
+    material.edge_alpha = f32::from(save.opacity_active_edge_alpha >> 1) / 127.0;
+    material
+}
+
+/// Whether every pixel of the image is fully opaque, like vpinball's
+/// `BaseTexture::IsOpaque`. `None` when the format has no simple 8-bit alpha
+/// channel to inspect (treated as opaque downstream).
+fn compute_is_opaque(image: &Image) -> Option<bool> {
+    use bevy::render::render_resource::TextureFormat;
+    match image.texture_descriptor.format {
+        TextureFormat::Rgba8Unorm
+        | TextureFormat::Rgba8UnormSrgb
+        | TextureFormat::Bgra8Unorm
+        | TextureFormat::Bgra8UnormSrgb => image
+            .data
+            .as_ref()
+            .map(|data| data.chunks_exact(4).all(|pixel| pixel[3] == 255)),
+        _ => None,
     }
 }
 
@@ -225,7 +312,7 @@ async fn load_image(
     load_context: &mut LoadContext<'_>,
     image_data: &ImageData,
     bytes: Vec<u8>,
-) -> Result<Handle<Image>, <VpxLoader as AssetLoader>::Error> {
+) -> Result<(Handle<Image>, Option<bool>), <VpxLoader as AssetLoader>::Error> {
     let mut reader = bevy::asset::io::VecReader::new(bytes);
     // TODO how do we properly delegate here to an Image AssetLoader?
     // // use the load context to load the image data from bytes
@@ -254,9 +341,10 @@ async fn load_image(
     let image = image_loader
         .load(&mut reader, &settings, &mut labeled)
         .await?;
+    let is_opaque = compute_is_opaque(&image);
     let loaded = labeled.finish(image);
     let handle = load_context.add_loaded_labeled_asset(label, loaded);
-    Ok(handle)
+    Ok((handle, is_opaque))
 }
 
 /// Build a Bevy image from a VPX raw bitmap (`bits`): LZW-compressed BGRA pixels.
@@ -267,7 +355,7 @@ fn load_bitmap(
     load_context: &mut LoadContext<'_>,
     image_data: &ImageData,
     bits: &vpin::vpx::image::ImageDataBits,
-) -> Option<Handle<Image>> {
+) -> (Option<Handle<Image>>, Option<bool>) {
     let bgra = vpin::vpx::lzw::from_lzw_blocks(&bits.lzw_compressed_data);
     let expected = image_data.width as usize * image_data.height as usize * 4;
     if bgra.len() != expected {
@@ -278,8 +366,9 @@ fn load_bitmap(
             image_data.height,
             bgra.len(),
         );
-        return None;
+        return (None, None);
     }
+    let is_opaque = bgra.chunks_exact(4).all(|pixel| pixel[3] == 255);
     let image = Image::new(
         Extent3d {
             width: image_data.width,
@@ -291,7 +380,10 @@ fn load_bitmap(
         TextureFormat::Bgra8UnormSrgb,
         RenderAssetUsages::default(),
     );
-    Some(load_context.add_labeled_asset(label, image))
+    (
+        Some(load_context.add_labeled_asset(label, image)),
+        Some(is_opaque),
+    )
 }
 
 async fn load_sound(
@@ -311,12 +403,14 @@ async fn load_sound(
     Ok(handle)
 }
 
-/// Generates a flat 2D polygon mesh from the given drag points at the specified top height.
+/// Generates a flat 2D polygon mesh from the given drag points. The mesh lies at z 0;
+/// the spawner puts the wall's top height into the entity transform so transparent
+/// 2D sorting (which only sees the transform) layers it correctly, e.g. an apron
+/// drawn over the ball rolling underneath it.
 fn load_mesh_2d_from_drag_points(
     table_size: Vec2,
     label: String,
     drag_points: &[DragPoint],
-    top_height: f32,
     load_context: &mut LoadContext<'_>,
 ) -> Handle<Mesh> {
     // Round the outline like Visual Pinball: smooth the drag points with the same
@@ -328,9 +422,9 @@ fn load_mesh_2d_from_drag_points(
     let mut uvs = Vec::with_capacity(num_points);
 
     for (x, y) in &smoothed {
-        // Position (x, top_height, y) -> Bevy uses y-up
-        positions.push([vpu_to_m(*x), -vpu_to_m(*y), top_height]);
-        // Wall top textures use table-space UVs (auto texture coordinates).
+        positions.push([vpu_to_m(*x), -vpu_to_m(*y), 0.0]);
+        // Wall top textures use table-space UVs (auto texture coordinates),
+        // normalized so the image spans the whole table.
         uvs.push([x / table_size.x, y / table_size.y]);
     }
 

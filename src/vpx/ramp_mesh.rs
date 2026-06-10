@@ -15,6 +15,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::math::Vec2;
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use vpin::vpx::gameitem::ramp::{Ramp, RampType};
+use vpin::vpx::gameitem::ramp_image_alignment::RampImageAlignment;
 use vpin::vpx::units::vpu_to_m;
 
 /// Per-centerline-point data derived from the smoothed drag points.
@@ -107,26 +108,26 @@ fn half_width_at(ramp: &Ramp, percentage: f32) -> f32 {
 }
 
 /// Append a quad strip (a band) between two edge polylines to the mesh buffers.
-/// `edge_a`/`edge_b` are matched-length lists of (bevy-space) points; `z` gives the
-/// render height per point (depth ordering).
+/// `edge_a`/`edge_b` are matched-length lists of (vpx-space) points; `z` gives the
+/// render height per point (depth ordering); `uv_a`/`uv_b` the per-point texture
+/// coordinates of each edge.
 fn append_band(
     positions: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
     indices: &mut Vec<u32>,
-    table_size: Vec2,
     edge_a: &[Vec2],
     edge_b: &[Vec2],
     z: &[f32],
-    src: &[Vec2],
+    uv_a: &[[f32; 2]],
+    uv_b: &[[f32; 2]],
 ) {
     let base = positions.len() as u32;
     let n = edge_a.len();
     for i in 0..n {
         positions.push([vpu_to_m(edge_a[i].x), -vpu_to_m(edge_a[i].y), z[i]]);
         positions.push([vpu_to_m(edge_b[i].x), -vpu_to_m(edge_b[i].y), z[i]]);
-        // Table-space UVs, matching how walls texture their tops.
-        uvs.push([src[i].x / table_size.x, src[i].y / table_size.y]);
-        uvs.push([src[i].x / table_size.x, src[i].y / table_size.y]);
+        uvs.push(uv_a[i]);
+        uvs.push(uv_b[i]);
     }
     for i in 0..n - 1 {
         let a = base + (i as u32) * 2;
@@ -151,7 +152,15 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
     let total_length: f32 = (0..n - 1)
         .map(|i| spine.mid[i].distance(spine.mid[i + 1]))
         .sum();
-    let z: Vec<f32> = spine.height.iter().map(|h| vpu_to_m(*h)).collect();
+    // Vertex z relative to the ramp's centre height: the spawner puts that height into
+    // the entity transform (transparent 2D sorting only sees the transform, like walls),
+    // so the per-vertex offsets only refine depth within the ramp for the opaque path.
+    let z_center = (ramp.height_bottom + ramp.height_top) * 0.5;
+    let z: Vec<f32> = spine
+        .height
+        .iter()
+        .map(|h| vpu_to_m(h - z_center))
+        .collect();
 
     // Offset polyline at the given signed multiple of the half width.
     let offset = |sign: f32, width_scale: f32| -> Vec<Vec2> {
@@ -169,6 +178,31 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
                 let hw = half_width_at(ramp, pct) * width_scale;
                 spine.mid[i] + spine.normal[i] * (sign * hw)
             })
+            .collect()
+    };
+
+    // Lengthwise wrap v at each centerline point, vpinball's `rgratio`
+    // (`GetRampVertex`: 1 at the first drag point, falling to 0 at the last).
+    let ratio: Vec<f32> = {
+        let mut cur = 0.0f32;
+        (0..n)
+            .map(|i| {
+                if i > 0 {
+                    cur += spine.mid[i - 1].distance(spine.mid[i]);
+                }
+                if total_length > 0.0 {
+                    1.0 - cur / total_length
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    };
+    // World-aligned UVs: each vertex samples the image stretched over the whole table,
+    // like wall tops (vpinball `Ramp::ExportMesh`, ImageModeWorld).
+    let world_uv = |edge: &[Vec2]| -> Vec<[f32; 2]> {
+        edge.iter()
+            .map(|p| [p.x / table_size.x, p.y / table_size.y])
             .collect()
     };
 
@@ -193,36 +227,56 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
             let edge_b: Vec<Vec2> = (0..n)
                 .map(|i| path[i] - spine.normal[i] * (ramp.wire_diameter * 0.5))
                 .collect();
+            // Wrapped wires sample one image column along the path (vpinball ramp.cpp).
+            let (uv_a, uv_b) = if ramp.image_alignment == RampImageAlignment::Wrap {
+                let uv: Vec<[f32; 2]> = ratio.iter().map(|r| [0.0, *r]).collect();
+                (uv.clone(), uv)
+            } else {
+                (world_uv(&edge_a), world_uv(&edge_b))
+            };
             append_band(
                 &mut positions,
                 &mut uvs,
                 &mut indices,
-                table_size,
                 &edge_a,
                 &edge_b,
                 &z,
-                path,
+                &uv_a,
+                &uv_b,
             );
         }
     } else {
         // Flat ramp: a single filled floor band from the right edge to the left edge.
         let right = offset(1.0, 1.0);
         let left = offset(-1.0, 1.0);
+        // Wrap alignment spans the image across the band (u 1 -> 0) and along its
+        // length (v = ratio), e.g. the apron score cards; World stretches it over the
+        // table like wall tops (vpinball ramp.cpp, `Ramp::ExportMesh`).
+        let (uv_right, uv_left) = if ramp.image_alignment == RampImageAlignment::Wrap {
+            (
+                ratio.iter().map(|r| [1.0, *r]).collect::<Vec<_>>(),
+                ratio.iter().map(|r| [0.0, *r]).collect::<Vec<_>>(),
+            )
+        } else {
+            (world_uv(&right), world_uv(&left))
+        };
         append_band(
             &mut positions,
             &mut uvs,
             &mut indices,
-            table_size,
             &right,
             &left,
             &z,
-            &spine.mid,
+            &uv_right,
+            &uv_left,
         );
     }
 
     if positions.is_empty() || indices.is_empty() {
         return None;
     }
+
+    sort_triangles_by_height(&positions, &mut indices);
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -236,6 +290,24 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
 
 fn is_wire(ramp: &Ramp) -> bool {
     !matches!(ramp.ramp_type, RampType::Flat)
+}
+
+/// Order index triplets by ascending average vertex z. Alpha-blended 2D meshes draw
+/// their triangles in index order without depth testing, so overlapping faces of a
+/// single mesh (a ramp looping over itself, a projected dome) must be emitted low to
+/// high to layer correctly regardless of the path/face authoring order.
+pub(crate) fn sort_triangles_by_height(positions: &[[f32; 3]], indices: &mut Vec<u32>) {
+    let mut triangles: Vec<[u32; 3]> = indices
+        .chunks_exact(3)
+        .map(|c| [c[0], c[1], c[2]])
+        .collect();
+    triangles.sort_by(|a, b| {
+        let za: f32 = a.iter().map(|&i| positions[i as usize][2]).sum();
+        let zb: f32 = b.iter().map(|&i| positions[i as usize][2]).sum();
+        za.total_cmp(&zb)
+    });
+    indices.clear();
+    indices.extend(triangles.into_iter().flatten());
 }
 
 #[cfg(test)]

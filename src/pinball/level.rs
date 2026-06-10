@@ -110,118 +110,128 @@ pub fn spawn_level(
             // ));
         })
         .with_children(|parent| {
-            vpx_asset.raw.gameitems.iter().for_each(|item| match item {
-                GameItemEnum::Wall(wall) => spawn_wall(
-                    parent,
-                    &meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    wall,
-                ),
-                GameItemEnum::Bumper(bumper) => {
-                    spawn_bumper(
+            // The index in the gameitem list breaks render-layer ties (see layer.rs).
+            vpx_asset
+                .raw
+                .gameitems
+                .iter()
+                .enumerate()
+                .for_each(|(item_index, item)| match item {
+                    GameItemEnum::Wall(wall) => spawn_wall(
+                        parent,
+                        &meshes,
+                        &mut materials,
+                        vpx_asset,
+                        vpx_to_bevy_transform,
+                        wall,
+                        item_index,
+                    ),
+                    GameItemEnum::Bumper(bumper) => {
+                        spawn_bumper(
+                            parent,
+                            &mut meshes,
+                            &mut materials,
+                            vpx_asset,
+                            vpx_to_bevy_transform,
+                            bumper,
+                        );
+                    }
+                    GameItemEnum::Trigger(trigger) => {
+                        spawn_trigger(
+                            &mut meshes,
+                            &mut materials,
+                            vpx_to_bevy_transform,
+                            parent,
+                            trigger,
+                        );
+                    }
+                    GameItemEnum::Kicker(kicker) => {
+                        // TODO implement kicker spawning
+                        spawn_kicker(
+                            &mut meshes,
+                            &mut materials,
+                            vpx_to_bevy_transform,
+                            parent,
+                            kicker,
+                        );
+                    }
+                    GameItemEnum::Light(light) => {
+                        spawn_light(
+                            &mut meshes,
+                            &mut glow_materials,
+                            &lighting.glow,
+                            vpx_to_bevy_transform,
+                            parent,
+                            light,
+                        );
+                    }
+                    GameItemEnum::Rubber(rubber) => spawn_rubber(
+                        &mut meshes,
+                        &mut materials,
+                        vpx_to_bevy_transform,
+                        parent,
+                        rubber,
+                        item_index,
+                    ),
+                    GameItemEnum::Plunger(plunger) => spawn_plunger(
+                        &mut meshes,
+                        &mut materials,
+                        &mut images,
+                        vpx_asset,
+                        vpx_to_bevy_transform,
+                        parent,
+                        plunger,
+                    ),
+                    GameItemEnum::Flipper(flipper) => spawn_flipper(
+                        &mut meshes,
+                        &mut materials,
+                        vpx_to_bevy_transform,
+                        parent,
+                        flipper,
+                        vpx_asset,
+                    ),
+                    GameItemEnum::HitTarget(target) => spawn_target(
                         parent,
                         &mut meshes,
                         &mut materials,
                         vpx_asset,
                         vpx_to_bevy_transform,
-                        bumper,
-                    );
-                }
-                GameItemEnum::Trigger(trigger) => {
-                    spawn_trigger(
+                        target,
+                    ),
+                    GameItemEnum::Spinner(spinner) => spawn_spinner(
+                        parent,
                         &mut meshes,
                         &mut materials,
+                        vpx_asset,
                         vpx_to_bevy_transform,
+                        spinner,
+                    ),
+                    GameItemEnum::Gate(gate) => spawn_gate(
                         parent,
-                        trigger,
-                    );
-                }
-                GameItemEnum::Kicker(kicker) => {
-                    // TODO implement kicker spawning
-                    spawn_kicker(
                         &mut meshes,
                         &mut materials,
+                        vpx_asset,
                         vpx_to_bevy_transform,
+                        gate,
+                    ),
+                    GameItemEnum::Ramp(ramp) => spawn_ramp(
                         parent,
-                        kicker,
-                    );
-                }
-                GameItemEnum::Light(light) => {
-                    spawn_light(
-                        &mut meshes,
-                        &mut glow_materials,
-                        &lighting.glow,
+                        &meshes,
+                        &mut materials,
+                        vpx_asset,
                         vpx_to_bevy_transform,
+                        ramp,
+                        item_index,
+                    ),
+                    GameItemEnum::Primitive(primitive) => spawn_primitive(
                         parent,
-                        light,
-                    );
-                }
-                GameItemEnum::Rubber(rubber) => spawn_rubber(
-                    &mut meshes,
-                    &mut materials,
-                    vpx_to_bevy_transform,
-                    parent,
-                    rubber,
-                ),
-                GameItemEnum::Plunger(plunger) => spawn_plunger(
-                    &mut meshes,
-                    &mut materials,
-                    &mut images,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    parent,
-                    plunger,
-                ),
-                GameItemEnum::Flipper(flipper) => spawn_flipper(
-                    &mut meshes,
-                    &mut materials,
-                    vpx_to_bevy_transform,
-                    parent,
-                    flipper,
-                    vpx_asset,
-                ),
-                GameItemEnum::HitTarget(target) => spawn_target(
-                    parent,
-                    &mut meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    target,
-                ),
-                GameItemEnum::Spinner(spinner) => spawn_spinner(
-                    parent,
-                    &mut meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    spinner,
-                ),
-                GameItemEnum::Gate(gate) => spawn_gate(
-                    parent,
-                    &mut meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    gate,
-                ),
-                GameItemEnum::Ramp(ramp) => spawn_ramp(
-                    parent,
-                    &meshes,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    ramp,
-                ),
-                GameItemEnum::Primitive(primitive) => spawn_primitive(
-                    parent,
-                    &mut materials,
-                    vpx_asset,
-                    vpx_to_bevy_transform,
-                    primitive,
-                ),
-                _ => (),
-            });
+                        &mut materials,
+                        vpx_asset,
+                        vpx_to_bevy_transform,
+                        primitive,
+                        item_index,
+                    ),
+                    _ => (),
+                });
         });
 }

@@ -131,8 +131,10 @@ fn transform_dir_z(m: &Mat, x: f32, y: f32, z: f32) -> f32 {
 }
 
 /// Build the top-down mesh for a primitive, or `None` if it has no decodable mesh or no
-/// upward-facing geometry.
-pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<Mesh> {
+/// upward-facing geometry. Also returns the centre height (in vpx units) of the kept
+/// geometry: the spawner puts it into the entity transform as the render layer (see
+/// `pinball::layer`); the mesh vertices carry z offsets relative to it.
+pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<(Mesh, f32)> {
     let read = primitive.read_mesh().ok().flatten()?;
     if read.vertices.is_empty() || read.indices.is_empty() {
         return None;
@@ -142,6 +144,8 @@ pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<Mesh> {
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
+    let mut min_z = f32::MAX;
+    let mut max_z = f32::MIN;
 
     for face in &read.indices {
         let tri = [face.i0 as usize, face.i1 as usize, face.i2 as usize];
@@ -166,6 +170,8 @@ pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<Mesh> {
         for &i in &tri {
             let v = &read.vertices[i].vertex;
             let w = transform_point(&m, v.x, v.y, v.z);
+            min_z = min_z.min(w[2]);
+            max_z = max_z.max(w[2]);
             // vpx world -> bevy: x right, y up (negated), z = render height.
             positions.push([vpu_to_m(w[0]), -vpu_to_m(w[1]), vpu_to_m(w[2])]);
             uvs.push([v.tu, v.tv]);
@@ -177,6 +183,16 @@ pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<Mesh> {
         return None;
     }
 
+    // Rebase vertex z around the centre height (vpinball sorts parts by their bounding
+    // sphere centre); the offsets keep face order within the mesh.
+    let center_z_vpu = (min_z + max_z) * 0.5;
+    let center_z_m = vpu_to_m(center_z_vpu);
+    for p in &mut positions {
+        p[2] -= center_z_m;
+    }
+
+    crate::vpx::ramp_mesh::sort_triangles_by_height(&positions, &mut indices);
+
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
@@ -184,5 +200,5 @@ pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<Mesh> {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
-    Some(mesh)
+    Some((mesh, center_z_vpu))
 }
