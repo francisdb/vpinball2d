@@ -134,10 +134,14 @@ fn handle_drain(
         commands.entity(ball_entity).despawn();
 
         // find the kicker named "BallRelease" to spawn a new ball there
-        let (eject_kicker_entity, _, kicker_transform) = kicker_query
+        // TODO improve this heuristic; not every table uses that name
+        let Some((eject_kicker_entity, _, kicker_transform)) = kicker_query
             .iter()
             .find(|(_, k, _)| k.name == "BallRelease")
-            .expect("BallRelease kicker not found");
+        else {
+            warn!("No 'BallRelease' kicker found; not spawning a new ball");
+            continue;
+        };
 
         play_sound_at(
             &mut commands,
