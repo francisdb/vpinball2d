@@ -155,12 +155,17 @@ pub(super) fn spawn_ramp(
     ));
     // A ramp lying fully below the playfield (e.g. North Pole's subway return at
     // -62 vpu) is hidden by the playfield itself in vpinball, so it must not drop a
-    // shadow onto it either.
+    // shadow onto it either. A ramp floating above the playfield (apron score cards
+    // at 51 vpu) rests on other geometry and must not shade the playfield either;
+    // only ramps whose low end is near the playfield cast.
     let below_playfield = ramp.height_bottom.max(ramp.height_top) < 0.0;
-    if ramp.is_visible && !below_playfield {
+    let base = ramp.height_bottom.min(ramp.height_top);
+    if ramp.is_visible && !below_playfield && crate::pinball::light::casts_playfield_shadow(base) {
         entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
-    } else {
+    } else if !ramp.is_visible {
         // Invisible ramps are collision guides in vpinball; we don't draw them.
+        entity.insert(Visibility::Hidden);
+    } else if below_playfield {
         entity.insert(Visibility::Hidden);
     }
 

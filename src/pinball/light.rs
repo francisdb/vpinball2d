@@ -60,6 +60,17 @@ const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
 const SHADOW_OBJECT_HEIGHT_M: f32 = 2.0 * BALL_RADIUS_M;
 /// Fallback lamp height when a table has no usable `light_height` (vpx units).
 const DEFAULT_LAMP_HEIGHT_VPU: f32 = 5000.0;
+/// Items whose base sits at or above this height (vpx units) float over other
+/// geometry (screws fastening a plastic, score cards on the apron) rather than
+/// standing on the playfield.
+const SHADOW_BASE_MAX_VPU: f32 = 50.0;
+
+/// Whether an item with its base at this height (vpx units) drops a shadow into the
+/// playfield light map. The map only represents the playfield surface, so an item
+/// standing on raised geometry must not shade the playfield underneath it.
+pub(crate) fn casts_playfield_shadow(base_height_vpu: f32) -> bool {
+    base_height_vpu < SHADOW_BASE_MAX_VPU
+}
 /// Tables hang their lights very high (typically 5000 vpu, ~2.7 m), which makes the
 /// two shadows short and nearly coincident. Bring the lamps down by this factor so
 /// the double shadows read distinctly, while taller-lit tables still differ.
