@@ -152,11 +152,15 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
     let total_length: f32 = (0..n - 1)
         .map(|i| spine.mid[i].distance(spine.mid[i + 1]))
         .sum();
-    // Vertex z relative to the ramp's top height: the spawner puts that height into the
-    // entity transform (transparent 2D sorting only sees the transform, like walls), so
-    // the per-vertex offsets only refine depth within the ramp for the opaque path.
-    let z_top = ramp.height_bottom.max(ramp.height_top);
-    let z: Vec<f32> = spine.height.iter().map(|h| vpu_to_m(h - z_top)).collect();
+    // Vertex z relative to the ramp's centre height: the spawner puts that height into
+    // the entity transform (transparent 2D sorting only sees the transform, like walls),
+    // so the per-vertex offsets only refine depth within the ramp for the opaque path.
+    let z_center = (ramp.height_bottom + ramp.height_top) * 0.5;
+    let z: Vec<f32> = spine
+        .height
+        .iter()
+        .map(|h| vpu_to_m(h - z_center))
+        .collect();
 
     // Offset polyline at the given signed multiple of the half width.
     let offset = |sign: f32, width_scale: f32| -> Vec<Vec2> {
@@ -272,6 +276,8 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
         return None;
     }
 
+    sort_triangles_by_height(&positions, &mut indices);
+
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
@@ -284,6 +290,24 @@ pub fn build_ramp_mesh_2d(table_size: Vec2, ramp: &Ramp, centerline: Vec<Vec2>) 
 
 fn is_wire(ramp: &Ramp) -> bool {
     !matches!(ramp.ramp_type, RampType::Flat)
+}
+
+/// Order index triplets by ascending average vertex z. Alpha-blended 2D meshes draw
+/// their triangles in index order without depth testing, so overlapping faces of a
+/// single mesh (a ramp looping over itself, a projected dome) must be emitted low to
+/// high to layer correctly regardless of the path/face authoring order.
+pub(crate) fn sort_triangles_by_height(positions: &[[f32; 3]], indices: &mut Vec<u32>) {
+    let mut triangles: Vec<[u32; 3]> = indices
+        .chunks_exact(3)
+        .map(|c| [c[0], c[1], c[2]])
+        .collect();
+    triangles.sort_by(|a, b| {
+        let za: f32 = a.iter().map(|&i| positions[i as usize][2]).sum();
+        let zb: f32 = b.iter().map(|&i| positions[i as usize][2]).sum();
+        za.total_cmp(&zb)
+    });
+    indices.clear();
+    indices.extend(triangles.into_iter().flatten());
 }
 
 #[cfg(test)]

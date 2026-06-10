@@ -77,6 +77,7 @@ pub(super) fn spawn_ramp(
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     ramp: &ramp::Ramp,
+    item_index: usize,
 ) {
     // Mesh is only generated for non-degenerate ramps (see ramp_mesh); skip if absent.
     let Some(mesh_handle) = vpx_asset
@@ -129,14 +130,19 @@ pub(super) fn spawn_ramp(
         ..default()
     });
 
-    // The ramp draws at its top height: transparent 2D sorting only sees the entity
-    // transform (see the matching wall logic), so e.g. the apron score cards at 51 vpu
-    // sort above the playfield and below the apron, and an elevated ramp covers lower
-    // geometry. The mesh vertices carry per-point offsets relative to this height.
+    // The ramp draws at its centre height minus its depth bias (see layer.rs):
+    // transparent 2D sorting only sees the entity transform, so e.g. the apron score
+    // cards at 51 vpu sort above the playfield and below the apron, and an elevated
+    // ramp covers lower geometry. The mesh vertices carry per-point offsets relative
+    // to this height.
     let transform = Transform::from_xyz(
         vpx_to_bevy_transform.translation.x,
         vpx_to_bevy_transform.translation.y,
-        vpu_to_m(ramp.height_bottom.max(ramp.height_top)),
+        crate::pinball::layer::render_z(
+            (ramp.height_bottom + ramp.height_top) * 0.5,
+            ramp.depth_bias,
+            item_index,
+        ),
     );
     let mut entity = parent.spawn((
         Name::from(format!("Ramp {}", ramp.name)),

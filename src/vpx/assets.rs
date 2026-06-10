@@ -22,6 +22,9 @@ pub struct VpxAsset {
     pub meshes: Vec<Handle<Mesh>>,
     /// Named meshes loaded from the vpx file.
     pub named_meshes: HashMap<Box<str>, Handle<Mesh>>,
+    /// Centre height (vpx units) of each named mesh whose vertices are stored relative
+    /// to it; the spawner puts this into the entity transform as the render layer.
+    pub named_mesh_centers: HashMap<Box<str>, f32>,
     /// The raw VPX data structure.
     pub raw: VPX,
 }

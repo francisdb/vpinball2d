@@ -137,6 +137,7 @@ pub(super) fn spawn_wall(
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     wall: &wall::Wall,
+    item_index: usize,
 ) {
     let mesh_handle = vpx_asset
         .named_meshes
@@ -196,13 +197,18 @@ pub(super) fn spawn_wall(
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
     let visible = wall.is_top_bottom_visible || wall.is_side_visible;
-    // The wall top draws at its vpx height: transparent 2D sorting only sees the entity
-    // transform, so the height must live there (not in the mesh vertices) for e.g. an
-    // apron at 52 vpu to cover the ball (drawn at its radius) rolling underneath.
+    // The wall top draws at the wall's centre height (see layer.rs): transparent 2D
+    // sorting only sees the entity transform, so the height must live there (not in
+    // the mesh vertices) for e.g. an apron at 52 vpu to cover the ball (drawn at its
+    // radius) rolling underneath. Walls have no depth bias in vpx.
     let transform = Transform::from_xyz(
         vpx_to_bevy_transform.translation.x,
         vpx_to_bevy_transform.translation.y,
-        vpu_to_m(wall.height_top),
+        crate::pinball::layer::render_z(
+            (wall.height_bottom + wall.height_top) * 0.5,
+            0.0,
+            item_index,
+        ),
     );
     let name_component = Name::from(format!("Wall {}", wall.name));
     let wall_component = Wall {
