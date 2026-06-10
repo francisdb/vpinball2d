@@ -180,7 +180,7 @@ pub fn spawn_level(
                     vpx_to_bevy_transform,
                     parent,
                     flipper,
-                    vpx_asset.raw.gamedata.materials.as_deref().unwrap_or(&[]),
+                    vpx_asset,
                 ),
                 GameItemEnum::HitTarget(target) => spawn_target(
                     parent,

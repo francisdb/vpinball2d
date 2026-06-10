@@ -35,9 +35,49 @@ use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
+use bevy::sprite_render::AlphaMode2d;
 use core::f32::consts::{PI, TAU};
 use vpin::vpx;
+use vpin::vpx::gameitem::GameItemEnum;
+use vpin::vpx::gameitem::primitive::Primitive;
 use vpin::vpx::units::vpu_to_m;
+
+/// A flipper bat is a textured primitive placed on the flipper pivot. Within this distance
+/// (vpx units) a visible textured primitive is treated as the bat.
+const FLIPPER_BAT_MAX_DIST_VPU: f32 = 40.0;
+
+/// The textured primitive that is a flipper's bat (its top art, often with text), if any.
+/// Modern tables model the bat as a primitive on the pivot; we render it rotating with the
+/// flipper instead of as a static, distorted top-down projection.
+fn flipper_bat_primitive<'a>(
+    gameitems: &'a [GameItemEnum],
+    flipper: &vpx::gameitem::flipper::Flipper,
+) -> Option<&'a Primitive> {
+    let c = &flipper.center;
+    let dist2 = |p: &Primitive| (p.position.x - c.x).powi(2) + (p.position.y - c.y).powi(2);
+    gameitems
+        .iter()
+        .filter_map(|it| match it {
+            GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
+            _ => None,
+        })
+        .filter(|p| dist2(p) < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
+        .min_by(|a, b| dist2(a).total_cmp(&dist2(b)))
+}
+
+/// Whether a primitive is a flipper bat, so the general primitive renderer can skip it (the
+/// flipper renders it rotating instead).
+pub(crate) fn is_flipper_bat(gameitems: &[GameItemEnum], primitive: &Primitive) -> bool {
+    if !primitive.is_visible || primitive.image.is_empty() {
+        return false;
+    }
+    gameitems.iter().any(|it| {
+        matches!(it, GameItemEnum::Flipper(f)
+            if (f.center.x - primitive.position.x).powi(2)
+                + (f.center.y - primitive.position.y).powi(2)
+                < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
+    })
+}
 
 /// Torque the solenoid applies while the flipper button is held.
 /// TODO Most flippers also reduce the torque when the flipper is fully extended to avoid burning out the coil.
@@ -86,8 +126,9 @@ pub(super) fn spawn_flipper(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     flipper: &vpx::gameitem::flipper::Flipper,
-    vpx_materials: &[vpx::material::Material],
+    vpx_asset: &VpxAsset,
 ) {
+    let vpx_materials = vpx_asset.raw.gamedata.materials.as_deref().unwrap_or(&[]);
     // Visual Pinball rests the flipper at `start_angle` and the solenoid rotates it to
     // `end_angle`. In vpinball an angle is 0 when the flipper points up and positive
     // angles go clockwise; in bevy 0 points right (+x) and positive angles go
@@ -152,8 +193,48 @@ pub(super) fn spawn_flipper(
 
     let rubber_mesh = meshes.add(convex_mesh(&rubber_outline));
     let rubber_material = materials.add(ColorMaterial::from(rubber_color));
-    let bat_mesh = meshes.add(convex_mesh(&bat_outline));
-    let bat_material = materials.add(ColorMaterial::from(bat_color));
+
+    // The bat sits just above the rubber and moves with it. If the table models the bat as
+    // a textured primitive on the pivot (e.g. North Pole's lettered bats), draw that art
+    // rotating with the flipper; otherwise draw the flat material-coloured bat shape.
+    let bat_primitive = flipper_bat_primitive(&vpx_asset.raw.gameitems, flipper).and_then(|p| {
+        vpx_asset
+            .named_meshes
+            .get(VpxAsset::primitive_mesh_sub_path(&p.name).as_str())
+            .map(|mesh| (p, mesh.clone()))
+    });
+    let bat_child = if let Some((prim, mesh)) = bat_primitive {
+        let material = materials.add(ColorMaterial {
+            color: Color::WHITE,
+            alpha_mode: AlphaMode2d::Blend,
+            texture: vpx_asset.image(prim.image.as_str()).cloned(),
+            ..default()
+        });
+        // The primitive mesh is baked in table space (before the table-centre offset). Place
+        // it in the flipper's local frame so it tracks the pivot rotation: undo the rest
+        // rotation and the offset between the table origin and the pivot.
+        let offset = vpx_to_bevy_transform.translation.truncate() - anchor_pos;
+        let local_xy = Mat2::from_angle(-rest_angle) * offset;
+        (
+            Name::from(format!("Flipper {} Bat", flipper.name)),
+            Mesh2d(mesh),
+            MeshMaterial2d(material),
+            Transform {
+                translation: local_xy.extend(0.02),
+                rotation: Quat::from_rotation_z(-rest_angle),
+                scale: Vec3::ONE,
+            },
+        )
+    } else {
+        let bat_mesh = meshes.add(convex_mesh(&bat_outline));
+        let bat_material = materials.add(ColorMaterial::from(bat_color));
+        (
+            Name::from(format!("Flipper {} Bat", flipper.name)),
+            Mesh2d(bat_mesh),
+            MeshMaterial2d(bat_material),
+            Transform::from_xyz(0.0, 0.0, 0.01),
+        )
+    };
 
     let flipper_entity = parent
         .spawn((
@@ -177,13 +258,7 @@ pub(super) fn spawn_flipper(
             // z above the playfield (0.0) so the rubber is not hidden by it
             Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.1),
         ))
-        // the rigid bat sits just above the rubber and moves with it
-        .with_child((
-            Name::from(format!("Flipper {} Bat", flipper.name)),
-            Mesh2d(bat_mesh),
-            MeshMaterial2d(bat_material),
-            Transform::from_xyz(0.0, 0.0, 0.01),
-        ))
+        .with_child(bat_child)
         .id();
 
     parent.spawn((
