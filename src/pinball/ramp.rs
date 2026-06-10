@@ -153,7 +153,11 @@ pub(super) fn spawn_ramp(
         MeshMaterial2d(material),
         transform,
     ));
-    if ramp.is_visible {
+    // A ramp lying fully below the playfield (e.g. North Pole's subway return at
+    // -62 vpu) is hidden by the playfield itself in vpinball, so it must not drop a
+    // shadow onto it either.
+    let below_playfield = ramp.height_bottom.max(ramp.height_top) < 0.0;
+    if ramp.is_visible && !below_playfield {
         entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
     } else {
         // Invisible ramps are collision guides in vpinball; we don't draw them.
