@@ -34,6 +34,12 @@ pub(super) fn spawn_primitive(
         return;
     }
 
+    // Bumper caps are textured discs the bumper draws flat (a cap's dome flattens to a
+    // distorted blob top-down); skip them here so they are not drawn twice.
+    if crate::pinball::bumper::is_bumper_cap(&vpx_asset.raw.gameitems, primitive) {
+        return;
+    }
+
     // A top-down mesh is only generated for visible primitives with upward-facing geometry.
     let Some(mesh_handle) = vpx_asset
         .named_meshes

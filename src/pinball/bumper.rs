@@ -11,7 +11,47 @@ use crate::audio::play_sound_at;
 use crate::screens::Screen;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem;
+use vpin::vpx::gameitem::GameItemEnum;
+use vpin::vpx::gameitem::primitive::Primitive;
 use vpin::vpx::units::vpu_to_m;
+
+/// A bumper cap is a textured primitive placed (almost exactly) on the bumper centre.
+/// Within this distance (vpx units) a visible textured primitive is treated as the cap.
+const BUMPER_CAP_MAX_DIST_VPU: f32 = 30.0;
+
+/// The textured primitive sitting on a bumper (its cap), if any. Tables hide the built-in
+/// cap (`is_cap_visible = false`) and place a textured primitive there; we render that flat
+/// (a textured disc) rather than as a distorted top-down dome projection.
+pub(super) fn cap_primitive_for<'a>(
+    gameitems: &'a [GameItemEnum],
+    bumper: &gameitem::bumper::Bumper,
+) -> Option<&'a Primitive> {
+    let center = &bumper.center;
+    let dist2 =
+        |p: &Primitive| (p.position.x - center.x).powi(2) + (p.position.y - center.y).powi(2);
+    gameitems
+        .iter()
+        .filter_map(|it| match it {
+            GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
+            _ => None,
+        })
+        .filter(|p| dist2(p) < BUMPER_CAP_MAX_DIST_VPU.powi(2))
+        .min_by(|a, b| dist2(a).total_cmp(&dist2(b)))
+}
+
+/// Whether a primitive is a bumper cap, so the general primitive renderer can skip it (the
+/// bumper renders it flat instead).
+pub(crate) fn is_bumper_cap(gameitems: &[GameItemEnum], primitive: &Primitive) -> bool {
+    if !primitive.is_visible || primitive.image.is_empty() {
+        return false;
+    }
+    gameitems.iter().any(|it| {
+        matches!(it, GameItemEnum::Bumper(b)
+            if (b.center.x - primitive.position.x).powi(2)
+                + (b.center.y - primitive.position.y).powi(2)
+                < BUMPER_CAP_MAX_DIST_VPU.powi(2))
+    })
+}
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -103,10 +143,33 @@ pub(super) fn spawn_bumper(
             scale: (cap_radius / base_radius) * 1.3,
         },
     ));
-    // The built-in flat cap is only drawn when the table uses it. Many tables hide it
-    // (`is_cap_visible = false`) and place a textured cap primitive instead, which is
-    // rendered separately (see pinball::primitive); drawing both would double the cap.
-    if bumper.is_cap_visible {
+    // Most tables hide the built-in cap (`is_cap_visible = false`) and place a textured
+    // cap primitive on the bumper. We draw that as a flat textured disc here: a cap reads
+    // as its flat art from straight above, whereas projecting its little dome top-down
+    // loses the centre artwork. The primitive renderer skips caps (see `is_bumper_cap`) so
+    // they are not drawn twice. Tables that keep the built-in cap fall back to a flat
+    // colour from the cap material.
+    if let Some(cap) = cap_primitive_for(&vpx_asset.raw.gameitems, bumper) {
+        // The cap art is a round image on a square texture; a disc clips the corners.
+        let cap_tex_radius = vpu_to_m(bumper.radius) * 1.6;
+        let cap_material = materials.add(ColorMaterial {
+            color: Color::WHITE,
+            alpha_mode: AlphaMode2d::Blend,
+            texture: vpx_asset.image(cap.image.as_str()).cloned(),
+            ..default()
+        });
+        let cap_mesh = meshes.add(Mesh::from(Circle {
+            radius: cap_tex_radius,
+        }));
+        entity.with_children(|parent| {
+            parent.spawn((
+                Name::from(format!("Bumper Cap {}", bumper.name)),
+                Mesh2d(cap_mesh),
+                MeshMaterial2d(cap_material),
+                Transform::from_xyz(0.0, 0.0, 0.01),
+            ));
+        });
+    } else if bumper.is_cap_visible {
         let cap_color = bumper
             .cap_material
             .is_empty()
