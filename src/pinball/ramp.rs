@@ -97,15 +97,15 @@ pub(super) fn spawn_ramp(
         .flatten()
         .find(|m| m.name == ramp.material);
     let texture = vpx_asset.image(ramp.image.as_str()).cloned();
+    let texture_has_alpha = !vpx_asset
+        .raw
+        .images
+        .iter()
+        .find(|i| i.name.eq_ignore_ascii_case(ramp.image.as_str()))
+        .and_then(|i| i.is_opaque)
+        .unwrap_or(true);
     let (color, alpha_mode) = if let Some(mat) = material {
         let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
-        let texture_has_alpha = !vpx_asset
-            .raw
-            .images
-            .iter()
-            .find(|i| i.name.eq_ignore_ascii_case(ramp.image.as_str()))
-            .and_then(|i| i.is_opaque)
-            .unwrap_or(true);
         let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
         let color = Srgba {
             alpha,
@@ -126,7 +126,7 @@ pub(super) fn spawn_ramp(
     let material = materials.add(ColorMaterial {
         color: color.into(),
         alpha_mode,
-        texture,
+        texture: texture.clone(),
         ..default()
     });
 
@@ -155,18 +155,37 @@ pub(super) fn spawn_ramp(
     ));
     // A ramp lying fully below the playfield (e.g. North Pole's subway return at
     // -62 vpu) is hidden by the playfield itself in vpinball, so it must not drop a
-    // shadow onto it either. A ramp floating above the playfield (apron score cards
-    // at 51 vpu) rests on other geometry and must not shade the playfield either;
-    // only ramps whose low end is near the playfield cast.
+    // shadow onto it either. A ramp whose low end is near the playfield casts its
+    // full silhouette; a raised plastics sheet (e.g. 8 Ball's full-table Ramp19)
+    // casts only its cut-out art, and only when sheet-sized - raised score cards
+    // and the like must not shade the playfield (see ShadowCaster).
     let below_playfield = ramp.height_bottom.max(ramp.height_top) < 0.0;
     let base = ramp.height_bottom.min(ramp.height_top);
-    if ramp.is_visible && !below_playfield && crate::pinball::light::casts_playfield_shadow(base) {
-        entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
-    } else if !ramp.is_visible {
-        // Invisible ramps are collision guides in vpinball; we don't draw them.
+    let shadow_caster = if crate::pinball::light::casts_playfield_shadow(base) {
+        Some(crate::pinball::light::ShadowCaster {
+            scale: 1.0,
+            texture: None,
+        })
+    } else if texture_has_alpha
+        && crate::pinball::light::footprint_fraction(
+            ramp.drag_points.iter().map(|d| (d.x, d.y)),
+            ramp.width_bottom.max(ramp.width_top) * 0.5,
+            &vpx_asset.raw.gamedata,
+        ) >= crate::pinball::light::SHEET_MIN_TABLE_FRACTION
+    {
+        Some(crate::pinball::light::ShadowCaster {
+            scale: 1.0,
+            texture: texture.clone(),
+        })
+    } else {
+        None
+    };
+    if !ramp.is_visible || below_playfield {
+        // Invisible ramps are collision guides in vpinball; we don't draw them, and
+        // a below-playfield ramp is hidden by the playfield itself.
         entity.insert(Visibility::Hidden);
-    } else if below_playfield {
-        entity.insert(Visibility::Hidden);
+    } else if let Some(caster) = shadow_caster {
+        entity.insert(caster);
     }
 
     // Treat a guide ramp as a wall when it sits within the ball's vertical reach: in 2D

@@ -71,6 +71,37 @@ const SHADOW_BASE_MAX_VPU: f32 = 50.0;
 pub(crate) fn casts_playfield_shadow(base_height_vpu: f32) -> bool {
     base_height_vpu < SHADOW_BASE_MAX_VPU
 }
+
+/// A raised, cut-out-textured item only casts when its footprint covers at least
+/// this fraction of the table: plastics sheets and the apron qualify, while small
+/// raised decor (fastening screws on a plastic) must not print through it.
+pub(crate) const SHEET_MIN_TABLE_FRACTION: f32 = 0.03;
+
+/// Fraction of the table area covered by the bounding box of the given outline
+/// points (vpx units), widened by `expand` on every side (e.g. a ramp's half width).
+pub(crate) fn footprint_fraction(
+    points: impl Iterator<Item = (f32, f32)>,
+    expand: f32,
+    gamedata: &vpx::gamedata::GameData,
+) -> f32 {
+    let (mut min, mut max) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+    let mut any = false;
+    for (x, y) in points {
+        any = true;
+        min = min.min(Vec2::new(x, y));
+        max = max.max(Vec2::new(x, y));
+    }
+    if !any {
+        return 0.0;
+    }
+    let size = max - min + Vec2::splat(2.0 * expand);
+    let table = (gamedata.right - gamedata.left) * (gamedata.bottom - gamedata.top);
+    if table > 0.0 {
+        (size.x * size.y) / table
+    } else {
+        0.0
+    }
+}
 /// Tables hang their lights very high (typically 5000 vpu, ~2.7 m), which makes the
 /// two shadows short and nearly coincident. Bring the lamps down by this factor so
 /// the double shadows read distinctly, while taller-lit tables still differ.
@@ -194,9 +225,14 @@ struct Shadow {
 /// (e.g. so a bumper's shadow clears its wider cap); use 1.0 for a 1:1 copy. Spawn
 /// the object as a direct child of the level (so its `Transform` is world space) for
 /// the shadow to land in the right place.
-#[derive(Component)]
+///
+/// `texture` makes the shadow a cut-out: the dark copy is multiplied by the texture,
+/// so only its opaque areas cast (a raised plastics sheet shades the playfield with
+/// the shape of its printed art, not its full polygon).
+#[derive(Component, Clone)]
 pub(crate) struct ShadowCaster {
     pub(crate) scale: f32,
+    pub(crate) texture: Option<Handle<Image>>,
 }
 
 /// Additive material for light glows: light is added to the playfield rather than
@@ -275,6 +311,21 @@ fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMateria
     materials.add(ColorMaterial {
         color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
         alpha_mode: AlphaMode2d::Blend,
+        ..default()
+    })
+}
+
+/// The cut-out variant: the dark shadow colour multiplied by a texture, so only the
+/// texture's opaque areas darken the light map (a plastics sheet casts its printed
+/// art, the holes around each plastic cast nothing).
+fn cut_out_shadow_material(
+    materials: &mut Assets<ColorMaterial>,
+    texture: Handle<Image>,
+) -> Handle<ColorMaterial> {
+    materials.add(ColorMaterial {
+        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
+        alpha_mode: AlphaMode2d::Blend,
+        texture: Some(texture),
         ..default()
     })
 }
@@ -459,8 +510,12 @@ fn spawn_static_shadows(
     if casters.is_empty() {
         return;
     }
-    let material = shadow_material(&mut materials);
+    let solid = shadow_material(&mut materials);
     for (transform, mesh, shadow_caster) in &casters {
+        let material = match &shadow_caster.texture {
+            Some(texture) => cut_out_shadow_material(&mut materials, texture.clone()),
+            None => solid.clone(),
+        };
         for lamp in 0..2 {
             let Some(shadow) = meshes
                 .get(&mesh.0)

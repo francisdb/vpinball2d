@@ -146,6 +146,7 @@ pub(super) fn spawn_bumper(
         // Drop a shadow into the light map; scale it past the wider cap so it shows.
         crate::pinball::light::ShadowCaster {
             scale: (cap_radius / base_radius) * 1.3,
+            texture: None,
         },
     ));
     // Most tables hide the built-in cap (`is_cap_visible = false`) and place a textured

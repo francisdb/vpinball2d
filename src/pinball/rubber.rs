@@ -87,7 +87,10 @@ pub(super) fn spawn_rubber(
     // (hidden slingshot-flex rubbers do not, since they are not drawn at rest;
     // raised rubbers sit on other geometry and must not shade the playfield).
     if rubber.is_visible && crate::pinball::light::casts_playfield_shadow(rubber.height) {
-        entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+        entity.insert(crate::pinball::light::ShadowCaster {
+            scale: 1.0,
+            texture: None,
+        });
     }
 
     // Only collidable rubbers get a collider. The slingshots' flexed-frame rubbers are
