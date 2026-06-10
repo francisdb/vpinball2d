@@ -258,21 +258,27 @@ pub(super) fn spawn_wall(
                 Visibility::Hidden,
             ));
         } else if visible {
-            // Visible walls drop a shadow into the light map (1:1 mesh copy).
-            entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+            // Visible walls standing on the playfield drop a shadow into the light
+            // map (1:1 mesh copy); raised tops (plastics, the apron) do not shade
+            // the playfield below them.
+            if crate::pinball::light::casts_playfield_shadow(wall.height_bottom) {
+                entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+            }
         } else {
             // Invisible guide wall: collide but don't draw or cast a shadow.
             entity.insert(Visibility::Hidden);
         }
     } else if visible {
-        parent.spawn((
+        let mut entity = parent.spawn((
             name_component,
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
             transform,
-            crate::pinball::light::ShadowCaster { scale: 1.0 },
         ));
+        if crate::pinball::light::casts_playfield_shadow(wall.height_bottom) {
+            entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
+        }
     } else {
         parent.spawn((
             name_component,

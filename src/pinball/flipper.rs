@@ -69,6 +69,9 @@ fn flipper_bat_primitive<'a>(
             GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
             _ => None,
         })
+        // Baked shadow primitives on the pivot are discarded (we generate flipper
+        // shadows), so they are never the bat either.
+        .filter(|p| !crate::pinball::primitive::is_table_shadow(p))
         .filter(|p| dist2(p) < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
         .filter_map(|p| {
             // Only primitives with a projected mesh can be drawn as the bat.
@@ -86,8 +89,8 @@ fn flipper_bat_primitive<'a>(
 }
 
 /// Whether a primitive is a flipper bat, so the general primitive renderer can skip it
-/// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat is
-/// skipped; co-located decor like a printed flipper shadow still renders statically.
+/// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat
+/// is skipped, so other decor co-located on the pivot still renders statically.
 pub(crate) fn is_flipper_bat(vpx_asset: &VpxAsset, primitive: &Primitive) -> bool {
     if !primitive.is_visible || primitive.image.is_empty() {
         return false;
@@ -251,6 +254,9 @@ pub(super) fn spawn_flipper(
         )
     };
 
+    // The flipper's moving drop shadows are spawned and tracked by `pinball::light`
+    // (`spawn_flipper_shadows`): dark copies of this body's outline mesh that follow
+    // its pose each frame, with the light offsets kept in world space.
     let flipper_entity = parent
         .spawn((
             Flipper {

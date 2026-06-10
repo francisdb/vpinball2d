@@ -83,9 +83,10 @@ pub(super) fn spawn_rubber(
         visibility,
     ));
 
-    // Visible rubbers drop a shadow into the light map (hidden slingshot-flex rubbers
-    // do not, since they are not drawn at rest).
-    if rubber.is_visible {
+    // Visible rubbers standing near the playfield drop a shadow into the light map
+    // (hidden slingshot-flex rubbers do not, since they are not drawn at rest;
+    // raised rubbers sit on other geometry and must not shade the playfield).
+    if rubber.is_visible && crate::pinball::light::casts_playfield_shadow(rubber.height) {
         entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
     }
 
