@@ -38,7 +38,6 @@ use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem::ramp;
@@ -127,9 +126,18 @@ pub(super) fn spawn_ramp(
         color: color.into(),
         alpha_mode,
         texture,
-        uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
+        ..default()
     });
 
+    // The ramp draws at its top height: transparent 2D sorting only sees the entity
+    // transform (see the matching wall logic), so e.g. the apron score cards at 51 vpu
+    // sort above the playfield and below the apron, and an elevated ramp covers lower
+    // geometry. The mesh vertices carry per-point offsets relative to this height.
+    let transform = Transform::from_xyz(
+        vpx_to_bevy_transform.translation.x,
+        vpx_to_bevy_transform.translation.y,
+        vpu_to_m(ramp.height_bottom.max(ramp.height_top)),
+    );
     let mut entity = parent.spawn((
         Name::from(format!("Ramp {}", ramp.name)),
         Ramp {
@@ -137,7 +145,7 @@ pub(super) fn spawn_ramp(
         },
         Mesh2d(mesh_handle.clone()),
         MeshMaterial2d(material),
-        vpx_to_bevy_transform,
+        transform,
     ));
     if ramp.is_visible {
         entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });

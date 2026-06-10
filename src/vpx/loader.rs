@@ -178,10 +178,10 @@ impl VpxLoader {
 
         let mut mesh_handles = Vec::new();
         let mut named_mesh_handles = HashMap::new();
-        // TODO where does the 100.0 factor come from?
+        // Table size in vpx units; wall/ramp world-aligned UVs are normalized by it.
         let table_size = Vec2::new(
-            (vpx.gamedata.right - vpx.gamedata.left) / 100.0,
-            (vpx.gamedata.bottom - vpx.gamedata.top) / 100.0,
+            vpx.gamedata.right - vpx.gamedata.left,
+            vpx.gamedata.bottom - vpx.gamedata.top,
         );
         if settings.load_meshes {
             for item in &vpx.gameitems {
@@ -199,11 +199,22 @@ impl VpxLoader {
                     mesh_handles.push(handle);
                 } else if let GameItemEnum::Ramp(ramp) = item {
                     // Ramps are open paths (not looped); build their top-down silhouette.
-                    let centerline =
+                    let mut centerline: Vec<Vec2> =
                         vpin::vpx::mesh::smooth_drag_points_2d(&ramp.drag_points, 4.0, false)
                             .into_iter()
                             .map(|(x, y)| Vec2::new(x, y))
                             .collect();
+                    // vpin's open-curve smoothing drops the final drag point (vpinball
+                    // appends it explicitly, see dragpoint.h "Add the very last point").
+                    // Without it a straight 2-point ramp (e.g. an apron score card)
+                    // collapses to a single point and gets no mesh.
+                    // TODO fix upstream in vpin and drop this.
+                    if let Some(last) = ramp.drag_points.last() {
+                        let end = Vec2::new(last.x, last.y);
+                        if centerline.last() != Some(&end) {
+                            centerline.push(end);
+                        }
+                    }
                     if let Some(mesh) = ramp_mesh::build_ramp_mesh_2d(table_size, ramp, centerline)
                     {
                         let path = VpxAsset::ramp_mesh_sub_path(&ramp.name);
@@ -408,7 +419,8 @@ fn load_mesh_2d_from_drag_points(
 
     for (x, y) in &smoothed {
         positions.push([vpu_to_m(*x), -vpu_to_m(*y), 0.0]);
-        // Wall top textures use table-space UVs (auto texture coordinates).
+        // Wall top textures use table-space UVs (auto texture coordinates),
+        // normalized so the image spans the whole table.
         uvs.push([x / table_size.x, y / table_size.y]);
     }
 

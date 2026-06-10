@@ -11,7 +11,6 @@ use core::time::Duration;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::math::Affine2;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::sprite_render::AlphaMode2d;
@@ -192,8 +191,7 @@ pub(super) fn spawn_wall(
         color: color.into(),
         alpha_mode,
         texture,
-        // TODO adjust UV scale properly, how doe vpinball do this?
-        uv_transform: Affine2::from_scale(Vec2::splat(0.01)),
+        ..default()
     });
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
