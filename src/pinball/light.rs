@@ -96,10 +96,61 @@ impl OverheadLights {
         }
     }
 
-    /// World translation of a shadow of the object at `pos`, cast by the given lamp:
-    /// the silhouette projected away from the lamp, vanishing right under it.
+    /// A world-space point projected away from the given lamp: where the shadow of
+    /// an object top at `pos` lands. The single place the shadow projection lives.
+    fn project(&self, lamp: usize, pos: Vec2) -> Vec2 {
+        pos + (pos - self.lamps[lamp]) * self.stretch
+    }
+
+    /// World translation of the shadow of a compact object at `pos` (the ball, a
+    /// flipper around its pivot), cast by the given lamp.
     fn shadow_translation(&self, lamp: usize, pos: Vec2) -> Vec3 {
-        (pos + (pos - self.lamps[lamp]) * self.stretch).extend(SHADOW_Z)
+        self.project(lamp, pos).extend(SHADOW_Z)
+    }
+
+    /// The shadow mesh of a static caster: its mesh taken to world space, enlarged
+    /// about its centre by `scale`, with every vertex projected away from the lamp.
+    /// Per vertex, because a caster's mesh can span much of the table (a rubber
+    /// ring, a long wall) while its entity transform may sit far from the geometry;
+    /// a single per-entity offset would aim parts of such a shadow the wrong way.
+    fn project_shadow_mesh(
+        &self,
+        mesh: &Mesh,
+        world: &Transform,
+        scale: f32,
+        lamp: usize,
+    ) -> Option<Mesh> {
+        let points: Vec<Vec2> = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)?
+            .as_float3()?
+            .iter()
+            .map(|p| world.transform_point(Vec3::from(*p)).truncate())
+            .collect();
+        let (min, max) = points.iter().fold(
+            (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+            |(min, max), p| (min.min(*p), max.max(*p)),
+        );
+        let center = (min + max) * 0.5;
+        let positions: Vec<[f32; 3]> = points
+            .iter()
+            .map(|p| {
+                let enlarged = center + (*p - center) * scale;
+                let projected = self.project(lamp, enlarged);
+                [projected.x, projected.y, 0.0]
+            })
+            .collect();
+        let mut shadow = Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        );
+        shadow.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        if let Some(uvs) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) {
+            shadow.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone());
+        }
+        if let Some(indices) = mesh.indices() {
+            shadow.insert_indices(indices.clone());
+        }
+        Some(shadow)
     }
 }
 
@@ -382,29 +433,39 @@ fn spawn_flipper_shadows(
     }
 }
 
-/// Spawns the drop shadows of each new [`ShadowCaster`]: its mesh silhouette per
-/// lamp. Static casters never move, so these stay where they spawn.
+/// Spawns the drop shadows of each new [`ShadowCaster`]: its mesh projected away
+/// from each lamp, baked in world space (static casters never move). The projection
+/// is per vertex (see [`OverheadLights::project_shadow_mesh`]): a caster's entity
+/// transform often anchors at the table corner with the real geometry in the mesh
+/// (walls, rubbers, ramps), so a per-entity offset would cast from the wrong spot.
 fn spawn_static_shadows(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     lights: Res<OverheadLights>,
-    casters: Query<(Entity, &Transform, &Mesh2d, &ShadowCaster), Added<ShadowCaster>>,
+    casters: Query<(&Transform, &Mesh2d, &ShadowCaster), Added<ShadowCaster>>,
 ) {
     if casters.is_empty() {
         return;
     }
     let material = shadow_material(&mut materials);
-    for (caster, transform, mesh, shadow_caster) in &casters {
-        spawn_shadows_for(
-            &mut commands,
-            &lights,
-            &material,
-            caster,
-            mesh.0.clone(),
-            transform,
-            shadow_caster.scale,
-            true,
-        );
+    for (transform, mesh, shadow_caster) in &casters {
+        for lamp in 0..2 {
+            let Some(shadow) = meshes
+                .get(&mesh.0)
+                .and_then(|m| lights.project_shadow_mesh(m, transform, shadow_caster.scale, lamp))
+            else {
+                continue;
+            };
+            commands.spawn((
+                Name::from("Static shadow"),
+                Mesh2d(meshes.add(shadow)),
+                MeshMaterial2d(material.clone()),
+                Transform::from_xyz(0.0, 0.0, SHADOW_Z),
+                lightmap_layer(),
+                DespawnOnExit(Screen::Gameplay),
+            ));
+        }
     }
 }
 
