@@ -60,6 +60,10 @@ const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
 const SHADOW_OBJECT_HEIGHT_M: f32 = 2.0 * BALL_RADIUS_M;
 /// Fallback lamp height when a table has no usable `light_height` (vpx units).
 const DEFAULT_LAMP_HEIGHT_VPU: f32 = 5000.0;
+/// Tables hang their lights very high (typically 5000 vpu, ~2.7 m), which makes the
+/// two shadows short and nearly coincident. Bring the lamps down by this factor so
+/// the double shadows read distinctly, while taller-lit tables still differ.
+const LAMP_HEIGHT_SCALE: f32 = 0.25;
 
 /// The two overhead lamps every shadow is cast from, vpinball's scene lights: on the
 /// table centre line at 1/3 and 2/3 of its depth, at the table's `light_height`
@@ -76,11 +80,13 @@ impl OverheadLights {
     /// The lamps for a table (world coordinates, table centred on the origin),
     /// `light_height_vpu` from the table's gamedata.
     pub(crate) fn for_table(table_depth_m: f32, light_height_vpu: f32) -> Self {
-        let height_m = vpu_to_m(if light_height_vpu > 0.0 {
-            light_height_vpu
-        } else {
-            DEFAULT_LAMP_HEIGHT_VPU
-        });
+        let height_m = vpu_to_m(
+            if light_height_vpu > 0.0 {
+                light_height_vpu
+            } else {
+                DEFAULT_LAMP_HEIGHT_VPU
+            } * LAMP_HEIGHT_SCALE,
+        );
         Self {
             lamps: [
                 Vec2::new(0.0, table_depth_m / 6.0),
