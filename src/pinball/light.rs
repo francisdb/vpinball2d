@@ -50,13 +50,49 @@ const SHADOW_ALPHA: f32 = 0.22;
 pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
 /// Z of the shadows in the light map: above the glows, below the ball.
 const SHADOW_Z: f32 = 0.012;
-/// Direction each of the two overhead lights throws a shadow (away from the light).
-const SHADOW_DIRS: [Vec2; 2] = [Vec2::new(-0.5, -0.7), Vec2::new(0.5, -0.7)];
-/// Ball shadow blob radius relative to the ball, and its offset per overhead light.
+/// Where the two overhead lamps sit, as a multiple of the table half-extents from its
+/// centre: over the upper corners, slightly outside the glass. Shadows are cast away
+/// from each lamp, so the direction depends on where the object is: steeply down-table
+/// near the drain, sideways near the top. At the table centre this matches the fixed
+/// down-table directions the shadows used before lamps had positions.
+const LAMP_POS_FRAC: Vec2 = Vec2::new(1.2, 1.2);
+/// Ball shadow blob radius relative to the ball, and its offset per overhead lamp.
 const SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
 const BALL_SHADOW_OFFSET: f32 = BALL_RADIUS_M;
-/// Static-object shadow offset per overhead light (metres).
+/// Static-object shadow offset per overhead lamp (metres).
 const MESH_SHADOW_OFFSET: f32 = 0.014;
+
+/// The two overhead lamps every shadow is cast from. Built per table (the lamps scale
+/// with the table size) and inserted at level spawn.
+#[derive(Resource)]
+pub(crate) struct OverheadLights {
+    lamps: [Vec2; 2],
+}
+
+impl OverheadLights {
+    /// Lamps over the upper table corners (world coordinates, table centred on the
+    /// origin).
+    pub(crate) fn for_table(table_width_m: f32, table_depth_m: f32) -> Self {
+        let half = Vec2::new(table_width_m, table_depth_m) * 0.5 * LAMP_POS_FRAC;
+        Self {
+            lamps: [Vec2::new(half.x, half.y), Vec2::new(-half.x, half.y)],
+        }
+    }
+
+    /// Unit direction the given lamp throws the shadow of an object at `pos`
+    /// (away from the lamp).
+    fn shadow_dir(&self, lamp: usize, pos: Vec2) -> Vec2 {
+        (pos - self.lamps[lamp]).normalize_or(Vec2::NEG_Y)
+    }
+
+    /// Shadow offsets of an object at `pos`, one per lamp, at the given length.
+    fn shadow_offsets(&self, pos: Vec2, length: f32) -> [Vec2; 2] {
+        [
+            self.shadow_dir(0, pos) * length,
+            self.shadow_dir(1, pos) * length,
+        ]
+    }
+}
 
 #[derive(Component)]
 pub struct Light {
@@ -64,11 +100,14 @@ pub struct Light {
     pub name: String,
 }
 
-/// Tracks a ball so its drop shadow follows it. The shadow is a separate entity
-/// (not a child of the ball) so it does not inherit the ball's spin.
+/// Tracks a ball so its drop shadow follows it. One shadow entity per overhead lamp
+/// (not a child of the ball, so it does not inherit the ball's spin and its offset
+/// can follow the lamp direction at the ball's current position).
 #[derive(Component)]
 struct BallShadow {
     ball: Entity,
+    /// Which overhead lamp this shadow is cast from.
+    lamp: usize,
 }
 
 /// Marks a static object that drops a shadow into the light map. A dark copy of the
@@ -247,8 +286,8 @@ pub(super) fn spawn_light(
 #[derive(Component)]
 struct FlipperShadow {
     flipper: Entity,
-    /// World-space offset away from one of the overhead lights (metres).
-    offset: Vec2,
+    /// Which overhead lamp this shadow is cast from.
+    lamp: usize,
 }
 
 /// Spawns the drop shadows of each flipper: a dark copy of its outline per overhead
@@ -263,13 +302,10 @@ fn spawn_flipper_shadows(
     }
     let material = shadow_material(&mut materials);
     for (flipper, mesh) in &flippers {
-        for dir in SHADOW_DIRS {
+        for lamp in 0..2 {
             commands.spawn((
                 Name::from("Flipper shadow"),
-                FlipperShadow {
-                    flipper,
-                    offset: dir * MESH_SHADOW_OFFSET,
-                },
+                FlipperShadow { flipper, lamp },
                 Mesh2d(mesh.0.clone()),
                 MeshMaterial2d(material.clone()),
                 Transform::from_xyz(0.0, 0.0, SHADOW_Z),
@@ -281,8 +317,9 @@ fn spawn_flipper_shadows(
 }
 
 /// Keeps each flipper shadow under its flipper: the exact bat pose at this instant
-/// (position and rotation), pushed away from each light in world space.
+/// (position and rotation), pushed away from its lamp in world space.
 fn update_flipper_shadows(
+    lights: Res<OverheadLights>,
     flippers: Query<&Transform, Without<FlipperShadow>>,
     mut shadows: Query<(&FlipperShadow, &mut Transform)>,
 ) {
@@ -290,8 +327,9 @@ fn update_flipper_shadows(
         let Ok(flipper_transform) = flippers.get(shadow.flipper) else {
             continue;
         };
-        transform.translation =
-            (flipper_transform.translation.truncate() + shadow.offset).extend(SHADOW_Z);
+        let pos = flipper_transform.translation.truncate();
+        let offset = lights.shadow_dir(shadow.lamp, pos) * MESH_SHADOW_OFFSET;
+        transform.translation = (pos + offset).extend(SHADOW_Z);
         transform.rotation = flipper_transform.rotation;
     }
 }
@@ -308,50 +346,34 @@ fn spawn_ball_shadows(
         let shadow_mesh = meshes.add(Circle::new(SHADOW_RADIUS));
         let material = shadow_material(&mut materials);
         let position = ball_transform.translation;
-        commands.spawn((
-            BallShadow { ball },
-            Name::from("Ball shadow"),
-            Transform::from_xyz(position.x, position.y, SHADOW_Z),
-            Visibility::default(),
-            DespawnOnExit(Screen::Gameplay),
-            children![
-                (
-                    Mesh2d(shadow_mesh.clone()),
-                    MeshMaterial2d(material.clone()),
-                    Transform::from_xyz(
-                        SHADOW_DIRS[0].x * BALL_SHADOW_OFFSET,
-                        SHADOW_DIRS[0].y * BALL_SHADOW_OFFSET,
-                        0.0,
-                    ),
-                    lightmap_layer(),
-                ),
-                (
-                    Mesh2d(shadow_mesh),
-                    MeshMaterial2d(material),
-                    Transform::from_xyz(
-                        SHADOW_DIRS[1].x * BALL_SHADOW_OFFSET,
-                        SHADOW_DIRS[1].y * BALL_SHADOW_OFFSET,
-                        0.0,
-                    ),
-                    lightmap_layer(),
-                ),
-            ],
-        ));
+        for lamp in 0..2 {
+            commands.spawn((
+                BallShadow { ball, lamp },
+                Name::from("Ball shadow"),
+                Mesh2d(shadow_mesh.clone()),
+                MeshMaterial2d(material.clone()),
+                Transform::from_xyz(position.x, position.y, SHADOW_Z),
+                lightmap_layer(),
+                DespawnOnExit(Screen::Gameplay),
+            ));
+        }
     }
 }
 
-/// Keeps each ball shadow under its ball. The shadow only follows the ball's
-/// position, not its rotation, so the offsets stay aligned to the lights.
+/// Keeps each ball shadow under its ball, cast away from its lamp at the ball's
+/// current spot on the table. Position only, not rotation (the ball spins).
 fn update_ball_shadows(
     mut commands: Commands,
+    lights: Res<OverheadLights>,
     balls: Query<&Transform, (With<Ball>, Without<BallShadow>)>,
     mut shadows: Query<(Entity, &BallShadow, &mut Transform), Without<Ball>>,
 ) {
     for (entity, shadow, mut transform) in shadows.iter_mut() {
         match balls.get(shadow.ball) {
             Ok(ball_transform) => {
-                transform.translation.x = ball_transform.translation.x;
-                transform.translation.y = ball_transform.translation.y;
+                let pos = ball_transform.translation.truncate();
+                let offset = lights.shadow_dir(shadow.lamp, pos) * BALL_SHADOW_OFFSET;
+                transform.translation = (pos + offset).extend(SHADOW_Z);
             }
             Err(_) => {
                 commands.entity(entity).despawn();
@@ -366,19 +388,24 @@ fn update_ball_shadows(
 fn spawn_static_shadows(
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    lights: Option<Res<OverheadLights>>,
     casters: Query<(&Transform, &Mesh2d, &ShadowCaster), Added<ShadowCaster>>,
 ) {
+    let Some(lights) = lights else {
+        return;
+    };
     if casters.is_empty() {
         return;
     }
     let material = shadow_material(&mut materials);
     for (transform, mesh, caster) in casters.iter() {
-        for dir in SHADOW_DIRS {
+        let offsets = lights.shadow_offsets(transform.translation.truncate(), MESH_SHADOW_OFFSET);
+        for offset in offsets {
             let mut shadow_transform = *transform;
             // Enlarge about the object centre (e.g. so a bumper shadow clears its cap).
             shadow_transform.scale *= caster.scale;
-            shadow_transform.translation.x += dir.x * MESH_SHADOW_OFFSET;
-            shadow_transform.translation.y += dir.y * MESH_SHADOW_OFFSET;
+            shadow_transform.translation.x += offset.x;
+            shadow_transform.translation.y += offset.y;
             shadow_transform.translation.z = SHADOW_Z;
             commands.spawn((
                 Name::from("Static shadow"),

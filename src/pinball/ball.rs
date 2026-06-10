@@ -21,8 +21,8 @@ pub const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 const BALL_MASS_KG: f32 = 0.08;
 
 // Overhead light directions (screen space, y up) the chrome ball reflects as
-// specular hotspots. These mirror the two lights the shadow system uses
-// (`light::SHADOW_DIRS`, negated: a light throws its shadow away from itself).
+// specular hotspots. These roughly mirror the two overhead lamps the shadow system
+// casts from (`light::OverheadLights`), as seen from the table centre.
 const BALL_LIGHTS: [Vec2; 2] = [Vec2::new(0.5, 0.7), Vec2::new(-0.5, 0.7)];
 // How high the overhead lights sit above the playfield plane, and how strong
 // their specular hotspot on the ball is.
