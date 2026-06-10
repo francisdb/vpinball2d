@@ -161,20 +161,26 @@ pub(super) fn spawn_wall(
     let (color, alpha_mode) = if let Some(mat) = top_material {
         let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
         // vpinball's `has_alpha` = the image is not opaque (see Shader::SetBasic).
-        let texture_has_alpha = !vpx_asset
+        let image_data = vpx_asset
             .raw
             .images
             .iter()
-            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()))
-            .and_then(|i| i.is_opaque)
-            .unwrap_or(true);
+            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()));
+        let texture_has_alpha = !image_data.and_then(|i| i.is_opaque).unwrap_or(true);
         let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
         let color = Srgba {
             alpha,
             ..Srgba::rgb_u8(mat.base_color.r, mat.base_color.g, mat.base_color.b)
         };
+        // Without blending, vpinball still alpha-tests a non-opaque texture when the
+        // image has a test value set (Shader::SetBasic), discarding pixels with
+        // alpha <= value/255. That is how cut-out plastics sheets on a wall top get
+        // their holes; map it to AlphaMode2d::Mask.
+        let alpha_test = image_data.map(|i| i.alpha_test_value).unwrap_or(-1.0);
         let alpha_mode = if blend {
             AlphaMode2d::Blend
+        } else if texture_has_alpha && alpha_test >= 0.0 {
+            AlphaMode2d::Mask(alpha_test / 255.0)
         } else {
             AlphaMode2d::Opaque
         };
