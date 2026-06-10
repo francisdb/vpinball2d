@@ -69,6 +69,9 @@ fn flipper_bat_primitive<'a>(
             GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
             _ => None,
         })
+        // Baked shadow primitives on the pivot are discarded (we generate flipper
+        // shadows), so they are never the bat either.
+        .filter(|p| !crate::pinball::primitive::is_table_shadow(p))
         .filter(|p| dist2(p) < FLIPPER_BAT_MAX_DIST_VPU.powi(2))
         .filter_map(|p| {
             // Only primitives with a projected mesh can be drawn as the bat.
@@ -251,6 +254,12 @@ pub(super) fn spawn_flipper(
         )
     };
 
+    // Generated drop shadow that swings with the flipper (tables bake these as
+    // script-rotated shadow primitives, which we discard; see primitive.rs).
+    const FLIPPER_BODY_Z: f32 = 0.1;
+    let shadow_child =
+        crate::pinball::light::attached_shadow(materials, rubber_mesh.clone(), FLIPPER_BODY_Z, 1.2);
+
     let flipper_entity = parent
         .spawn((
             Flipper {
@@ -271,9 +280,10 @@ pub(super) fn spawn_flipper(
             Restitution::from(0.4),
             // start at the pivot so the body never overlaps the ball at the world origin;
             // z above the playfield (0.0) so the rubber is not hidden by it
-            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.1),
+            Transform::from_xyz(anchor_pos.x, anchor_pos.y, FLIPPER_BODY_Z),
         ))
         .with_child(bat_child)
+        .with_child(shadow_child)
         .id();
 
     parent.spawn((

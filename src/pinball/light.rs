@@ -159,6 +159,27 @@ fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMateria
     })
 }
 
+/// A dark copy of a mesh on the light-map layer, to be attached as a child of a moving
+/// body so the shadow follows it (e.g. the flipper bat). AO-style with no light offset,
+/// like the script-rotated shadow primitives vpinball tables ship, so attaching it to
+/// the rotating body is exact; `scale` enlarges it about the body origin so it peeks
+/// out from under the shape. `parent_z` is the body's world z, compensated so the
+/// shadow lands at the shadows' light-map depth.
+pub(crate) fn attached_shadow(
+    materials: &mut Assets<ColorMaterial>,
+    mesh: Handle<Mesh>,
+    parent_z: f32,
+    scale: f32,
+) -> impl Bundle {
+    (
+        Name::from("Attached shadow"),
+        Mesh2d(mesh),
+        MeshMaterial2d(shadow_material(materials)),
+        Transform::from_xyz(0.0, 0.0, SHADOW_Z - parent_z).with_scale(Vec3::new(scale, scale, 1.0)),
+        lightmap_layer(),
+    )
+}
+
 /// Builds a white radial texture whose alpha is `falloff(distance)`, where
 /// `distance` is 0 at the center and 1 at the inscribed-circle edge. The shape of
 /// the falloff controls how soft or hard the glow/shadow reads.

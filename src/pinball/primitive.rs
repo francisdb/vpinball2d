@@ -21,6 +21,15 @@ pub struct Primitive {
     pub name: String,
 }
 
+/// Whether a primitive is a baked shadow. Tables ship flipper and ball shadows as flat
+/// primitives driven by their script (e.g. A-Go-Go's `priFlipperShadowLeft`, 8 Ball's
+/// `FlipperLSh` with image `flippers_shadow`). We render generated shadows instead
+/// (see `pinball::light`), so these are discarded at spawn.
+pub(crate) fn is_table_shadow(primitive: &primitive::Primitive) -> bool {
+    primitive.name.to_lowercase().contains("shadow")
+        || primitive.image.to_lowercase().contains("shadow")
+}
+
 pub(super) fn spawn_primitive(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
@@ -33,6 +42,14 @@ pub(super) fn spawn_primitive(
     // is textured with the table image; our playfield quad already draws that, so
     // rendering it here would cover the table with an untextured sheet.
     if primitive.name.eq_ignore_ascii_case("playfield_mesh") {
+        return;
+    }
+
+    if is_table_shadow(primitive) {
+        info!(
+            "Discarding baked shadow primitive '{}' (image '{}'); shadows are generated instead",
+            primitive.name, primitive.image
+        );
         return;
     }
 
