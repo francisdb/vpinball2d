@@ -254,12 +254,9 @@ pub(super) fn spawn_flipper(
         )
     };
 
-    // Generated drop shadow that swings with the flipper (tables bake these as
-    // script-rotated shadow primitives, which we discard; see primitive.rs).
-    const FLIPPER_BODY_Z: f32 = 0.1;
-    let shadow_child =
-        crate::pinball::light::attached_shadow(materials, rubber_mesh.clone(), FLIPPER_BODY_Z, 1.2);
-
+    // The flipper's moving drop shadows are spawned and tracked by `pinball::light`
+    // (`spawn_flipper_shadows`): dark copies of this body's outline mesh that follow
+    // its pose each frame, with the light offsets kept in world space.
     let flipper_entity = parent
         .spawn((
             Flipper {
@@ -280,10 +277,9 @@ pub(super) fn spawn_flipper(
             Restitution::from(0.4),
             // start at the pivot so the body never overlaps the ball at the world origin;
             // z above the playfield (0.0) so the rubber is not hidden by it
-            Transform::from_xyz(anchor_pos.x, anchor_pos.y, FLIPPER_BODY_Z),
+            Transform::from_xyz(anchor_pos.x, anchor_pos.y, 0.1),
         ))
         .with_child(bat_child)
-        .with_child(shadow_child)
         .id();
 
     parent.spawn((

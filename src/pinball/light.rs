@@ -131,8 +131,10 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_lighting);
     app.add_systems(
         Update,
-        (spawn_ball_shadows, update_ball_shadows)
-            .chain()
+        (
+            (spawn_ball_shadows, update_ball_shadows).chain(),
+            (spawn_flipper_shadows, update_flipper_shadows).chain(),
+        )
             .run_if(in_state(Screen::Gameplay)),
     );
     app.add_systems(
@@ -157,27 +159,6 @@ fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMateria
         alpha_mode: AlphaMode2d::Blend,
         ..default()
     })
-}
-
-/// A dark copy of a mesh on the light-map layer, to be attached as a child of a moving
-/// body so the shadow follows it (e.g. the flipper bat). AO-style with no light offset,
-/// like the script-rotated shadow primitives vpinball tables ship, so attaching it to
-/// the rotating body is exact; `scale` enlarges it about the body origin so it peeks
-/// out from under the shape. `parent_z` is the body's world z, compensated so the
-/// shadow lands at the shadows' light-map depth.
-pub(crate) fn attached_shadow(
-    materials: &mut Assets<ColorMaterial>,
-    mesh: Handle<Mesh>,
-    parent_z: f32,
-    scale: f32,
-) -> impl Bundle {
-    (
-        Name::from("Attached shadow"),
-        Mesh2d(mesh),
-        MeshMaterial2d(shadow_material(materials)),
-        Transform::from_xyz(0.0, 0.0, SHADOW_Z - parent_z).with_scale(Vec3::new(scale, scale, 1.0)),
-        lightmap_layer(),
-    )
 }
 
 /// Builds a white radial texture whose alpha is `falloff(distance)`, where
@@ -258,9 +239,62 @@ pub(super) fn spawn_light(
     ));
 }
 
-// TODO: flippers also need a dynamic drop shadow that tracks their rotation, the
-// same way the ball gets one here. The flipper bat is a moving body, so its shadow
-// has to follow both position and angle (offset per overhead light).
+/// Tracks a flipper so its drop shadow follows the bat. Unlike the ball (whose
+/// shadows hang off one non-rotating tracker), each flipper shadow is its own
+/// entity: the shadow copies the flipper's position *and* rotation while its light
+/// offset stays in world space; as a child the offset would swing with the bat,
+/// as if the light moved.
+#[derive(Component)]
+struct FlipperShadow {
+    flipper: Entity,
+    /// World-space offset away from one of the overhead lights (metres).
+    offset: Vec2,
+}
+
+/// Spawns the drop shadows of each flipper: a dark copy of its outline per overhead
+/// light, softened by the low-res light map exactly like every other shadow.
+fn spawn_flipper_shadows(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    flippers: Query<(Entity, &Mesh2d), Added<crate::pinball::flipper::Flipper>>,
+) {
+    if flippers.is_empty() {
+        return;
+    }
+    let material = shadow_material(&mut materials);
+    for (flipper, mesh) in &flippers {
+        for dir in SHADOW_DIRS {
+            commands.spawn((
+                Name::from("Flipper shadow"),
+                FlipperShadow {
+                    flipper,
+                    offset: dir * MESH_SHADOW_OFFSET,
+                },
+                Mesh2d(mesh.0.clone()),
+                MeshMaterial2d(material.clone()),
+                Transform::from_xyz(0.0, 0.0, SHADOW_Z),
+                lightmap_layer(),
+                DespawnOnExit(Screen::Gameplay),
+            ));
+        }
+    }
+}
+
+/// Keeps each flipper shadow under its flipper: the exact bat pose at this instant
+/// (position and rotation), pushed away from each light in world space.
+fn update_flipper_shadows(
+    flippers: Query<&Transform, Without<FlipperShadow>>,
+    mut shadows: Query<(&FlipperShadow, &mut Transform)>,
+) {
+    for (shadow, mut transform) in &mut shadows {
+        let Ok(flipper_transform) = flippers.get(shadow.flipper) else {
+            continue;
+        };
+        transform.translation =
+            (flipper_transform.translation.truncate() + shadow.offset).extend(SHADOW_Z);
+        transform.rotation = flipper_transform.rotation;
+    }
+}
 
 /// Spawns one drop shadow per ball: a plain dark disc per overhead light, softened
 /// by the low-res light map exactly like the static shadows.
