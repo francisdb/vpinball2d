@@ -188,13 +188,11 @@ impl VpxLoader {
                 // Walls get a generated 2D mesh; rubbers build their own ring mesh at spawn
                 // time (see pinball::rubber) and other items have no generated mesh.
                 if let GameItemEnum::Wall(wall) = item {
-                    let top_height = vpu_to_m(wall.height_top);
                     let path = VpxAsset::wall_mesh_sub_path(&wall.name);
                     let handle = load_mesh_2d_from_drag_points(
                         table_size,
                         path.clone(),
                         &wall.drag_points,
-                        top_height,
                         load_context,
                     );
                     named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
@@ -390,12 +388,14 @@ async fn load_sound(
     Ok(handle)
 }
 
-/// Generates a flat 2D polygon mesh from the given drag points at the specified top height.
+/// Generates a flat 2D polygon mesh from the given drag points. The mesh lies at z 0;
+/// the spawner puts the wall's top height into the entity transform so transparent
+/// 2D sorting (which only sees the transform) layers it correctly, e.g. an apron
+/// drawn over the ball rolling underneath it.
 fn load_mesh_2d_from_drag_points(
     table_size: Vec2,
     label: String,
     drag_points: &[DragPoint],
-    top_height: f32,
     load_context: &mut LoadContext<'_>,
 ) -> Handle<Mesh> {
     // Round the outline like Visual Pinball: smooth the drag points with the same
@@ -407,8 +407,7 @@ fn load_mesh_2d_from_drag_points(
     let mut uvs = Vec::with_capacity(num_points);
 
     for (x, y) in &smoothed {
-        // Position (x, top_height, y) -> Bevy uses y-up
-        positions.push([vpu_to_m(*x), -vpu_to_m(*y), top_height]);
+        positions.push([vpu_to_m(*x), -vpu_to_m(*y), 0.0]);
         // Wall top textures use table-space UVs (auto texture coordinates).
         uvs.push([x / table_size.x, y / table_size.y]);
     }

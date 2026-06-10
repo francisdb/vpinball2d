@@ -198,6 +198,14 @@ pub(super) fn spawn_wall(
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
     let visible = wall.is_top_bottom_visible || wall.is_side_visible;
+    // The wall top draws at its vpx height: transparent 2D sorting only sees the entity
+    // transform, so the height must live there (not in the mesh vertices) for e.g. an
+    // apron at 52 vpu to cover the ball (drawn at its radius) rolling underneath.
+    let transform = Transform::from_xyz(
+        vpx_to_bevy_transform.translation.x,
+        vpx_to_bevy_transform.translation.y,
+        vpu_to_m(wall.height_top),
+    );
     let name_component = Name::from(format!("Wall {}", wall.name));
     let wall_component = Wall {
         name: wall.name.clone(),
@@ -218,7 +226,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             RigidBody::Static,
             Restitution::from(wall.elasticity),
             Friction::from(wall.friction),
@@ -258,7 +266,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             crate::pinball::light::ShadowCaster { scale: 1.0 },
         ));
     } else {
@@ -267,7 +275,7 @@ pub(super) fn spawn_wall(
             wall_component,
             Mesh2d(mesh_handle.clone()),
             MeshMaterial2d(material),
-            vpx_to_bevy_transform,
+            transform,
             Visibility::Hidden,
         ));
     }
