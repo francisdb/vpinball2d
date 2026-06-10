@@ -28,6 +28,12 @@ pub(super) fn spawn_primitive(
     vpx_to_bevy_transform: Transform,
     primitive: &primitive::Primitive,
 ) {
+    // Flipper bats are textured primitives the flipper draws rotating with it; skip them
+    // here so they are not also drawn statically.
+    if crate::pinball::flipper::is_flipper_bat(&vpx_asset.raw.gameitems, primitive) {
+        return;
+    }
+
     // A top-down mesh is only generated for visible primitives with upward-facing geometry.
     let Some(mesh_handle) = vpx_asset
         .named_meshes
