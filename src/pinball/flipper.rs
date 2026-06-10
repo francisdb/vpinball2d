@@ -89,8 +89,8 @@ fn flipper_bat_primitive<'a>(
 }
 
 /// Whether a primitive is a flipper bat, so the general primitive renderer can skip it
-/// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat is
-/// skipped; co-located decor like a printed flipper shadow still renders statically.
+/// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat
+/// is skipped, so other decor co-located on the pivot still renders statically.
 pub(crate) fn is_flipper_bat(vpx_asset: &VpxAsset, primitive: &Primitive) -> bool {
     if !primitive.is_visible || primitive.image.is_empty() {
         return false;
