@@ -65,10 +65,11 @@ pub fn spawn_level(
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
     let vpx_to_bevy_transform = Transform::from_xyz(-table_width_m / 2.0, table_depth_m / 2.0, 0.0);
 
-    // The overhead lamps all shadows are cast from, scaled to this table.
+    // The overhead lamps all shadows are cast from: vpinball's scene lights, at the
+    // height this table defines.
     commands.insert_resource(crate::pinball::light::OverheadLights::for_table(
-        table_width_m,
         table_depth_m,
+        vpx_asset.raw.gamedata.light_height,
     ));
 
     // Offscreen light/shadow map, rendered by its own camera over the playfield rect
