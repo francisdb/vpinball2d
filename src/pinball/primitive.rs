@@ -73,15 +73,18 @@ pub(super) fn spawn_primitive(
     // The primitive draws at its projected mesh's centre height minus its depth bias
     // (see layer.rs), so e.g. screws fastening a plastic sort above it; the mesh
     // vertices carry z offsets relative to that centre.
-    let center_z_vpu = vpx_asset
-        .named_mesh_centers
+    let heights = vpx_asset
+        .named_mesh_heights
         .get(mesh_sub_path.as_str())
         .copied()
-        .unwrap_or(0.0);
+        .unwrap_or(crate::vpx::assets::MeshHeights {
+            center: 0.0,
+            base: 0.0,
+        });
     let transform = Transform::from_xyz(
         vpx_to_bevy_transform.translation.x,
         vpx_to_bevy_transform.translation.y,
-        crate::pinball::layer::render_z(center_z_vpu, primitive.depth_bias, item_index),
+        crate::pinball::layer::render_z(heights.center, primitive.depth_bias, item_index),
     );
 
     // Colour/transparency from the primitive material, mirroring walls and ramps (base
@@ -126,11 +129,11 @@ pub(super) fn spawn_primitive(
     let material = materials.add(ColorMaterial {
         color: color.into(),
         alpha_mode,
-        texture,
+        texture: texture.clone(),
         ..default()
     });
 
-    parent.spawn((
+    let mut entity = parent.spawn((
         Name::from(format!("Primitive {}", primitive.name)),
         Primitive {
             name: primitive.name.clone(),
@@ -139,4 +142,13 @@ pub(super) fn spawn_primitive(
         MeshMaterial2d(material),
         transform,
     ));
+    // Primitives standing on the playfield (posts, pegs, guides) drop a shadow into
+    // the light map; cut-out art casts its art shape. Raised primitives (screws on a
+    // plastic) sit on other geometry and must not shade the playfield through it.
+    if crate::pinball::light::casts_playfield_shadow(heights.base) {
+        entity.insert(crate::pinball::light::ShadowCaster {
+            scale: 1.0,
+            texture: texture_has_alpha.then_some(texture).flatten(),
+        });
+    }
 }

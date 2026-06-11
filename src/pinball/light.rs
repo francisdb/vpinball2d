@@ -72,10 +72,11 @@ pub(crate) fn casts_playfield_shadow(base_height_vpu: f32) -> bool {
     base_height_vpu < SHADOW_BASE_MAX_VPU
 }
 
-/// A raised, cut-out-textured item only casts when its footprint covers at least
-/// this fraction of the table: plastics sheets and the apron qualify, while small
-/// raised decor (fastening screws on a plastic) must not print through it.
-pub(crate) const SHEET_MIN_TABLE_FRACTION: f32 = 0.03;
+/// A raised item only casts when its footprint covers at least this fraction of the
+/// table: plastics sheets and panels qualify (North Pole's smallest panel is ~0.4%),
+/// while small raised decor (fastening screws on a plastic, ~0.01%) must not print
+/// through whatever it stands on.
+pub(crate) const RAISED_MIN_TABLE_FRACTION: f32 = 0.002;
 
 /// Fraction of the table area covered by the bounding box of the given outline
 /// points (vpx units), widened by `expand` on every side (e.g. a ramp's half width).

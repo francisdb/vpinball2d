@@ -178,7 +178,7 @@ impl VpxLoader {
 
         let mut mesh_handles = Vec::new();
         let mut named_mesh_handles = HashMap::new();
-        let mut named_mesh_centers = HashMap::new();
+        let mut named_mesh_heights = HashMap::new();
         // Table size in vpx units; wall/ramp world-aligned UVs are normalized by it.
         let table_size = Vec2::new(
             vpx.gamedata.right - vpx.gamedata.left,
@@ -229,14 +229,14 @@ impl VpxLoader {
                     // Visible primitives are projected to their top-down silhouette (only the
                     // upward-facing faces). Invisible primitives are skipped.
                     if primitive.is_visible
-                        && let Some((mesh, center_z)) =
+                        && let Some((mesh, heights)) =
                             primitive_mesh::build_primitive_mesh_2d(primitive)
                     {
                         let path = VpxAsset::primitive_mesh_sub_path(&primitive.name);
                         let labeled = load_context.begin_labeled_asset();
                         let handle = load_context
                             .add_loaded_labeled_asset(path.clone(), labeled.finish(mesh));
-                        named_mesh_centers.insert(path.clone().into_boxed_str(), center_z);
+                        named_mesh_heights.insert(path.clone().into_boxed_str(), heights);
                         named_mesh_handles.insert(path.into_boxed_str(), handle.clone());
                         mesh_handles.push(handle);
                     }
@@ -251,7 +251,7 @@ impl VpxLoader {
             named_sounds: named_sound_handles,
             meshes: mesh_handles,
             named_meshes: named_mesh_handles,
-            named_mesh_centers,
+            named_mesh_heights,
             raw: vpx,
         };
 

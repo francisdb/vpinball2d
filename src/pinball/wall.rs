@@ -206,16 +206,21 @@ pub(super) fn spawn_wall(
             scale: 1.0,
             texture: None,
         })
-    } else if texture_has_alpha
-        && crate::pinball::light::footprint_fraction(
-            wall.drag_points.iter().map(|d| (d.x, d.y)),
-            0.0,
-            &vpx_asset.raw.gamedata,
-        ) >= crate::pinball::light::SHEET_MIN_TABLE_FRACTION
+    } else if crate::pinball::light::footprint_fraction(
+        wall.drag_points.iter().map(|d| (d.x, d.y)),
+        0.0,
+        &vpx_asset.raw.gamedata,
+    ) >= crate::pinball::light::RAISED_MIN_TABLE_FRACTION
     {
+        // A raised panel whose mesh is its shape (untextured/opaque) casts a solid
+        // silhouette; a sheet with cut-out art in the texture casts the art.
         Some(crate::pinball::light::ShadowCaster {
             scale: 1.0,
-            texture: texture.clone(),
+            texture: if texture_has_alpha {
+                texture.clone()
+            } else {
+                None
+            },
         })
     } else {
         None

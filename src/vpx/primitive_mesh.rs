@@ -131,10 +131,13 @@ fn transform_dir_z(m: &Mat, x: f32, y: f32, z: f32) -> f32 {
 }
 
 /// Build the top-down mesh for a primitive, or `None` if it has no decodable mesh or no
-/// upward-facing geometry. Also returns the centre height (in vpx units) of the kept
-/// geometry: the spawner puts it into the entity transform as the render layer (see
-/// `pinball::layer`); the mesh vertices carry z offsets relative to it.
-pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<(Mesh, f32)> {
+/// upward-facing geometry. Also returns the heights (in vpx units) of the kept
+/// geometry: the spawner puts the centre into the entity transform as the render
+/// layer (see `pinball::layer`, the mesh vertices carry z offsets relative to it)
+/// and gates shadow casting on the base.
+pub fn build_primitive_mesh_2d(
+    primitive: &Primitive,
+) -> Option<(Mesh, crate::vpx::assets::MeshHeights)> {
     let read = primitive.read_mesh().ok().flatten()?;
     if read.vertices.is_empty() || read.indices.is_empty() {
         return None;
@@ -200,5 +203,11 @@ pub fn build_primitive_mesh_2d(primitive: &Primitive) -> Option<(Mesh, f32)> {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
-    Some((mesh, center_z_vpu))
+    Some((
+        mesh,
+        crate::vpx::assets::MeshHeights {
+            center: center_z_vpu,
+            base: min_z,
+        },
+    ))
 }
