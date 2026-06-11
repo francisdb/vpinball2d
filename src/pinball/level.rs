@@ -191,6 +191,7 @@ pub fn spawn_level(
                             vpx_to_bevy_transform,
                             parent,
                             light,
+                            item_index,
                         );
                     }
                     GameItemEnum::Rubber(rubber) => spawn_rubber(
