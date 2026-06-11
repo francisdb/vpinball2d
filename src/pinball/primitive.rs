@@ -126,11 +126,11 @@ pub(super) fn spawn_primitive(
     let material = materials.add(ColorMaterial {
         color: color.into(),
         alpha_mode,
-        texture,
+        texture: texture.clone(),
         ..default()
     });
 
-    parent.spawn((
+    let mut entity = parent.spawn((
         Name::from(format!("Primitive {}", primitive.name)),
         Primitive {
             name: primitive.name.clone(),
@@ -139,4 +139,7 @@ pub(super) fn spawn_primitive(
         MeshMaterial2d(material),
         transform,
     ));
+    // Primitives drop a shadow via the static-shadow render pass: posts and pegs
+    // cast their silhouette, screws on a plastic merge into the plastic's shadow.
+    entity.insert(crate::pinball::lightmap::casts_shadow_layers());
 }

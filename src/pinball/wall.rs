@@ -152,6 +152,13 @@ pub(super) fn spawn_wall(
         .flatten()
         .find(|m| m.name == wall.top_material);
     let texture = vpx_asset.image(wall.image.as_str()).cloned();
+    // vpinball's `has_alpha` = the image is not opaque (see Shader::SetBasic).
+    let image_data = vpx_asset
+        .raw
+        .images
+        .iter()
+        .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()));
+    let texture_has_alpha = !image_data.and_then(|i| i.is_opaque).unwrap_or(true);
     // Mirror vpinball's surface-top rendering (Shader::SetMaterial): the base colour
     // carries the material opacity as its alpha, and alpha blending is enabled only
     // when the material has opacity active and either the texture has an alpha channel
@@ -160,13 +167,6 @@ pub(super) fn spawn_wall(
     // instead of letting the playfield show through.
     let (color, alpha_mode) = if let Some(mat) = top_material {
         let alpha = if mat.opacity_active { mat.opacity } else { 1.0 };
-        // vpinball's `has_alpha` = the image is not opaque (see Shader::SetBasic).
-        let image_data = vpx_asset
-            .raw
-            .images
-            .iter()
-            .find(|i| i.name.eq_ignore_ascii_case(wall.image.as_str()));
-        let texture_has_alpha = !image_data.and_then(|i| i.is_opaque).unwrap_or(true);
         let blend = mat.opacity_active && (texture_has_alpha || alpha < 0.999);
         let color = Srgba {
             alpha,
@@ -191,7 +191,7 @@ pub(super) fn spawn_wall(
     let material = materials.add(ColorMaterial {
         color: color.into(),
         alpha_mode,
-        texture,
+        texture: texture.clone(),
         ..default()
     });
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
@@ -259,11 +259,8 @@ pub(super) fn spawn_wall(
             ));
         } else if visible {
             // Visible walls standing on the playfield drop a shadow into the light
-            // map (1:1 mesh copy); raised tops (plastics, the apron) do not shade
-            // the playfield below them.
-            if crate::pinball::light::casts_playfield_shadow(wall.height_bottom) {
-                entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
-            }
+            // map through the static-shadow render pass.
+            entity.insert(crate::pinball::lightmap::casts_shadow_layers());
         } else {
             // Invisible guide wall: collide but don't draw or cast a shadow.
             entity.insert(Visibility::Hidden);
@@ -276,9 +273,7 @@ pub(super) fn spawn_wall(
             MeshMaterial2d(material),
             transform,
         ));
-        if crate::pinball::light::casts_playfield_shadow(wall.height_bottom) {
-            entity.insert(crate::pinball::light::ShadowCaster { scale: 1.0 });
-        }
+        entity.insert(crate::pinball::lightmap::casts_shadow_layers());
     } else {
         parent.spawn((
             name_component,

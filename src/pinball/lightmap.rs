@@ -25,6 +25,14 @@ use bevy::sprite_render::Material2dPlugin;
 /// only through the playfield composite.
 pub(crate) const LIGHTMAP_LAYER: usize = 1;
 
+/// Render layer of the static-shadow pass: every static table item that should cast
+/// a shadow renders to this layer *as well as* the main view, into an offscreen
+/// image with a transparent background (no playfield, ball or flippers). The light
+/// map then darkens the playfield with that image projected away from each lamp
+/// (see `pinball::light`), so shadows are per pixel exactly what the table shows:
+/// cut-out plastics cast their art, screws on a plastic merge into its shadow.
+pub(crate) const STATIC_SHADOW_LAYER: usize = 2;
+
 /// The light map is cleared to this ambient level; the playfield reads as
 /// `table_image * ambient` where nothing lights it, brighter where lit, darker
 /// where shadowed. Higher = brighter unlit playfield, but less headroom before lit
@@ -36,8 +44,9 @@ const AMBIENT: Color = Color::srgb(0.7, 0.7, 0.7);
 /// glows and shadows into soft edges via the linear upscale onto the playfield).
 const LIGHTMAP_HEIGHT_PX: u32 = crate::pinball::light::SHADOW_SOFTNESS_PX;
 
-/// Marks the offscreen light map camera, so systems that operate on the main view
-/// camera (cursor picking, nudge, projection) can exclude it with `Without`.
+/// Marks the offscreen cameras (light map and static-shadow pass), so systems that
+/// operate on the main view camera (cursor picking, nudge, projection) can exclude
+/// them with `Without`.
 #[derive(Component)]
 pub(crate) struct LightmapCamera;
 
@@ -65,6 +74,42 @@ pub(super) fn plugin(app: &mut App) {
 /// The render layer for everything that should be baked into the light map.
 pub(crate) fn lightmap_layer() -> RenderLayers {
     RenderLayers::layer(LIGHTMAP_LAYER)
+}
+
+/// The render layers of a static item that casts a shadow: drawn by the main camera
+/// and again by the static-shadow camera. Render layers do not propagate to
+/// children, so every visual entity of the item needs this.
+pub(crate) fn casts_shadow_layers() -> RenderLayers {
+    RenderLayers::from_layers(&[0, STATIC_SHADOW_LAYER])
+}
+
+/// Camera that renders the static-shadow layer over the playfield rect into the
+/// given image, on a fully transparent background. Orders before the lightmap
+/// camera, which composites the result as the static shadows.
+pub(crate) fn static_shadow_camera(
+    target: Handle<Image>,
+    table_width_m: f32,
+    table_depth_m: f32,
+) -> impl Bundle {
+    (
+        Name::from("Static shadow camera"),
+        LightmapCamera,
+        Camera2d,
+        Camera {
+            order: -2,
+            clear_color: ClearColorConfig::Custom(Color::NONE),
+            ..default()
+        },
+        RenderTarget::Image(target.into()),
+        Projection::Orthographic(OrthographicProjection {
+            scaling_mode: ScalingMode::Fixed {
+                width: table_width_m,
+                height: table_depth_m,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
+        RenderLayers::layer(STATIC_SHADOW_LAYER),
+    )
 }
 
 /// Create the offscreen light map texture, sized to the table aspect so texels are

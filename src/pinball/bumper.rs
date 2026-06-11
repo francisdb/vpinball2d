@@ -143,10 +143,8 @@ pub(super) fn spawn_bumper(
         CollisionEventsEnabled,
         RigidBody::Static,
         Collider::circle(base_radius),
-        // Drop a shadow into the light map; scale it past the wider cap so it shows.
-        crate::pinball::light::ShadowCaster {
-            scale: (cap_radius / base_radius) * 1.3,
-        },
+        // Drop a shadow via the static-shadow render pass.
+        crate::pinball::lightmap::casts_shadow_layers(),
     ));
     // Most tables hide the built-in cap (`is_cap_visible = false`) and place a textured
     // cap primitive on the bumper. We draw that as a flat textured disc here: a cap reads
