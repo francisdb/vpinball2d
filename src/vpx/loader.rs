@@ -54,7 +54,10 @@ impl Default for VpxLoaderSettings {
 
 /// Loads vpx files with all of their data as their corresponding bevy representations.
 #[derive(TypePath)]
-pub struct VpxLoader {}
+pub struct VpxLoader {
+    /// Shared progress counters the loading screen reads (see `VpxLoadProgress`).
+    pub progress: crate::vpx::VpxLoadProgress,
+}
 
 impl AssetLoader for VpxLoader {
     type Asset = VpxAsset;
@@ -105,10 +108,28 @@ impl VpxLoader {
             );
         }
 
+        // Count the per-item work for the loading screen's progress bar. Images
+        // dominate the load time, but counting everything keeps the bar moving.
+        let total = if settings.load_images {
+            vpx.images.len()
+        } else {
+            0
+        } + if settings.load_sounds {
+            vpx.sounds.len()
+        } else {
+            0
+        } + if settings.load_meshes {
+            vpx.gameitems.len()
+        } else {
+            0
+        };
+        self.progress.start(total as u32);
+
         let mut image_handles = Vec::new();
         let mut named_image_handles = HashMap::new();
         if settings.load_images {
             for image in &mut vpx.images {
+                self.progress.advance();
                 let label = format!("images/{}", image.name);
                 // VPX stores images either as a compressed blob (`jpeg`, despite the
                 // name this can be JPEG/PNG/etc.) or as a raw bitmap (`bits`, always
@@ -158,6 +179,7 @@ impl VpxLoader {
         let mut named_sound_handles = HashMap::new();
         if settings.load_sounds {
             for sound in &vpx.sounds {
+                self.progress.advance();
                 let handle =
                     load_sound(format!("sounds/{}", sound.name), load_context, sound).await;
                 match handle {
@@ -186,6 +208,7 @@ impl VpxLoader {
         );
         if settings.load_meshes {
             for item in &vpx.gameitems {
+                self.progress.advance();
                 // Walls get a generated 2D mesh; rubbers build their own ring mesh at spawn
                 // time (see pinball::rubber) and other items have no generated mesh.
                 if let GameItemEnum::Wall(wall) = item {
