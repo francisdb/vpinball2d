@@ -1,21 +1,24 @@
 use crate::pinball::ball::{BALL_RADIUS_M, Ball};
 use crate::pinball::lightmap::lightmap_layer;
 use crate::screens::Screen;
+use crate::vpx::triangulate::triangulate_polygon;
 use bevy::asset::{Asset, Assets, RenderAssetUsages};
 use bevy::color::Srgba;
 use bevy::ecs::entity::Entities;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::image::Image;
-use bevy::mesh::{Mesh, Mesh2d, MeshVertexBufferLayoutRef};
+use bevy::mesh::{Indices, Mesh, Mesh2d, MeshVertexBufferLayoutRef, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{
     AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, Extent3d,
-    RenderPipelineDescriptor, SpecializedMeshPipelineError, TextureDimension, TextureFormat,
+    RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError, TextureDimension,
+    TextureFormat,
 };
 use bevy::shader::ShaderRef;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dKey, Material2dPlugin};
 use vpin::vpx;
+use vpin::vpx::gameitem::light::Fader;
 use vpin::vpx::units::vpu_to_m;
 
 /// Shared lighting assets, built once at startup and reused by every light and
@@ -32,13 +35,18 @@ pub(crate) struct LightingAssets {
 /// wherever GI glows cover the playfield; drawn first, the shadow's dark multiply
 /// attenuates ambient and glow alike. The vpx bulb height is irrelevant here.
 const LIGHT_Z: f32 = 0.005;
-/// Additive glow alpha per unit of vpx light intensity. Pinball general
-/// illumination uses many low-power bulbs (intensity ~4); inserts are far
-/// brighter (~90). Scaling by intensity keeps GI gentle while lit inserts stand
-/// out. The light map multiplies the playfield, so over-bright clips to full
-/// playfield brightness (not white), letting us push this without washout.
+/// Z of the animated insert lights on the main view: just above the playfield,
+/// below the ball (~0.0125), rubbers and plastics. Inserts emit light, so they
+/// draw over the playfield art (and its shadows) but under everything physical.
+const INSERT_LIGHT_Z: f32 = 0.001;
+/// Additive glow alpha per unit of vpx light intensity, for the steady GI bulbs
+/// only. Pinball general illumination uses many low-power bulbs (intensity ~4);
+/// scaling keeps that wash gentle. Animated inserts instead use vpinball's own
+/// model: the added light is `falloff * intensity` saturated by the framebuffer
+/// (ClassicLightShader's `saturate(atten * intensity)`), which is what lights the
+/// whole insert at its colour rather than a dim spot in the middle.
 const INTENSITY_TO_ALPHA: f32 = 0.1;
-/// Cap so no single lamp dominates.
+/// Cap so no single GI lamp dominates.
 const MAX_GLOW_ALPHA: f32 = 0.9;
 
 // --- Shadows: tune every shadow here, in one place ---
@@ -165,6 +173,49 @@ pub struct Light {
     pub name: String,
 }
 
+/// How a light's intensity chases its on/off target, vpinball's `Fader` modes
+/// (light.cpp `UpdateAnimation`).
+enum LightFader {
+    /// Intensity jumps straight to the target.
+    None,
+    /// Linear ramp at the authored fade speeds.
+    Linear,
+    /// Tungsten filament: vpinball simulates a BULB_44 bulb (bulb.cpp) whose
+    /// visible emission rises steeply then saturates. We approximate that curve
+    /// with an exponential approach over the same authored fade time.
+    Incandescent,
+}
+
+/// vpinball's light animation (light.cpp `UpdateAnimation`/`UpdateBlinker`): a blink
+/// pattern advances one character every `interval`, and the intensity chases the
+/// pattern's on/off target through the fader. Tables ship their lamps off and a ROM
+/// would normally drive them; we do not run scripts, so every insert gets this
+/// blinker as attract-style demo behaviour.
+#[derive(Component)]
+pub(crate) struct LightAnimation {
+    /// The blink pattern as on/off frames (vpx `blink_pattern`, '1' = lit).
+    pattern: Vec<bool>,
+    /// Seconds per pattern frame (vpx `blink_interval`, default 125 ms).
+    interval: f32,
+    /// Current frame in the pattern.
+    frame: usize,
+    /// Seconds until the next frame advance. All blinkers start together on one
+    /// shared clock, like vpinball's (UpdateBlinker runs off global time): tables
+    /// author chases as per-light walking-bit patterns (e.g. a bonus ladder with
+    /// `10000000000`, `01000000000`, ...) that only line up when synchronized.
+    next_blink: f32,
+    fader: LightFader,
+    /// Fade rates in intensity per second (vpx stores intensity per ms). May be
+    /// infinite (some tables author it so); the clamp to the target handles that.
+    fade_up: f32,
+    fade_down: f32,
+    /// The authored full intensity, the "on" target.
+    intensity: f32,
+    /// Animated intensity, chasing on/off through the fader; lands in the
+    /// material's intensity each frame.
+    current: f32,
+}
+
 /// One drop shadow in the light map: a dark silhouette following its source entity,
 /// cast away from one overhead lamp. The moving parts (ball, flippers) get these;
 /// static items cast through the static-shadow render pass instead (see
@@ -226,13 +277,93 @@ impl Material2d for GlowMaterial {
     }
 }
 
+/// Uniform parameters of [`InsertGlowMaterial`].
+#[derive(ShaderType, Clone, Debug)]
+pub(crate) struct InsertLightParams {
+    /// rgb: the light colour at the falloff edge (linear); a: the current
+    /// animated intensity in raw vpx units (inserts author 10-90; saturation in
+    /// the shader does the rest).
+    pub(crate) color: Vec4,
+    /// rgb: the light colour at the centre, vpx "color full" (`color2`). vpinball
+    /// lerps centre to edge by sqrt of the falloff distance; tables author e.g. a
+    /// warm-white centre fading to a near-black rim.
+    pub(crate) color_full: Vec4,
+    /// The vpx falloff power shaping the attenuation curve (default 2).
+    pub(crate) falloff_power: f32,
+    /// Playfield extent in world metres (the table is centred on the origin),
+    /// to derive table-space art UVs from the fragment's world position.
+    pub(crate) table_size: Vec2,
+}
+
+/// Material for the animated insert lights, drawn directly over the playfield on
+/// the main view like vpinball's classic light (the shape mesh composited onto the
+/// already-lit playfield). The shader ports PS_LightWithTexel: the light colour
+/// times the falloff attenuation is added over the insert's art, then the art is
+/// re-composited with Overlay (darks like decal prints stay dark) and Screen (the
+/// art brightens the result) - see ClassicLightShader.hlsl. The light map's
+/// multiply could never do this: a dark insert print would stay dark no matter
+/// the glow, reading as a dim spot in the middle of the insert.
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub(crate) struct InsertGlowMaterial {
+    #[uniform(0)]
+    params: InsertLightParams,
+    /// The art under/of the insert: the light's own image like vpinball, usually
+    /// the playfield image.
+    #[texture(1)]
+    #[sampler(2)]
+    art: Handle<Image>,
+}
+
+impl Material2d for InsertGlowMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/insert_light.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        // Transparent pass: sorted back to front, so the playfield (opaque) and
+        // anything below the insert's z is on screen before the light blends
+        // over it.
+        AlphaMode2d::Blend
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        // Premultiplied: the shader weights the lit pixel by the saturating
+        // falloff-times-intensity, crossfading from the unlit framebuffer to the
+        // fully lit insert.
+        const PREMULTIPLIED: BlendComponent = BlendComponent {
+            src_factor: BlendFactor::One,
+            dst_factor: BlendFactor::OneMinusSrcAlpha,
+            operation: BlendOperation::Add,
+        };
+        if let Some(target) = descriptor
+            .fragment
+            .as_mut()
+            .and_then(|fragment| fragment.targets.get_mut(0))
+            .and_then(|target| target.as_mut())
+        {
+            target.blend = Some(BlendState {
+                color: PREMULTIPLIED,
+                alpha: PREMULTIPLIED,
+            });
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins(Material2dPlugin::<GlowMaterial>::default());
+    app.add_plugins(Material2dPlugin::<InsertGlowMaterial>::default());
     app.add_systems(Startup, setup_lighting);
     app.add_systems(
         Update,
-        ((spawn_ball_shadows, spawn_flipper_shadows), update_shadows)
-            .chain()
+        (
+            ((spawn_ball_shadows, spawn_flipper_shadows), update_shadows).chain(),
+            animate_lights,
+        )
             .run_if(in_state(Screen::Gameplay)),
     );
 }
@@ -296,49 +427,276 @@ fn radial_image(falloff: impl Fn(f32) -> f32) -> Image {
     )
 }
 
+/// The insert shape mesh, vpinball's classic light geometry (light.cpp
+/// `RenderSetup`): the drag-point outline smoothed with the same Catmull-Rom pass
+/// as wall meshes, triangulated, centred on the light. The UVs map the radial glow
+/// texture over the light's *falloff radius* - exactly vpinball's light shader,
+/// which attenuates by `pow(1 - dist / falloff, falloff_power)` with the falloff
+/// property as the range (light.cpp `center_range`), NOT the shape extent. Insert
+/// shapes are typically well inside their falloff radius, so the whole insert
+/// lights near-uniformly and only the rim dims. Our `(1 - d)^2` texture matches
+/// the vpx default falloff power 2.
+fn insert_mesh(light: &vpx::gameitem::light::Light) -> Option<Mesh> {
+    if light.drag_points.len() < 3 {
+        return None;
+    }
+    let smoothed = vpin::vpx::mesh::smooth_drag_points_2d(&light.drag_points, 4.0, true);
+    // Offsets from the light centre, in vpx units (y still down like vpx).
+    let offsets: Vec<Vec2> = smoothed
+        .iter()
+        .map(|(x, y)| Vec2::new(x - light.center.x, y - light.center.y))
+        .collect();
+    let max_dist = offsets.iter().map(|d| d.length()).fold(0.0f32, f32::max);
+    if max_dist <= 0.0 {
+        return None;
+    }
+    // The attenuation range: the falloff radius like vpinball, falling back to the
+    // shape extent for degenerate authoring. Shape parts beyond the falloff sample
+    // past the texture edge, where the clamped texture is transparent - the same
+    // zero vpinball's saturate produces there.
+    let range = if light.falloff_radius > 0.0 {
+        light.falloff_radius
+    } else {
+        max_dist
+    };
+    let positions: Vec<[f32; 3]> = offsets
+        .iter()
+        .map(|d| [vpu_to_m(d.x), -vpu_to_m(d.y), 0.0])
+        .collect();
+    // Texture centre (0.5, 0.5) on the light centre, texture edge at the falloff
+    // radius.
+    let uvs: Vec<[f32; 2]> = offsets
+        .iter()
+        .map(|d| [0.5 + d.x * 0.5 / range, 0.5 + d.y * 0.5 / range])
+        .collect();
+    let outline: Vec<Vec2> = positions.iter().map(|p| Vec2::new(p[0], p[1])).collect();
+    let indices = triangulate_polygon(&outline);
+    if indices.is_empty() {
+        return None;
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    Some(mesh)
+}
+
+/// An authored per-ms fade speed as intensity per second; zero, negative or NaN
+/// (vpx allows even infinity) becomes an infinite rate, i.e. an instant snap.
+fn fade_rate(per_ms: f32) -> f32 {
+    if per_ms > 0.0 {
+        per_ms * 1000.0
+    } else {
+        f32::INFINITY
+    }
+}
+
+/// The blinker + fader state for one insert, from its authored vpx fields
+/// (vpinball's defaults where unset: pattern "10", interval 125 ms, linear fader).
+fn light_animation(light: &vpx::gameitem::light::Light) -> LightAnimation {
+    let mut pattern: Vec<bool> = light.blink_pattern.chars().map(|c| c == '1').collect();
+    if pattern.is_empty() {
+        pattern = vec![true, false];
+    }
+    let interval = if light.blink_interval > 0 {
+        light.blink_interval as f32 / 1000.0
+    } else {
+        0.125
+    };
+    let fader = match light.fader {
+        Some(Fader::None) => LightFader::None,
+        Some(Fader::Incandescent) => LightFader::Incandescent,
+        // vpinball defaults to the linear fader (light.h `m_fader`).
+        Some(Fader::Linear) | None => LightFader::Linear,
+    };
+    LightAnimation {
+        next_blink: interval,
+        pattern,
+        interval,
+        frame: 0,
+        fader,
+        // Per-ms authored speeds to per-second. A missing/zero speed degenerates
+        // to a snap (infinite ramp clamps straight to the target).
+        fade_up: fade_rate(light.fade_speed_up),
+        fade_down: fade_rate(light.fade_speed_down),
+        intensity: light.intensity,
+        current: 0.0,
+    }
+}
+
 pub(super) fn spawn_light(
     meshes: &mut ResMut<Assets<Mesh>>,
     glow_materials: &mut ResMut<Assets<GlowMaterial>>,
+    insert_materials: &mut ResMut<Assets<InsertGlowMaterial>>,
     glow_texture: &Handle<Image>,
+    vpx_asset: &crate::vpx::VpxAsset,
+    table_size_m: Vec2,
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
 ) {
-    // Tables ship with their lamps off; the ROM lights them during a game (and
-    // animates them in attract mode). We do not drive a ROM, so render only general
-    // illumination (GI / pfGI bulbs, on whenever the table is powered) plus any lamp
-    // the table ships explicitly lit. State 0 = off, 1 = on, 2 = blinking; None =
-    // unspecified, treated as off so insert-heavy tables do not light every lamp.
-    let is_gi = light.name.to_lowercase().contains("gi");
-    let is_on = light.state.is_some_and(|state| state != 0.0);
-    if !is_gi && !is_on {
+    // Backglass-mode lights belong on the backdrop, not the playfield.
+    if light.visible == Some(false) || light.is_backglass {
         return;
     }
-    // Cover the falloff radius, but never collapse to nothing for lights that
-    // only define a small core.
-    let radius = vpu_to_m(light.falloff_radius).max(vpu_to_m(light.mesh_radius));
-    // Glow tinted by the light colour; brightness scales with the lamp intensity
-    // (capped), so many low-power GI bulbs stay gentle.
-    let alpha = (light.intensity * INTENSITY_TO_ALPHA).clamp(0.0, MAX_GLOW_ALPHA);
-    let glow_color = Srgba::rgb_u8(light.color.r, light.color.g, light.color.b).with_alpha(alpha);
-    parent.spawn((
+    // GI bulbs (general illumination, on whenever the table is powered) glow
+    // steadily. Everything else is an insert or feature lamp a ROM would drive;
+    // we do not run scripts, so they all get the blinker animation instead
+    // (attract-style demo of vpinball's light animation).
+    let is_gi = light.name.to_lowercase().contains("gi");
+    // Every light renders its drag-point shape: vpinball draws the same shape
+    // mesh for classic inserts and bulb lights alike (m_lightmapMeshBuffer in
+    // light.cpp Render; only the shader differs), so a bulb-light insert still
+    // fills its authored insert outline. Shapeless/degenerate lights fall back
+    // to a glow disc over the falloff radius.
+    let mesh = insert_mesh(light)
+        .map(|mesh| meshes.add(mesh))
+        .unwrap_or_else(|| {
+            // Cover the falloff radius, but never collapse to nothing for lights
+            // that only define a small core.
+            let radius = vpu_to_m(light.falloff_radius).max(vpu_to_m(light.mesh_radius));
+            meshes.add(Circle::new(radius))
+        });
+    let base = (
         Light {
             name: light.name.clone(),
         },
         Name::from(format!("Light {}", light.name)),
-        Transform::from_xyz(
-            vpx_to_bevy_transform.translation.x + vpu_to_m(light.center.x),
-            vpx_to_bevy_transform.translation.y - vpu_to_m(light.center.y),
-            LIGHT_Z,
-        ),
-        Mesh2d(meshes.add(Circle::new(radius))),
-        MeshMaterial2d(glow_materials.add(GlowMaterial {
-            color: Color::from(glow_color).to_linear(),
-            texture: glow_texture.clone(),
-        })),
-        // Render into the light map only, not directly on screen.
-        lightmap_layer(),
-    ));
+        Mesh2d(mesh),
+    );
+    let translation = Vec2::new(
+        vpx_to_bevy_transform.translation.x + vpu_to_m(light.center.x),
+        vpx_to_bevy_transform.translation.y - vpu_to_m(light.center.y),
+    );
+    let color = Color::from(Srgba::rgb_u8(light.color.r, light.color.g, light.color.b)).to_linear();
+    if is_gi {
+        // GI washes the playfield through the light map, tinted by the light
+        // colour with a gentle intensity-scaled alpha so the many low-power
+        // bulbs stay soft.
+        let alpha = (light.intensity * INTENSITY_TO_ALPHA).clamp(0.0, MAX_GLOW_ALPHA);
+        parent.spawn((
+            base,
+            Transform::from_translation(translation.extend(LIGHT_Z)),
+            MeshMaterial2d(glow_materials.add(GlowMaterial {
+                color: color.with_alpha(alpha),
+                texture: glow_texture.clone(),
+            })),
+            // Render into the light map only, not directly on screen.
+            lightmap_layer(),
+        ));
+    } else {
+        // Animated lamps composite directly over the playfield on the main view,
+        // like vpinball's classic light render; they start dark and the
+        // animation drives the params alpha with the raw vpx intensity. The art
+        // the shader re-composites is the light's own image like vpinball,
+        // usually the playfield image.
+        let art = vpx_asset
+            .image(light.image.as_str())
+            .or_else(|| vpx_asset.image(vpx_asset.raw.gamedata.image.as_str()))
+            .cloned()
+            .unwrap_or_default();
+        let color_full = Color::from(Srgba::rgb_u8(
+            light.color2.r,
+            light.color2.g,
+            light.color2.b,
+        ))
+        .to_linear();
+        // vpinball's no-contribution early-out: a light with both colours black
+        // adds nothing and is not drawn at all (light.cpp Render).
+        if color.red == 0.0
+            && color.green == 0.0
+            && color.blue == 0.0
+            && color_full.red == 0.0
+            && color_full.green == 0.0
+            && color_full.blue == 0.0
+        {
+            return;
+        }
+        parent.spawn((
+            base,
+            Transform::from_translation(translation.extend(INSERT_LIGHT_Z)),
+            MeshMaterial2d(insert_materials.add(InsertGlowMaterial {
+                params: InsertLightParams {
+                    color: Vec4::new(color.red, color.green, color.blue, 0.0),
+                    color_full: Vec4::new(color_full.red, color_full.green, color_full.blue, 0.0),
+                    // vpx defaults the falloff power to 2; guard degenerate 0,
+                    // which would make pow() a hard-edged disc.
+                    falloff_power: if light.falloff_power > 0.0 {
+                        light.falloff_power
+                    } else {
+                        2.0
+                    },
+                    table_size: table_size_m,
+                },
+                art,
+            })),
+            light_animation(light),
+        ));
+    }
+}
+
+/// Advances every animated light, vpinball's light.cpp `UpdateAnimation`: the
+/// blinker picks the on/off target from the pattern, the fader moves the intensity
+/// toward it, and the result lands in the glow material's alpha.
+fn animate_lights(
+    time: Res<Time>,
+    mut glow_materials: ResMut<Assets<InsertGlowMaterial>>,
+    mut lights: Query<(&mut LightAnimation, &MeshMaterial2d<InsertGlowMaterial>)>,
+) {
+    let dt = time.delta_secs();
+    for (mut anim, material) in &mut lights {
+        // The blinker (light.h UpdateBlinker): one pattern frame per interval.
+        anim.next_blink -= dt;
+        while anim.next_blink <= 0.0 {
+            anim.frame = (anim.frame + 1) % anim.pattern.len();
+            anim.next_blink += anim.interval;
+        }
+        let target = if anim.pattern[anim.frame] {
+            anim.intensity
+        } else {
+            0.0
+        };
+        anim.current = match anim.fader {
+            LightFader::None => target,
+            LightFader::Linear => {
+                // Authored ramp speed, clamped at the target. An infinite or zero
+                // authored speed degenerates to a snap.
+                if anim.current < target {
+                    (anim.current + anim.fade_up * dt).min(target)
+                } else {
+                    (anim.current - anim.fade_down * dt).max(target)
+                }
+            }
+            LightFader::Incandescent => {
+                // Exponential stand-in for vpinball's filament sim: vpinball maps
+                // the authored fade time onto the BULB_44 heat-up (full power in
+                // 30-40 ms of sim time), so the bulb settles within roughly the
+                // authored time with a steep start - which is exactly an
+                // exponential with tau of a quarter of that time.
+                let rate = if anim.current < target {
+                    anim.fade_up
+                } else {
+                    anim.fade_down
+                };
+                if rate > 0.0 && rate.is_finite() {
+                    let fade_time = anim.intensity / rate;
+                    let tau = (fade_time / 4.0).max(1e-4);
+                    anim.current + (target - anim.current) * (1.0 - (-dt / tau).exp())
+                } else {
+                    target
+                }
+            }
+        };
+        if let Some(glow) = glow_materials.get_mut(&material.0) {
+            // The raw intensity goes to the shader (inserts author 10-90);
+            // vpinball's saturate(atten * intensity) there lights the whole
+            // insert at full colour with only the falloff rim dimming.
+            glow.params.color.w = anim.current;
+        }
+    }
 }
 
 /// Spawns the [`Shadow`] entities of one source: a dark copy of its silhouette per

@@ -20,10 +20,14 @@ struct PlasticMaterial {
 @group(#{MATERIAL_BIND_GROUP}) @binding(3) var light_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(4) var light_sampler: sampler;
 
+// Scale on the sampled light map; the map's ambient clear is pre-divided by this.
+// Keep in sync with LIGHT_OVERBRIGHT in lightmap.rs (and playfield_light.wgsl).
+const OVERBRIGHT: f32 = 1.5;
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let tex = textureSample(base_texture, base_sampler, mesh.uv);
-    let light = textureSample(light_texture, light_sampler, mesh.uv);
+    let light = textureSample(light_texture, light_sampler, mesh.uv) * OVERBRIGHT;
     let base = material.color * tex;
     // Transmitted light: tinted by the plastic colour (sqrt reads brighter, like
     // vpinball), scaled by the light under this spot. Masked so cut-out holes

@@ -33,11 +33,28 @@ pub(crate) const LIGHTMAP_LAYER: usize = 1;
 /// cut-out plastics cast their art, screws on a plastic merge into its shadow.
 pub(crate) const STATIC_SHADOW_LAYER: usize = 2;
 
-/// The light map is cleared to this ambient level; the playfield reads as
-/// `table_image * ambient` where nothing lights it, brighter where lit, darker
-/// where shadowed. Higher = brighter unlit playfield, but less headroom before lit
-/// areas clip (HDR + bloom later would remove that ceiling).
-const AMBIENT: Color = Color::srgb(0.7, 0.7, 0.7);
+/// The ambient level of the unlit playfield: it reads as `table_image * AMBIENT`
+/// where nothing lights it, brighter where lit, darker where shadowed.
+const AMBIENT: f32 = 0.7;
+
+/// The compositing shaders multiply the sampled light map by this, so a fully lit
+/// spot reads brighter than the playfield art itself instead of clipping at it
+/// (a poor man's HDR until the map is HDR and lit areas can bloom). The ambient
+/// clear is stored pre-divided, so the unlit level and the shadows (which darken
+/// relative to ambient) are unaffected. Keep in sync with the OVERBRIGHT consts
+/// in playfield_light.wgsl and plastic_transmission.wgsl.
+const LIGHT_OVERBRIGHT: f32 = 1.5;
+
+/// The light map clear colour: ambient pre-divided by [`LIGHT_OVERBRIGHT`] in
+/// linear space (where the shader multiply happens).
+fn ambient_clear() -> Color {
+    let linear = Color::srgb(AMBIENT, AMBIENT, AMBIENT).to_linear();
+    Color::from(LinearRgba::rgb(
+        linear.red / LIGHT_OVERBRIGHT,
+        linear.green / LIGHT_OVERBRIGHT,
+        linear.blue / LIGHT_OVERBRIGHT,
+    ))
+}
 
 /// Light map texture height in pixels; width is derived from the table aspect.
 /// Driven by the single shadow-softness knob in `light` (a low value blurs the
@@ -211,7 +228,7 @@ pub(crate) fn lightmap_camera(
         Camera2d,
         Camera {
             order: -1,
-            clear_color: ClearColorConfig::Custom(AMBIENT),
+            clear_color: ClearColorConfig::Custom(ambient_clear()),
             ..default()
         },
         RenderTarget::Image(light_map.into()),

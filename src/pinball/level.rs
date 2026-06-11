@@ -5,7 +5,7 @@ use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
-use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
+use crate::pinball::light::{GlowMaterial, InsertGlowMaterial, LightingAssets, spawn_light};
 use crate::pinball::lightmap::{PlayfieldLightMaterial, lightmap_camera, lightmap_image};
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::primitive::spawn_primitive;
@@ -52,6 +52,7 @@ pub fn spawn_level(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
+    mut insert_glow_materials: ResMut<Assets<InsertGlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
     mut plastic_materials: ResMut<Assets<crate::pinball::lightmap::PlasticMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -187,7 +188,10 @@ pub fn spawn_level(
                         spawn_light(
                             &mut meshes,
                             &mut glow_materials,
+                            &mut insert_glow_materials,
                             &lighting.glow,
+                            vpx_asset,
+                            Vec2::new(table_width_m, table_depth_m),
                             vpx_to_bevy_transform,
                             parent,
                             light,
@@ -260,6 +264,17 @@ pub fn spawn_level(
                         primitive,
                         item_index,
                     ),
+                    GameItemEnum::Flasher(flasher) => {
+                        crate::pinball::flasher::spawn_flasher(
+                            parent,
+                            &mut meshes,
+                            &mut materials,
+                            vpx_asset,
+                            vpx_to_bevy_transform,
+                            flasher,
+                            item_index,
+                        );
+                    }
                     _ => (),
                 });
         });

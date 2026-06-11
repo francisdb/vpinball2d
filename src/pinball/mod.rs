@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 pub(crate) mod ball;
 mod ballcontrol;
 mod bumper;
+mod flasher;
 pub(crate) mod flipper;
 pub(crate) mod gate;
 mod kicker;

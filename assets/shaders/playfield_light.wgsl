@@ -11,9 +11,14 @@
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var light_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(3) var light_sampler: sampler;
 
+// Scale on the sampled light map so lit spots read brighter than the playfield
+// art itself; the map's ambient clear is pre-divided by this. Keep in sync with
+// LIGHT_OVERBRIGHT in lightmap.rs (and plastic_transmission.wgsl).
+const OVERBRIGHT: f32 = 1.5;
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let base = textureSample(playfield_texture, playfield_sampler, mesh.uv);
     let light = textureSample(light_texture, light_sampler, mesh.uv);
-    return vec4<f32>(base.rgb * light.rgb, 1.0);
+    return vec4<f32>(base.rgb * light.rgb * OVERBRIGHT, 1.0);
 }
