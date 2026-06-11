@@ -40,12 +40,14 @@ pub(crate) struct TableEntry {
 
 impl TableEntry {
     /// Build an entry from its relative path and an optional metadata title.
-    fn build(rel_path: &str, title: Option<String>) -> Self {
+    fn build(rel_path: &str, title: Option<String>, tables_dir: &Path) -> Self {
         let file_name = Path::new(rel_path)
             .file_name()
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_else(|| rel_path.to_string());
-        let has_script = crate::pinball::scripts::has_script(&file_name);
+        // Scripted: a hand-written Rust module or a `.lua` sidecar next to the vpx.
+        let has_script = crate::pinball::scripts::has_script(&file_name)
+            || crate::scripting::has_script_sidecar(tables_dir, rel_path);
         let title = title.unwrap_or_else(|| fallback_title(rel_path));
         Self {
             rel_path: rel_path.to_string(),
@@ -82,7 +84,7 @@ fn start_indexing(mut commands: Commands, tables_dir: Res<TablesDir>, index: Res
     commands.insert_resource(TableIndex {
         entries: rel_paths
             .iter()
-            .map(|rel| TableEntry::build(rel, None))
+            .map(|rel| TableEntry::build(rel, None, &root))
             .collect(),
         indexed: false,
     });
@@ -92,7 +94,7 @@ fn start_indexing(mut commands: Commands, tables_dir: Res<TablesDir>, index: Res
             .into_iter()
             .map(|rel| {
                 let title = read_title(&root.join(&rel));
-                TableEntry::build(&rel, title)
+                TableEntry::build(&rel, title, &root)
             })
             .collect::<Vec<_>>()
     });

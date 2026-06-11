@@ -329,6 +329,14 @@ pub(super) fn spawn_wall(
             collider,
         ));
         top.insert(&mut entity);
+        // Walls authored with hit events score in the table script
+        // (`<name>_hit`); enable collision events so the bridge sees them.
+        if wall.hit_event {
+            entity.insert((
+                crate::scripting::ScriptName(wall.name.clone()),
+                CollisionEventsEnabled,
+            ));
+        }
         // A wall is a slingshot when it has a threshold and a drag point flagged as such
         // (vpinball builds slingshot segments from `is_slingshot` drag points).
         let is_slingshot = wall.slingshot_threshold > 0.0
@@ -459,6 +467,7 @@ fn handle_slingshot_collisions(
     mut visibility: Query<&mut Visibility>,
     flashing: Query<(), With<SlingshotFlash>>,
     mut commands: Commands,
+    mut slingshot_fired: MessageWriter<crate::scripting::SlingshotFired>,
 ) {
     for collision in collision_reader.read() {
         let (Some(b1), Some(b2)) = (collision.body1, collision.body2) else {
@@ -521,6 +530,11 @@ fn handle_slingshot_collisions(
         let kick_m_s =
             0.5 * (1.0 - t * t) * slingshot.force * crate::pinball::physics::VP_SPEED_TO_M_S;
         forces.apply_linear_impulse(outward * kick_m_s * crate::pinball::ball::BALL_MASS_KG);
+
+        // Table scripts score slingshots (`<name>_slingshot`).
+        slingshot_fired.write(crate::scripting::SlingshotFired {
+            name: slingshot.name.clone(),
+        });
 
         // play the slingshot sound at the slingshot (spatial panning from its position)
         if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {

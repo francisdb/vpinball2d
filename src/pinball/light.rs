@@ -188,13 +188,17 @@ enum LightFader {
 
 /// vpinball's light animation (light.cpp `UpdateAnimation`/`UpdateBlinker`): a blink
 /// pattern advances one character every `interval`, and the intensity chases the
-/// pattern's on/off target through the fader. Tables ship their lamps off and a ROM
-/// would normally drive them; we do not run scripts, so every insert gets this
-/// blinker as attract-style demo behaviour.
+/// pattern's on/off target through the fader. Without a table script every insert
+/// gets the blinker as attract-style demo behaviour; a script drives the state
+/// (off/on/blinking) instead via [`LightAnimation::set_state`].
 #[derive(Component)]
 pub(crate) struct LightAnimation {
-    /// The blink pattern as on/off frames (vpx `blink_pattern`, '1' = lit).
+    /// The current pattern as on/off frames: the authored blink pattern while
+    /// blinking, a single steady frame when a script holds the light on or off.
     pattern: Vec<bool>,
+    /// The authored blink pattern (vpx `blink_pattern`, '1' = lit), restored
+    /// when a script sets the light to blinking.
+    authored_pattern: Vec<bool>,
     /// Seconds per pattern frame (vpx `blink_interval`, default 125 ms).
     interval: f32,
     /// Current frame in the pattern.
@@ -214,6 +218,23 @@ pub(crate) struct LightAnimation {
     /// Animated intensity, chasing on/off through the fader; lands in the
     /// material's intensity each frame.
     current: f32,
+}
+
+impl LightAnimation {
+    /// Drive the light from a table script: vpinball light states 0 = off,
+    /// 1 = on, 2 = blinking (the authored pattern). The fader still chases the
+    /// new target, so scripted lights keep their authored fade.
+    pub(crate) fn set_state(&mut self, state: f32) {
+        self.pattern = if state == 2.0 {
+            self.authored_pattern.clone()
+        } else if state != 0.0 {
+            vec![true]
+        } else {
+            vec![false]
+        };
+        self.frame = 0;
+        self.next_blink = self.interval;
+    }
 }
 
 /// One drop shadow in the light map: a dark silhouette following its source entity,
@@ -496,10 +517,10 @@ fn fade_rate(per_ms: f32) -> f32 {
 
 /// The blinker + fader state for one insert, from its authored vpx fields
 /// (vpinball's defaults where unset: pattern "10", interval 125 ms, linear fader).
-fn light_animation(light: &vpx::gameitem::light::Light) -> LightAnimation {
-    let mut pattern: Vec<bool> = light.blink_pattern.chars().map(|c| c == '1').collect();
-    if pattern.is_empty() {
-        pattern = vec![true, false];
+fn light_animation(light: &vpx::gameitem::light::Light, script_active: bool) -> LightAnimation {
+    let mut authored_pattern: Vec<bool> = light.blink_pattern.chars().map(|c| c == '1').collect();
+    if authored_pattern.is_empty() {
+        authored_pattern = vec![true, false];
     }
     let interval = if light.blink_interval > 0 {
         light.blink_interval as f32 / 1000.0
@@ -512,9 +533,10 @@ fn light_animation(light: &vpx::gameitem::light::Light) -> LightAnimation {
         // vpinball defaults to the linear fader (light.h `m_fader`).
         Some(Fader::Linear) | None => LightFader::Linear,
     };
-    LightAnimation {
+    let mut animation = LightAnimation {
         next_blink: interval,
-        pattern,
+        pattern: authored_pattern.clone(),
+        authored_pattern,
         interval,
         frame: 0,
         fader,
@@ -524,7 +546,14 @@ fn light_animation(light: &vpx::gameitem::light::Light) -> LightAnimation {
         fade_down: fade_rate(light.fade_speed_down),
         intensity: light.intensity,
         current: 0.0,
+    };
+    // With a table script in charge, lamps start in their authored saved state
+    // and the script drives them; without one, every lamp blinks its pattern as
+    // attract-style demo behaviour.
+    if script_active {
+        animation.set_state(light.state.unwrap_or(0.0));
     }
+    animation
 }
 
 pub(super) fn spawn_light(
@@ -537,6 +566,7 @@ pub(super) fn spawn_light(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
+    script_active: bool,
 ) {
     // Backglass-mode lights belong on the backdrop, not the playfield.
     if light.visible == Some(false) || light.is_backglass {
@@ -633,7 +663,7 @@ pub(super) fn spawn_light(
                 },
                 art,
             })),
-            light_animation(light),
+            light_animation(light, script_active),
         ));
     }
 }

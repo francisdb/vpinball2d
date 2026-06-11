@@ -61,7 +61,11 @@ pub fn spawn_level(
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
     camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
+    script: Option<Res<crate::scripting::ScriptActive>>,
 ) {
+    // A table script owns the ball lifecycle and the lamp states; without one
+    // the engine free-plays (auto ball, attract blinker).
+    let script_active = script.is_some();
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
@@ -143,15 +147,17 @@ pub fn spawn_level(
             )],
         ))
         .with_children(|parent| {
-            parent.spawn(ball(
-                0,
-                &table_assets,
-                &mut meshes,
-                &mut ball_materials,
-                &ball_assets,
-                &assets_vpx,
-                Vec2::default(),
-            ));
+            if !script_active {
+                parent.spawn(ball(
+                    0,
+                    &table_assets,
+                    &mut meshes,
+                    &mut ball_materials,
+                    &ball_assets,
+                    &assets_vpx,
+                    Vec2::default(),
+                ));
+            }
             // parent.spawn(ball(
             //     4,
             //     &table_assets,
@@ -219,6 +225,7 @@ pub fn spawn_level(
                             vpx_to_bevy_transform,
                             parent,
                             light,
+                            script_active,
                         );
                     }
                     GameItemEnum::Rubber(rubber) => spawn_rubber(

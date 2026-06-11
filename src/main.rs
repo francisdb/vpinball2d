@@ -11,6 +11,7 @@ mod pinball;
 #[cfg(any(feature = "remote_control", feature = "telemetry"))]
 mod play;
 mod screens;
+mod scripting;
 mod tables;
 mod theme;
 mod vpx;
@@ -131,6 +132,7 @@ impl Plugin for AppPlugin {
             asset_tracking::plugin,
             audio::plugin,
             pinball::plugin,
+            scripting::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,
             #[cfg(any(feature = "remote_control", feature = "telemetry"))]

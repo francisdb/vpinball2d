@@ -60,6 +60,7 @@ pub(super) fn spawn_kicker(
         Kicker {
             name: kicker.name.clone(),
         },
+        crate::scripting::ScriptName(kicker.name.clone()),
         Name::from(format!("Kicker {}", kicker.name)),
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x + vpu_to_m(kicker.center.x),
@@ -97,6 +98,7 @@ fn handle_drain(
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     ball_assets: Res<BallAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    script: Option<Res<crate::scripting::ScriptActive>>,
 ) {
     for collision in collision_reader.read() {
         // Match on the collider entities, not body1/body2: a kicker is a sensor without a
@@ -139,6 +141,13 @@ fn handle_drain(
             drain_kicker_entity,
             &sounds.drain,
         );
+
+        // With a table script in charge the drain sound is still ours (static
+        // feedback, see the sidecar), but the ball lifecycle is the script's:
+        // it receives drain_hit and decides when a new ball appears.
+        if script.is_some() {
+            continue;
+        }
 
         commands.entity(ball_entity).despawn();
 

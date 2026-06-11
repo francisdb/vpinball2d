@@ -451,7 +451,10 @@ fn flipper_movement(
     table_assets: Option<Res<TableAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
     mut commands: Commands,
+    flippers_enabled: Option<Res<crate::scripting::FlippersEnabled>>,
 ) {
+    // A tilted table cuts flipper power (the script drives this gate).
+    let enabled = flippers_enabled.map(|e| e.0).unwrap_or(true);
     for (entity, mut flipper) in &mut flippers {
         // The solenoid drives towards the active angle, so the sign of the swing tells us
         // which way the flipper turns: a counter-clockwise (positive) swing is a left-hand
@@ -459,12 +462,14 @@ fn flipper_movement(
         // flipper concept of its own - the table script binds each named flipper to
         // LeftFlipperKey / RightFlipperKey - so we map it to the matching button here.
         let towards_active = (flipper.active_angle - flipper.rest_angle).signum();
-        let pressed = if towards_active > 0.0 {
-            keyboard_input.pressed(KeyCode::ArrowLeft) || keyboard_input.pressed(KeyCode::ShiftLeft)
-        } else {
-            keyboard_input.pressed(KeyCode::ArrowRight)
-                || keyboard_input.pressed(KeyCode::ShiftRight)
-        };
+        let pressed = enabled
+            && if towards_active > 0.0 {
+                keyboard_input.pressed(KeyCode::ArrowLeft)
+                    || keyboard_input.pressed(KeyCode::ShiftLeft)
+            } else {
+                keyboard_input.pressed(KeyCode::ArrowRight)
+                    || keyboard_input.pressed(KeyCode::ShiftRight)
+            };
 
         // While held, drive towards the active angle; when released the return spring pulls
         // back to rest with a weaker torque. Gravity alone is not enough to hold the flipper

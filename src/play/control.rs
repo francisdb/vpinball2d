@@ -36,6 +36,9 @@ fn key_for(name: &str) -> Option<KeyCode> {
         "right" => Some(KeyCode::ArrowRight),
         // The plunger systems listen for Enter (see pinball::plunger), not Space.
         "plunge" | "plunger" => Some(KeyCode::Enter),
+        // Table-script keys (see scripting::key_code): coin in, start game.
+        "coin" => Some(KeyCode::Digit5),
+        "start" => Some(KeyCode::Digit1),
         _ => None,
     }
 }

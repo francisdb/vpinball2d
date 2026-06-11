@@ -137,6 +137,7 @@ pub(super) fn spawn_bumper(
     let force = bumper.force * crate::pinball::physics::VP_SPEED_TO_M_S;
     let mut entity = parent.spawn((
         Bumper { force },
+        crate::scripting::ScriptName(bumper.name.clone()),
         Name::from(format!("Bumper{}", bumper.name)),
         Mesh2d(meshes.add(mesh)),
         MeshMaterial2d(base_material),
