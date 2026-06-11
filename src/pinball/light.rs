@@ -53,10 +53,12 @@ const SHADOW_ALPHA: f32 = 0.22;
 pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
 /// Z of the shadows in the light map: above the glows (see [`LIGHT_Z`]).
 const SHADOW_Z: f32 = 0.012;
-/// Nominal height of the moving shadow casters (metres): the ball's diameter, also
-/// about a flipper's height. With the lamp height it sets how far their shadows
-/// stretch away from the lamp.
-const SHADOW_OBJECT_HEIGHT_M: f32 = 2.0 * BALL_RADIUS_M;
+/// Nominal height the moving casters' shadows project at (metres). A grounded
+/// caster's shadow is the sweep from its base (no offset, it touches the caster)
+/// to its top; projecting the single silhouette copy at the mid height - the
+/// ball's centre, about half a flipper - keeps the near end tucked under the
+/// caster instead of floating beside it, while the far edge still peeks out.
+const SHADOW_OBJECT_HEIGHT_M: f32 = BALL_RADIUS_M;
 /// Nominal height of the static decor for the static-shadow pass (vpx units): the
 /// pass mixes playfield-level posts with raised plastics, and the plastics tops
 /// (~65 vpu) dominate what the eye reads, so their shadows get the honest length.
