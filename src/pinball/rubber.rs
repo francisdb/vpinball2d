@@ -9,6 +9,8 @@ use bevy::prelude::*;
 use vpin::vpx;
 use vpin::vpx::units::vpu_to_m;
 
+/// Fallback when the rubber references no (known) material; vpinball's default
+/// material base colour is white.
 const RUBER_COLOR: Srgba = css::WHITE;
 
 #[derive(Component)]
@@ -20,6 +22,7 @@ pub struct Rubber {
 pub(super) fn spawn_rubber(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    vpx_asset: &crate::vpx::VpxAsset,
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     rubber: &vpx::gameitem::rubber::Rubber,
@@ -68,6 +71,17 @@ pub(super) fn spawn_rubber(
         Visibility::Hidden
     };
 
+    // The rubber's authored material base colour, like vpinball shades it (a
+    // table's "white" rubbers are usually grey, posts can be black or coloured).
+    let color = vpx_asset
+        .raw
+        .gamedata
+        .materials
+        .iter()
+        .flatten()
+        .find(|m| m.name == rubber.material)
+        .map(|m| Srgba::rgb_u8(m.base_color.r, m.base_color.g, m.base_color.b))
+        .unwrap_or(RUBER_COLOR);
     let mut entity = parent.spawn((
         Rubber {
             name: rubber.name.clone(),
@@ -79,7 +93,7 @@ pub(super) fn spawn_rubber(
             render_z,
         ),
         Mesh2d(mesh),
-        MeshMaterial2d(materials.add(Color::from(RUBER_COLOR))),
+        MeshMaterial2d(materials.add(Color::from(color))),
         visibility,
     ));
 

@@ -200,6 +200,7 @@ pub fn spawn_level(
                     GameItemEnum::Rubber(rubber) => spawn_rubber(
                         &mut meshes,
                         &mut materials,
+                        vpx_asset,
                         vpx_to_bevy_transform,
                         parent,
                         rubber,
