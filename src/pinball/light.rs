@@ -27,10 +27,11 @@ pub(crate) struct LightingAssets {
     pub(crate) glow: Handle<Image>,
 }
 
-/// Z of the light glows in the light map: above the shadows, since an insert lamp
-/// is its own light source and must not be dimmed by an overhead-lamp shadow. The
-/// vpx bulb height is irrelevant for 2D layering.
-const LIGHT_Z: f32 = 0.012;
+/// Z of the light glows in the light map: below the shadows. Glows are additive, so
+/// drawn above a shadow they add the brightness right back and the shadow vanishes
+/// wherever GI glows cover the playfield; drawn first, the shadow's dark multiply
+/// attenuates ambient and glow alike. The vpx bulb height is irrelevant here.
+const LIGHT_Z: f32 = 0.005;
 /// Additive glow alpha per unit of vpx light intensity. Pinball general
 /// illumination uses many low-power bulbs (intensity ~4); inserts are far
 /// brighter (~90). Scaling by intensity keeps GI gentle while lit inserts stand
@@ -45,13 +46,13 @@ const MAX_GLOW_ALPHA: f32 = 0.9;
 // and are softened *uniformly* by the map's resolution, so they always match. The
 // two values below are the only knobs for how every shadow reads.
 /// How dark every shadow is (0 = none, 1 = black).
-const SHADOW_ALPHA: f32 = 0.4;
+const SHADOW_ALPHA: f32 = 0.3;
 /// Softness of every shadow: the light map is rendered at this height (px) and
 /// upscaled onto the playfield, so a lower value blurs all shadows (and glows)
 /// more. `lightmap` reads this so it stays the single shadow-softness knob.
 pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
-/// Z of the shadows in the light map: below the glows (a lamp shines over a shadow).
-const SHADOW_Z: f32 = 0.005;
+/// Z of the shadows in the light map: above the glows (see [`LIGHT_Z`]).
+const SHADOW_Z: f32 = 0.012;
 /// Ball shadow silhouette radius: the ball's disc, enlarged so the shadow peeks out
 /// from under it.
 const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
