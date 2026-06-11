@@ -264,6 +264,17 @@ pub fn spawn_level(
                         primitive,
                         item_index,
                     ),
+                    GameItemEnum::Flasher(flasher) => {
+                        crate::pinball::flasher::spawn_flasher(
+                            parent,
+                            &mut meshes,
+                            &mut materials,
+                            vpx_asset,
+                            vpx_to_bevy_transform,
+                            flasher,
+                            item_index,
+                        );
+                    }
                     _ => (),
                 });
         });
