@@ -99,14 +99,25 @@ impl VpxLoader {
         // Convert them into the regular list so the rest of the code has a single
         // material source, like vpinball does on load.
         if vpx.gamedata.materials.is_none() {
-            vpx.gamedata.materials = Some(
-                vpx.gamedata
-                    .materials_old
-                    .iter()
-                    .map(material_from_save_material)
-                    .collect(),
-            );
+            let mut materials: Vec<Material> = vpx
+                .gamedata
+                .materials_old
+                .iter()
+                .map(material_from_save_material)
+                .collect();
+            // The legacy physics half (PHMA) is a separate list keyed by name.
+            for physics in vpx.gamedata.materials_physics_old.iter().flatten() {
+                if let Some(material) = materials.iter_mut().find(|m| m.name == physics.name) {
+                    material.elasticity = physics.elasticity;
+                    material.elasticity_falloff = physics.elasticity_falloff;
+                    material.friction = physics.friction;
+                    material.scatter_angle = physics.scatter_angle;
+                }
+            }
+            vpx.gamedata.materials = Some(materials);
         }
+
+        resolve_physics_materials(&mut vpx);
 
         // Count the per-item work for the loading screen's progress bar. Images
         // dominate the load time, but counting everything keeps the bar moving.
@@ -282,11 +293,80 @@ impl VpxLoader {
     }
 }
 
+/// Resolve vpinball's shared physics materials: an item saved with
+/// `overwrite_physics = false` takes its elasticity, falloff, friction and scatter
+/// from the named physics material instead of its own fields (vpinball's
+/// `SetupHitObject`, e.g. rubber.cpp / surface.cpp / ramp.cpp). The values are
+/// copied onto the items so the spawners keep reading the item fields. Ramps take
+/// no falloff, like vpinball.
+fn resolve_physics_materials(vpx: &mut vpin::vpx::VPX) {
+    struct Physics {
+        elasticity: f32,
+        elasticity_falloff: f32,
+        friction: f32,
+        scatter_angle: f32,
+    }
+    let materials: HashMap<&str, Physics> = vpx
+        .gamedata
+        .materials
+        .iter()
+        .flatten()
+        .map(|m| {
+            (
+                m.name.as_str(),
+                Physics {
+                    elasticity: m.elasticity,
+                    elasticity_falloff: m.elasticity_falloff,
+                    friction: m.friction,
+                    scatter_angle: m.scatter_angle,
+                },
+            )
+        })
+        .collect();
+    let find = |name: &Option<String>| -> Option<&Physics> { materials.get(name.as_deref()?) };
+    for item in &mut vpx.gameitems {
+        match item {
+            GameItemEnum::Wall(wall) if wall.overwrite_physics == Some(false) => {
+                if let Some(mat) = find(&wall.physics_material) {
+                    wall.elasticity = mat.elasticity;
+                    wall.elasticity_falloff = Some(mat.elasticity_falloff);
+                    wall.friction = mat.friction;
+                    wall.scatter = mat.scatter_angle;
+                }
+            }
+            GameItemEnum::Rubber(rubber) if rubber.overwrite_physics == Some(false) => {
+                if let Some(mat) = find(&rubber.physics_material) {
+                    rubber.elasticity = mat.elasticity;
+                    rubber.elasticity_falloff = mat.elasticity_falloff;
+                    rubber.friction = mat.friction;
+                    rubber.scatter = mat.scatter_angle;
+                }
+            }
+            GameItemEnum::Ramp(ramp) if ramp.overwrite_physics == Some(false) => {
+                if let Some(mat) = find(&ramp.physics_material) {
+                    ramp.elasticity = mat.elasticity;
+                    ramp.friction = mat.friction;
+                    ramp.scatter = mat.scatter_angle;
+                }
+            }
+            GameItemEnum::HitTarget(target) if target.overwrite_physics == Some(false) => {
+                if let Some(mat) = find(&target.physics_material) {
+                    target.elasticity = mat.elasticity;
+                    target.elasticity_falloff = mat.elasticity_falloff;
+                    target.friction = mat.friction;
+                    target.scatter = mat.scatter_angle;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Convert a legacy (pre 10.8) [`SaveMaterial`] to a [`Material`], inverting the
 /// quantization vpinball applies when saving (see `From<&Material> for SaveMaterial`
 /// in vpin and `Material::Material(const SaveMaterial&)` in vpinball). The physics
-/// fields are private on [`Material`] and stay at their defaults; physics comes from
-/// the game items themselves.
+/// half lives in the separate legacy PHMA list and is merged afterwards (see
+/// `load_vpx`).
 fn material_from_save_material(save: &SaveMaterial) -> Material {
     // Material has private fields, so a struct literal is not possible; start from
     // the default and overwrite the visual fields.
@@ -471,4 +551,50 @@ fn load_mesh_2d_from_drag_points(
     mesh.insert_indices(Indices::U32(indices));
     let labeled = load_context.begin_labeled_asset();
     load_context.add_loaded_labeled_asset(label, labeled.finish(mesh))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vpin::vpx::VPX;
+    use vpin::vpx::gameitem::rubber::Rubber;
+
+    /// An item saved with `overwrite_physics = false` takes its physics from the
+    /// named material; one that overrides keeps its own fields.
+    #[test]
+    fn shared_physics_materials_resolve() {
+        let mut material = Material::default();
+        material.name = "Rubber Posts".to_string();
+        material.elasticity = 0.9;
+        material.elasticity_falloff = 0.15;
+        material.friction = 0.25;
+        material.scatter_angle = 2.0;
+
+        let mut shared = Rubber::default();
+        shared.physics_material = Some("Rubber Posts".to_string());
+        shared.overwrite_physics = Some(false);
+        shared.elasticity = 0.5;
+
+        let mut own = Rubber::default();
+        own.physics_material = Some("Rubber Posts".to_string());
+        own.overwrite_physics = Some(true);
+        own.elasticity = 0.5;
+
+        let mut vpx = VPX::default();
+        vpx.gamedata.materials = Some(vec![material]);
+        vpx.gameitems = vec![GameItemEnum::Rubber(shared), GameItemEnum::Rubber(own)];
+
+        resolve_physics_materials(&mut vpx);
+
+        let GameItemEnum::Rubber(shared) = &vpx.gameitems[0] else {
+            unreachable!()
+        };
+        assert_eq!(shared.elasticity, 0.9);
+        assert_eq!(shared.elasticity_falloff, 0.15);
+        assert_eq!(shared.friction, 0.25);
+        let GameItemEnum::Rubber(own) = &vpx.gameitems[1] else {
+            unreachable!()
+        };
+        assert_eq!(own.elasticity, 0.5);
+    }
 }
