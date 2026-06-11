@@ -53,6 +53,7 @@ pub fn spawn_level(
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
+    mut plastic_materials: ResMut<Assets<crate::pinball::lightmap::PlasticMaterial>>,
     mut images: ResMut<Assets<Image>>,
     ball_assets: Res<BallAssets>,
     lighting: Res<LightingAssets>,
@@ -150,8 +151,10 @@ pub fn spawn_level(
                 .for_each(|(item_index, item)| match item {
                     GameItemEnum::Wall(wall) => spawn_wall(
                         parent,
-                        &meshes,
+                        &mut meshes,
                         &mut materials,
+                        &mut plastic_materials,
+                        &light_map,
                         vpx_asset,
                         vpx_to_bevy_transform,
                         wall,
@@ -228,6 +231,7 @@ pub fn spawn_level(
                         vpx_asset,
                         vpx_to_bevy_transform,
                         target,
+                        item_index,
                     ),
                     GameItemEnum::Spinner(spinner) => spawn_spinner(
                         parent,

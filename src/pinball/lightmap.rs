@@ -15,10 +15,10 @@ use bevy::camera::{Camera, ClearColorConfig, RenderTarget, ScalingMode};
 use bevy::image::Image;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, TextureFormat};
+use bevy::render::render_resource::{AsBindGroup, ShaderType, TextureFormat};
 use bevy::shader::ShaderRef;
-use bevy::sprite_render::Material2d;
 use bevy::sprite_render::Material2dPlugin;
+use bevy::sprite_render::{AlphaMode2d, Material2d};
 
 /// Render layer that the light/shadow map camera sees. Light glows and shadows live
 /// here only, so the main camera does not draw them directly; they reach the screen
@@ -67,8 +67,77 @@ impl Material2d for PlayfieldLightMaterial {
     }
 }
 
+/// Uniform parameters of [`PlasticMaterial`].
+#[derive(ShaderType, Clone, Debug)]
+pub(crate) struct PlasticParams {
+    /// Tint and opacity of the plastic (vpx material base colour + opacity).
+    pub(crate) color: Vec4,
+    /// How much of the light below is transmitted through the plastic.
+    pub(crate) transmission: f32,
+}
+
+/// Material for translucent plastics over the playfield: the usual tinted texture
+/// plus the light below transmitted through the plastic, vpinball's bulb
+/// transmission ("add light from below", BasicShader). This is what makes a
+/// coloured acrylic read as a glowing wash instead of a barely-visible tint - the
+/// vpx data gives e.g. TNA's blacklight acrylic ~5% effective alpha, and all its
+/// perceived colour comes from light transmitted through it.
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub(crate) struct PlasticMaterial {
+    #[uniform(0)]
+    pub(crate) params: PlasticParams,
+    #[texture(1)]
+    #[sampler(2)]
+    pub(crate) texture: Option<Handle<Image>>,
+    #[texture(3)]
+    #[sampler(4)]
+    pub(crate) light_map: Handle<Image>,
+}
+
+impl Material2d for PlasticMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/plastic_transmission.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        // Translucent: sort in the transparent pass by entity z, so the plastic
+        // draws over everything beneath it (and tints it via the blend below).
+        AlphaMode2d::Blend
+    }
+
+    fn specialize(
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: bevy::sprite_render::Material2dKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        use bevy::render::render_resource::{
+            BlendComponent, BlendFactor, BlendOperation, BlendState,
+        };
+        // Premultiplied alpha: the shader weights the base colour by its own alpha
+        // and the transmitted light adds on top of whatever is below.
+        const PREMULTIPLIED: BlendComponent = BlendComponent {
+            src_factor: BlendFactor::One,
+            dst_factor: BlendFactor::OneMinusSrcAlpha,
+            operation: BlendOperation::Add,
+        };
+        if let Some(target) = descriptor
+            .fragment
+            .as_mut()
+            .and_then(|fragment| fragment.targets.get_mut(0))
+            .and_then(|target| target.as_mut())
+        {
+            target.blend = Some(BlendState {
+                color: PREMULTIPLIED,
+                alpha: PREMULTIPLIED,
+            });
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins(Material2dPlugin::<PlayfieldLightMaterial>::default());
+    app.add_plugins(Material2dPlugin::<PlasticMaterial>::default());
 }
 
 /// The render layer for everything that should be baked into the light map.
