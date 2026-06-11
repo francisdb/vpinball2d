@@ -12,7 +12,8 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{
     AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, Extent3d,
-    RenderPipelineDescriptor, SpecializedMeshPipelineError, TextureDimension, TextureFormat,
+    RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError, TextureDimension,
+    TextureFormat,
 };
 use bevy::shader::ShaderRef;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dKey, Material2dPlugin};
@@ -210,10 +211,9 @@ pub(crate) struct LightAnimation {
     fade_down: f32,
     /// The authored full intensity, the "on" target.
     intensity: f32,
-    /// Animated intensity, chasing on/off through the fader.
+    /// Animated intensity, chasing on/off through the fader; lands in the
+    /// material's intensity each frame.
     current: f32,
-    /// The light's colour; the animated intensity sets its alpha.
-    color: LinearRgba,
 }
 
 /// One drop shadow in the light map: a dark silhouette following its source entity,
@@ -277,31 +277,46 @@ impl Material2d for GlowMaterial {
     }
 }
 
+/// Uniform parameters of [`InsertGlowMaterial`].
+#[derive(ShaderType, Clone, Debug)]
+pub(crate) struct InsertLightParams {
+    /// rgb: the light colour (linear); a: the current animated intensity in raw
+    /// vpx units (inserts author 10-90; saturation in the shader does the rest).
+    pub(crate) color: Vec4,
+    /// The vpx falloff power shaping the attenuation curve (default 2).
+    pub(crate) falloff_power: f32,
+    /// Playfield extent in world metres (the table is centred on the origin),
+    /// to derive table-space art UVs from the fragment's world position.
+    pub(crate) table_size: Vec2,
+}
+
 /// Material for the animated insert lights, drawn directly over the playfield on
-/// the main view (vpinball renders its classic lights the same way: the shape mesh
-/// composited onto the already-lit playfield, ClassicLightShader's ScreenHDR). The
-/// blend is a screen blend - `out = light + dest * (1 - light)` - so the insert
-/// saturates toward the light colour as the intensity rises without ever
-/// over-brightening, and the playfield art shows through partially lit areas.
-/// The light map's multiply could never do this: a dark insert print would stay
-/// dark no matter the glow, reading as a dim spot in the middle of the insert.
+/// the main view like vpinball's classic light (the shape mesh composited onto the
+/// already-lit playfield). The shader ports PS_LightWithTexel: the light colour
+/// times the falloff attenuation is added over the insert's art, then the art is
+/// re-composited with Overlay (darks like decal prints stay dark) and Screen (the
+/// art brightens the result) - see ClassicLightShader.hlsl. The light map's
+/// multiply could never do this: a dark insert print would stay dark no matter
+/// the glow, reading as a dim spot in the middle of the insert.
 #[derive(Asset, TypePath, AsBindGroup, Clone)]
 pub(crate) struct InsertGlowMaterial {
     #[uniform(0)]
-    color: LinearRgba,
+    params: InsertLightParams,
+    /// The art under/of the insert: the light's own image like vpinball, usually
+    /// the playfield image.
     #[texture(1)]
     #[sampler(2)]
-    texture: Handle<Image>,
+    art: Handle<Image>,
 }
 
 impl Material2d for InsertGlowMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/glow.wgsl".into()
+        "shaders/insert_light.wgsl".into()
     }
 
     fn alpha_mode(&self) -> AlphaMode2d {
         // Transparent pass: sorted back to front, so the playfield (opaque) and
-        // anything below the insert's z is on screen before the light screens
+        // anything below the insert's z is on screen before the light blends
         // over it.
         AlphaMode2d::Blend
     }
@@ -311,12 +326,12 @@ impl Material2d for InsertGlowMaterial {
         _layout: &MeshVertexBufferLayoutRef,
         _key: Material2dKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        // Screen blend: framebuffer = source + framebuffer * (1 - source). The
-        // shader outputs the light colour premultiplied by the saturating
-        // falloff-times-intensity, like vpinball's saturate(atten * intensity).
-        const SCREEN: BlendComponent = BlendComponent {
+        // Premultiplied: the shader weights the lit pixel by the saturating
+        // falloff-times-intensity, crossfading from the unlit framebuffer to the
+        // fully lit insert.
+        const PREMULTIPLIED: BlendComponent = BlendComponent {
             src_factor: BlendFactor::One,
-            dst_factor: BlendFactor::OneMinusSrc,
+            dst_factor: BlendFactor::OneMinusSrcAlpha,
             operation: BlendOperation::Add,
         };
         if let Some(target) = descriptor
@@ -326,8 +341,8 @@ impl Material2d for InsertGlowMaterial {
             .and_then(|target| target.as_mut())
         {
             target.blend = Some(BlendState {
-                color: SCREEN,
-                alpha: SCREEN,
+                color: PREMULTIPLIED,
+                alpha: PREMULTIPLIED,
             });
         }
         Ok(())
@@ -476,7 +491,7 @@ fn fade_rate(per_ms: f32) -> f32 {
 
 /// The blinker + fader state for one insert, from its authored vpx fields
 /// (vpinball's defaults where unset: pattern "10", interval 125 ms, linear fader).
-fn light_animation(light: &vpx::gameitem::light::Light, color: LinearRgba) -> LightAnimation {
+fn light_animation(light: &vpx::gameitem::light::Light) -> LightAnimation {
     let mut pattern: Vec<bool> = light.blink_pattern.chars().map(|c| c == '1').collect();
     if pattern.is_empty() {
         pattern = vec![true, false];
@@ -504,7 +519,6 @@ fn light_animation(light: &vpx::gameitem::light::Light, color: LinearRgba) -> Li
         fade_down: fade_rate(light.fade_speed_down),
         intensity: light.intensity,
         current: 0.0,
-        color,
     }
 }
 
@@ -513,6 +527,8 @@ pub(super) fn spawn_light(
     glow_materials: &mut ResMut<Assets<GlowMaterial>>,
     insert_materials: &mut ResMut<Assets<InsertGlowMaterial>>,
     glow_texture: &Handle<Image>,
+    vpx_asset: &crate::vpx::VpxAsset,
+    table_size_m: Vec2,
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
@@ -577,17 +593,34 @@ pub(super) fn spawn_light(
             lightmap_layer(),
         ));
     } else {
-        // Animated lamps screen directly over the playfield on the main view,
+        // Animated lamps composite directly over the playfield on the main view,
         // like vpinball's classic light render; they start dark and the
-        // animation drives the material alpha with the raw vpx intensity.
+        // animation drives the params alpha with the raw vpx intensity. The art
+        // the shader re-composites is the light's own image like vpinball,
+        // usually the playfield image.
+        let art = vpx_asset
+            .image(light.image.as_str())
+            .or_else(|| vpx_asset.image(vpx_asset.raw.gamedata.image.as_str()))
+            .cloned()
+            .unwrap_or_default();
         parent.spawn((
             base,
             Transform::from_translation(translation.extend(INSERT_LIGHT_Z)),
             MeshMaterial2d(insert_materials.add(InsertGlowMaterial {
-                color: color.with_alpha(0.0),
-                texture: glow_texture.clone(),
+                params: InsertLightParams {
+                    color: Vec4::new(color.red, color.green, color.blue, 0.0),
+                    // vpx defaults the falloff power to 2; guard degenerate 0,
+                    // which would make pow() a hard-edged disc.
+                    falloff_power: if light.falloff_power > 0.0 {
+                        light.falloff_power
+                    } else {
+                        2.0
+                    },
+                    table_size: table_size_m,
+                },
+                art,
             })),
-            light_animation(light, color),
+            light_animation(light),
         ));
     }
 }
@@ -645,13 +678,10 @@ fn animate_lights(
             }
         };
         if let Some(glow) = glow_materials.get_mut(&material.0) {
-            // vpinball's ClassicLightShader composites `saturate(atten *
-            // intensity)` of the light colour: the raw intensity goes in (inserts
-            // author 10-90) and saturation does the rest, which is what lights
-            // the whole insert at full colour with only the falloff rim dimming.
-            // Our glow shader multiplies this alpha by the radial texture (the
-            // atten) and the screen blend clamps just the same.
-            glow.color = anim.color.with_alpha(anim.current);
+            // The raw intensity goes to the shader (inserts author 10-90);
+            // vpinball's saturate(atten * intensity) there lights the whole
+            // insert at full colour with only the falloff rim dimming.
+            glow.params.color.w = anim.current;
         }
     }
 }
