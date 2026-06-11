@@ -231,6 +231,7 @@ pub fn spawn_level(
                         vpx_asset,
                         vpx_to_bevy_transform,
                         target,
+                        item_index,
                     ),
                     GameItemEnum::Spinner(spinner) => spawn_spinner(
                         parent,

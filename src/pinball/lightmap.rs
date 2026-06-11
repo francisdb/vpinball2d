@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, ShaderType, TextureFormat};
 use bevy::shader::ShaderRef;
-use bevy::sprite_render::Material2d;
 use bevy::sprite_render::Material2dPlugin;
+use bevy::sprite_render::{AlphaMode2d, Material2d};
 
 /// Render layer that the light/shadow map camera sees. Light glows and shadows live
 /// here only, so the main camera does not draw them directly; they reach the screen
@@ -97,6 +97,12 @@ pub(crate) struct PlasticMaterial {
 impl Material2d for PlasticMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/plastic_transmission.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        // Translucent: sort in the transparent pass by entity z, so the plastic
+        // draws over everything beneath it (and tints it via the blend below).
+        AlphaMode2d::Blend
     }
 
     fn specialize(

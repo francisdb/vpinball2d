@@ -66,9 +66,10 @@ pub(super) fn spawn_target(
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     target: &HitTarget,
+    item_index: usize,
 ) {
-    // Footprint (width x depth) and top height (the render layer); None when not visible.
-    let Some((size, top)) = footprint(target) else {
+    // Footprint (width x depth) and centre height (the render layer); None when not visible.
+    let Some((size, center_vpu)) = footprint(target) else {
         return;
     };
 
@@ -76,9 +77,9 @@ pub(super) fn spawn_target(
         translation: Vec3::new(
             vpu_to_m(target.position.x) + vpx_to_bevy_transform.translation.x,
             -vpu_to_m(target.position.y) + vpx_to_bevy_transform.translation.y,
-            // Render at the target's top height so it depth-sorts against walls (which render at
-            // their own top height) the way vpinball stacks them.
-            top,
+            // Render at the target's centre height like every other item (see layer.rs),
+            // so e.g. a translucent acrylic over a drop target bank tints the targets.
+            crate::pinball::layer::render_z(center_vpu, target.depth_bias, item_index),
         ),
         // vpx rotates around +Z; this game flips the y axis, so the bevy angle is negated.
         rotation: Quat::from_rotation_z(-target.rot_z.to_radians()),
@@ -133,9 +134,9 @@ fn material_color(vpx_asset: &VpxAsset, material: &str) -> Color {
         .unwrap_or(Color::srgb_u8(210, 200, 90))
 }
 
-/// The target panel's footprint (width x depth, metres) and its top height (metres above the
-/// playfield, used as the render layer like pinball::wall does). The footprint is the per-type
-/// base extent scaled by the item's `size`; `rot_z` is a rigid rotation that does not change it
+/// The target panel's footprint (width x depth, metres) and its centre height (vpx units,
+/// used as the render layer like pinball::wall does). The footprint is the per-type base
+/// extent scaled by the item's `size`; `rot_z` is a rigid rotation that does not change it
 /// (it is applied through the entity transform). `None` when the target is not visible.
 fn footprint(target: &HitTarget) -> Option<(Vec2, f32)> {
     if !target.is_visible {
@@ -146,8 +147,8 @@ fn footprint(target: &HitTarget) -> Option<(Vec2, f32)> {
         vpu_to_m(base.x * target.size.x),
         vpu_to_m(base.y * target.size.y),
     );
-    let top = vpu_to_m(target.position.z + target.size.z * base.z);
-    Some((size, top))
+    let center = target.position.z + target.size.z * base.z * 0.5;
+    Some((size, center))
 }
 
 /// Base footprint (width across the face x depth front-to-back) and top height (z), in mesh
