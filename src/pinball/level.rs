@@ -184,6 +184,12 @@ pub fn spawn_level(
                         );
                     }
                     GameItemEnum::Light(light) => {
+                        // Phase the demo blinkers by playfield position, a wave
+                        // travelling up the table (0 at the bottom edge).
+                        let gamedata = &vpx_asset.raw.gamedata;
+                        let blink_phase = ((gamedata.bottom - light.center.y)
+                            / (gamedata.bottom - gamedata.top).max(1.0))
+                        .clamp(0.0, 1.0);
                         spawn_light(
                             &mut meshes,
                             &mut glow_materials,
@@ -191,7 +197,7 @@ pub fn spawn_level(
                             vpx_to_bevy_transform,
                             parent,
                             light,
-                            item_index,
+                            blink_phase,
                         );
                     }
                     GameItemEnum::Rubber(rubber) => spawn_rubber(

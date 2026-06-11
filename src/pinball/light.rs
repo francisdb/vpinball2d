@@ -193,9 +193,10 @@ pub(crate) struct LightAnimation {
     interval: f32,
     /// Current frame in the pattern.
     frame: usize,
-    /// Seconds until the next frame advance. Seeded per light so the playfield
-    /// chases instead of strobing in lockstep (the stagger is our demo choice;
-    /// a script would normally phase the lamps).
+    /// Seconds until the next frame advance. Seeded from the light's playfield
+    /// position so the blinking sweeps up the table as a coherent wave instead
+    /// of flickering at random (the phasing is our demo choice; a script would
+    /// normally phase the lamps).
     next_blink: f32,
     fader: LightFader,
     /// Fade rates in intensity per second (vpx stores intensity per ms). May be
@@ -403,7 +404,7 @@ fn fade_rate(per_ms: f32) -> f32 {
 fn light_animation(
     light: &vpx::gameitem::light::Light,
     color: LinearRgba,
-    item_index: usize,
+    blink_phase: f32,
 ) -> LightAnimation {
     let mut pattern: Vec<bool> = light.blink_pattern.chars().map(|c| c == '1').collect();
     if pattern.is_empty() {
@@ -420,12 +421,14 @@ fn light_animation(
         // vpinball defaults to the linear fader (light.h `m_fader`).
         Some(Fader::Linear) | None => LightFader::Linear,
     };
+    let period = interval * pattern.len() as f32;
     LightAnimation {
+        // One full pattern period of phase across the table, so the blinking
+        // travels as a wave from the bottom up (see the field docs).
+        next_blink: interval + period * blink_phase.clamp(0.0, 1.0),
         pattern,
         interval,
         frame: 0,
-        // Stagger the blink phase across the table (see the field docs).
-        next_blink: interval * (1.0 + (item_index % 8) as f32 / 8.0),
         fader,
         // Per-ms authored speeds to per-second. A missing/zero speed degenerates
         // to a snap (infinite ramp clamps straight to the target).
@@ -444,7 +447,7 @@ pub(super) fn spawn_light(
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     light: &vpx::gameitem::light::Light,
-    item_index: usize,
+    blink_phase: f32,
 ) {
     if light.visible == Some(false) {
         return;
@@ -491,7 +494,7 @@ pub(super) fn spawn_light(
         lightmap_layer(),
     ));
     if !is_gi {
-        entity.insert(light_animation(light, color, item_index));
+        entity.insert(light_animation(light, color, blink_phase));
     }
 }
 
