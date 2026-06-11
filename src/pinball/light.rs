@@ -46,7 +46,7 @@ const MAX_GLOW_ALPHA: f32 = 0.9;
 // and are softened *uniformly* by the map's resolution, so they always match. The
 // two values below are the only knobs for how every shadow reads.
 /// How dark every shadow is (0 = none, 1 = black).
-const SHADOW_ALPHA: f32 = 0.3;
+const SHADOW_ALPHA: f32 = 0.22;
 /// Softness of every shadow: the light map is rendered at this height (px) and
 /// upscaled onto the playfield, so a lower value blurs all shadows (and glows)
 /// more. `lightmap` reads this so it stays the single shadow-softness knob.
