@@ -28,6 +28,26 @@ const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
 /// Width (vpx units) of the band that visualises a wall's translucent side faces
 /// (edge-lit acrylic outlines).
 const SIDE_BAND_WIDTH_VPU: f32 = 6.0;
+/// How strongly a translucent plastic transmits the light below it, scaled by the
+/// material opacity (a barely-there acrylic still tints noticeably; vpinball's bulb
+/// transmission term).
+const PLASTIC_TRANSMISSION: f32 = 1.0;
+
+/// The material of a wall top: a plain colour material, or the translucent-plastic
+/// material that also transmits the light below it.
+enum TopMaterial {
+    Color(Handle<ColorMaterial>),
+    Plastic(Handle<crate::pinball::lightmap::PlasticMaterial>),
+}
+
+impl TopMaterial {
+    fn insert(&self, entity: &mut bevy::ecs::system::EntityCommands) {
+        match self {
+            TopMaterial::Color(handle) => entity.insert(MeshMaterial2d(handle.clone())),
+            TopMaterial::Plastic(handle) => entity.insert(MeshMaterial2d(handle.clone())),
+        };
+    }
+}
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -133,10 +153,13 @@ struct SlingshotFlash {
     timer: Timer,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_wall(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    plastics: &mut ResMut<Assets<crate::pinball::lightmap::PlasticMaterial>>,
+    light_map: &Handle<Image>,
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
     wall: &wall::Wall,
@@ -191,12 +214,28 @@ pub(super) fn spawn_wall(
     } else {
         (css::PINK, AlphaMode2d::Opaque)
     };
-    let material = materials.add(ColorMaterial {
-        color: color.into(),
-        alpha_mode,
-        texture: texture.clone(),
-        ..default()
-    });
+    // A translucent top is a plastic: besides its (often barely visible) tint it
+    // transmits the light below, tinted by its colour - vpinball's bulb transmission.
+    // That, not the tint, is what makes a coloured acrylic read (e.g. TNA's
+    // blacklight plastics at ~5% effective alpha). Opaque and cut-out tops keep the
+    // plain colour material.
+    let top: TopMaterial = if matches!(alpha_mode, AlphaMode2d::Blend) && top_material.is_some() {
+        TopMaterial::Plastic(plastics.add(crate::pinball::lightmap::PlasticMaterial {
+            params: crate::pinball::lightmap::PlasticParams {
+                color: Vec4::new(color.red, color.green, color.blue, color.alpha),
+                transmission: PLASTIC_TRANSMISSION * color.alpha,
+            },
+            texture: texture.clone(),
+            light_map: light_map.clone(),
+        }))
+    } else {
+        TopMaterial::Color(materials.add(ColorMaterial {
+            color: color.into(),
+            alpha_mode,
+            texture: texture.clone(),
+            ..default()
+        }))
+    };
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
     let visible = wall.is_top_bottom_visible || wall.is_side_visible;
@@ -278,13 +317,13 @@ pub(super) fn spawn_wall(
             name_component,
             wall_component,
             Mesh2d(mesh_handle.clone()),
-            MeshMaterial2d(material),
             transform,
             RigidBody::Static,
             Restitution::from(wall.elasticity),
             Friction::from(wall.friction),
             collider,
         ));
+        top.insert(&mut entity);
         // A wall is a slingshot when it has a threshold and a drag point flagged as such
         // (vpinball builds slingshot segments from `is_slingshot` drag points).
         let is_slingshot = wall.slingshot_threshold > 0.0
@@ -319,19 +358,19 @@ pub(super) fn spawn_wall(
             name_component,
             wall_component,
             Mesh2d(mesh_handle.clone()),
-            MeshMaterial2d(material),
             transform,
         ));
+        top.insert(&mut entity);
         entity.insert(crate::pinball::lightmap::casts_shadow_layers());
     } else {
-        parent.spawn((
+        let mut entity = parent.spawn((
             name_component,
             wall_component,
             Mesh2d(mesh_handle.clone()),
-            MeshMaterial2d(material),
             transform,
             Visibility::Hidden,
         ));
+        top.insert(&mut entity);
     }
 }
 
