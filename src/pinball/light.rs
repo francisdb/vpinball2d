@@ -136,7 +136,7 @@ pub(crate) fn static_shadow_quads(
 ) -> [impl Bundle; 2] {
     let mesh = meshes.add(Rectangle::new(table_width_m, table_depth_m));
     let material = materials.add(ColorMaterial {
-        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
+        color: Color::srgba(0.0, 0.0, 0.0, per_lamp_shadow_alpha()),
         alpha_mode: AlphaMode2d::Blend,
         texture: Some(static_render),
         ..default()
@@ -246,19 +246,24 @@ fn setup_lighting(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(LightingAssets { glow });
 }
 
+/// The darkness of a single lamp's shadow copy. Every caster shades once per lamp
+/// and the copies largely overlap (fully so right under the ball), so the per-copy
+/// strength is set to compound to [`SHADOW_ALPHA`] where both overlap (the umbra);
+/// where only one lamp is blocked the penumbra reads about half as strong.
+fn per_lamp_shadow_alpha() -> f32 {
+    1.0 - (1.0 - SHADOW_ALPHA).sqrt()
+}
+
 /// The flat-dark material every shadow uses; its soft look comes entirely from the
 /// low-resolution light map, so ball and static shadows match.
 fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMaterial> {
     materials.add(ColorMaterial {
-        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
+        color: Color::srgba(0.0, 0.0, 0.0, per_lamp_shadow_alpha()),
         alpha_mode: AlphaMode2d::Blend,
         ..default()
     })
 }
 
-/// The cut-out variant: the dark shadow colour multiplied by a texture, so only the
-/// texture's opaque areas darken the light map (a plastics sheet casts its printed
-/// art, the holes around each plastic cast nothing).
 /// Builds a white radial texture whose alpha is `falloff(distance)`, where
 /// `distance` is 0 at the center and 1 at the inscribed-circle edge. The shape of
 /// the falloff controls how soft or hard the glow/shadow reads.
