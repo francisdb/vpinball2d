@@ -171,13 +171,7 @@ pub fn spawn_level(
                         );
                     }
                     GameItemEnum::Trigger(trigger) => {
-                        spawn_trigger(
-                            &mut meshes,
-                            &mut materials,
-                            vpx_to_bevy_transform,
-                            parent,
-                            trigger,
-                        );
+                        spawn_trigger(vpx_to_bevy_transform, parent, trigger);
                     }
                     GameItemEnum::Kicker(kicker) => {
                         // TODO implement kicker spawning

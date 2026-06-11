@@ -1,10 +1,6 @@
 use avian2d::prelude::{Collider, CollisionEventsEnabled, RigidBody, Sensor};
-use bevy::color::Color;
-use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::mesh::{Mesh, Mesh2d};
 use bevy::prelude::*;
-use bevy::prelude::{Annulus, ChildOf, ColorMaterial, MeshMaterial2d, Name, ResMut, Transform};
 use vpin::vpx;
 use vpin::vpx::units::vpu_to_m;
 
@@ -14,21 +10,15 @@ pub struct Trigger {
     pub name: String,
 }
 
-const TRIGGER_COLOR: Srgba = css::YELLOW;
-
 pub(super) fn spawn_trigger(
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
     vpx_to_bevy_transform: Transform,
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     trigger: &vpx::gameitem::trigger::Trigger,
 ) {
     // TODO triggers in case the shape is None have a custom polygon shape
-    // TODO make the drag_points accessible in the vpin lib
-
-    // trigger.drag_points.clone();
-
-    // we also want to draw the wire, the button or the star shape depending on the trigger type
+    // TODO we may want to draw the wire, button or star shape depending on the
+    //   trigger type; for now triggers are invisible (the playfield art usually
+    //   shows them) and only visible in the dev collider view.
     let radius = vpu_to_m(trigger.radius);
     parent.spawn((
         Trigger {
@@ -40,9 +30,7 @@ pub(super) fn spawn_trigger(
             vpx_to_bevy_transform.translation.y - vpu_to_m(trigger.center.y),
             10.0,
         ),
-        Mesh2d(meshes.add(Annulus::new(radius - 0.001, radius))),
-        MeshMaterial2d(materials.add(Color::from(TRIGGER_COLOR))),
-        // physics
+        // physics only: no visual, the collider shows in the dev collider view
         CollisionEventsEnabled,
         RigidBody::Static,
         Collider::circle(radius),
