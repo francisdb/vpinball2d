@@ -25,6 +25,9 @@ const SLINGSHOT_FORCE_SCALE: f32 = 0.1 * 0.02;
 /// Minimum ball speed towards the slingshot face (m/s) for it to fire. vpinball uses the
 /// per-surface `slingshot_threshold`; we scale it into m/s. TODO calibrate against vpx.
 const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
+/// Width (vpx units) of the band that visualises a wall's translucent side faces
+/// (edge-lit acrylic outlines).
+const SIDE_BAND_WIDTH_VPU: f32 = 6.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
@@ -132,7 +135,7 @@ struct SlingshotFlash {
 
 pub(super) fn spawn_wall(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
-    meshes: &ResMut<Assets<Mesh>>,
+    meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     vpx_asset: &VpxAsset,
     vpx_to_bevy_transform: Transform,
@@ -214,6 +217,52 @@ pub(super) fn spawn_wall(
     let wall_component = Wall {
         name: wall.name.clone(),
     };
+    // vpinball also draws the wall's extruded side faces. Straight from above they
+    // have no area, but translucent sides read as a glowing outline around the top
+    // (TNA's edge-lit blacklight acrylics, clear plastic protectors); draw them as
+    // a thin band along the wall outline, just above the top.
+    if wall.is_side_visible
+        && let Some(side) = vpx_asset
+            .raw
+            .gamedata
+            .materials
+            .iter()
+            .flatten()
+            .find(|m| m.name == wall.side_material)
+        && side.opacity_active
+        && side.opacity < 0.999
+    {
+        let outline: Vec<Vec2> =
+            vpin::vpx::mesh::smooth_drag_points_2d(&wall.drag_points, 4.0, true)
+                .iter()
+                .map(|(x, y)| Vec2::new(vpu_to_m(*x), -vpu_to_m(*y)))
+                .collect();
+        if outline.len() >= 3 {
+            let band = crate::pinball::rubber::rubber_ring_mesh(
+                &outline,
+                vpu_to_m(SIDE_BAND_WIDTH_VPU) * 0.5,
+            );
+            let color = Srgba {
+                alpha: side.opacity,
+                ..Srgba::rgb_u8(side.base_color.r, side.base_color.g, side.base_color.b)
+            };
+            parent.spawn((
+                Name::from(format!("Wall {} edge", wall.name)),
+                Mesh2d(meshes.add(band)),
+                MeshMaterial2d(materials.add(ColorMaterial {
+                    color: color.into(),
+                    alpha_mode: AlphaMode2d::Blend,
+                    ..default()
+                })),
+                // Just above the wall top, so the edge glow reads over the fill.
+                Transform::from_xyz(
+                    vpx_to_bevy_transform.translation.x,
+                    vpx_to_bevy_transform.translation.y,
+                    transform.translation.z + vpu_to_m(1.0),
+                ),
+            ));
+        }
+    }
     // A wall collides with the ball when its vertical span reaches into the ball's height.
     // VPX wall heights are in vpu, so convert to metres before comparing with the ball size.
     //   - height_bottom below the ball top: not floating above the ball (e.g. raised plastics

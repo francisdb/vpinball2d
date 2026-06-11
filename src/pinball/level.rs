@@ -150,7 +150,7 @@ pub fn spawn_level(
                 .for_each(|(item_index, item)| match item {
                     GameItemEnum::Wall(wall) => spawn_wall(
                         parent,
-                        &meshes,
+                        &mut meshes,
                         &mut materials,
                         vpx_asset,
                         vpx_to_bevy_transform,

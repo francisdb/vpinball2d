@@ -108,7 +108,7 @@ pub(super) fn spawn_rubber(
 
 /// Build a closed band mesh of the given half width around a closed centerline (treated
 /// as cyclic): the centerline offset by +/- half_width, triangulated as a ring strip.
-fn rubber_ring_mesh(centerline: &[Vec2], half_width: f32) -> Mesh {
+pub(super) fn rubber_ring_mesh(centerline: &[Vec2], half_width: f32) -> Mesh {
     let n = centerline.len();
     let mut positions: Vec<[f32; 3]> = Vec::with_capacity(n * 2);
     for i in 0..n {
