@@ -45,7 +45,7 @@ const MAX_GLOW_ALPHA: f32 = 0.9;
 // and are softened *uniformly* by the map's resolution, so they always match. The
 // two values below are the only knobs for how every shadow reads.
 /// How dark every shadow is (0 = none, 1 = black).
-const SHADOW_ALPHA: f32 = 0.22;
+const SHADOW_ALPHA: f32 = 0.4;
 /// Softness of every shadow: the light map is rendered at this height (px) and
 /// upscaled onto the playfield, so a lower value blurs all shadows (and glows)
 /// more. `lightmap` reads this so it stays the single shadow-softness knob.
@@ -55,10 +55,14 @@ const SHADOW_Z: f32 = 0.005;
 /// Ball shadow silhouette radius: the ball's disc, enlarged so the shadow peeks out
 /// from under it.
 const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
-/// Nominal height of the shadow-casting silhouettes (metres): a ball diameter, which
-/// is also about the height of posts, flippers and plastics. With the lamp height it
-/// sets how far a shadow stretches away from the lamp.
+/// Nominal height of the moving shadow casters (metres): the ball's diameter, also
+/// about a flipper's height. With the lamp height it sets how far their shadows
+/// stretch away from the lamp.
 const SHADOW_OBJECT_HEIGHT_M: f32 = 2.0 * BALL_RADIUS_M;
+/// Nominal height of the static decor for the static-shadow pass (vpx units): the
+/// pass mixes playfield-level posts with raised plastics, and the plastics tops
+/// (~65 vpu) dominate what the eye reads, so their shadows get the honest length.
+const STATIC_SHADOW_HEIGHT_VPU: f32 = 65.0;
 /// Fallback lamp height when a table has no usable `light_height` (vpx units).
 const DEFAULT_LAMP_HEIGHT_VPU: f32 = 5000.0;
 /// Tables hang their lights very high (typically 5000 vpu, ~2.7 m), which makes the
@@ -74,7 +78,10 @@ pub(crate) struct OverheadLights {
     lamps: [Vec2; 2],
     /// How far an object's top is dragged away from the lamp per metre of horizontal
     /// distance: `h / (H - h)` for the nominal object height `h` and lamp height `H`.
+    /// One value for the moving casters (ball height), one for the static pass
+    /// (plastics height).
     stretch: f32,
+    static_stretch: f32,
 }
 
 impl OverheadLights {
@@ -88,12 +95,14 @@ impl OverheadLights {
                 DEFAULT_LAMP_HEIGHT_VPU
             } * LAMP_HEIGHT_SCALE,
         );
+        let static_height_m = vpu_to_m(STATIC_SHADOW_HEIGHT_VPU);
         Self {
             lamps: [
                 Vec2::new(0.0, table_depth_m / 6.0),
                 Vec2::new(0.0, -table_depth_m / 6.0),
             ],
             stretch: SHADOW_OBJECT_HEIGHT_M / (height_m - SHADOW_OBJECT_HEIGHT_M).max(0.1),
+            static_stretch: static_height_m / (height_m - static_height_m).max(0.1),
         }
     }
 
@@ -132,7 +141,7 @@ pub(crate) fn static_shadow_quads(
         ..default()
     });
     [0, 1].map(|lamp| {
-        let stretch = lights.stretch;
+        let stretch = lights.static_stretch;
         (
             Name::from("Static shadows"),
             Mesh2d(mesh.clone()),

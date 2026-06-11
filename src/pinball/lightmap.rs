@@ -44,8 +44,9 @@ const AMBIENT: Color = Color::srgb(0.7, 0.7, 0.7);
 /// glows and shadows into soft edges via the linear upscale onto the playfield).
 const LIGHTMAP_HEIGHT_PX: u32 = crate::pinball::light::SHADOW_SOFTNESS_PX;
 
-/// Marks the offscreen light map camera, so systems that operate on the main view
-/// camera (cursor picking, nudge, projection) can exclude it with `Without`.
+/// Marks the offscreen cameras (light map and static-shadow pass), so systems that
+/// operate on the main view camera (cursor picking, nudge, projection) can exclude
+/// them with `Without`.
 #[derive(Component)]
 pub(crate) struct LightmapCamera;
 
@@ -92,6 +93,7 @@ pub(crate) fn static_shadow_camera(
 ) -> impl Bundle {
     (
         Name::from("Static shadow camera"),
+        LightmapCamera,
         Camera2d,
         Camera {
             order: -2,
