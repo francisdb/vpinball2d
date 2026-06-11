@@ -8,7 +8,7 @@ edition = "2024"
 bevy = { version = "0.18.1", features = ["webp", "wav", "jpeg", "exr"] }
 #bevy-inspector-egui = "0.34.0"
 avian2d = { version = "0.6.1", features = ["diagnostic_ui"] }
-vpin = "0.26.5"
+vpin = "0.26.8"
 thiserror = "2.0.18"
 
 # Compile out low-severity logs to improve performance.
