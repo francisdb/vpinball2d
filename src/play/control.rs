@@ -19,7 +19,9 @@ pub(super) fn plugin(app: &mut App) {
     app.init_resource::<PendingReleases>();
     app.add_systems(
         Update,
-        (read_commands, apply_pending_releases).run_if(in_state(Screen::Gameplay)),
+        // Also during Loading, so e.g. `screenshot` can capture the loading screen.
+        (read_commands, apply_pending_releases)
+            .run_if(in_state(Screen::Gameplay).or(in_state(Screen::Loading))),
     );
 }
 
