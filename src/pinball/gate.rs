@@ -310,6 +310,7 @@ pub struct GateCollisionHooks<'w, 's> {
     gates: Query<'w, 's, &'static Gate>,
     launching: Query<'w, 's, (), With<crate::pinball::plunger::Launching>>,
     balls: Query<'w, 's, &'static LinearVelocity, With<Ball>>,
+    falloffs: Query<'w, 's, &'static crate::pinball::physics::ElasticityFalloff>,
 }
 
 impl CollisionHooks for GateCollisionHooks<'_, '_> {
@@ -320,6 +321,28 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
             || self.launching.contains(contacts.collider2)
         {
             return false;
+        }
+
+        // vpinball's elasticity falloff: scale this contact's effective restitution
+        // down with the approach speed (see pinball::physics::ElasticityFalloff).
+        // The other body is the ball; static surfaces have no velocity of their own.
+        let falloff = self
+            .falloffs
+            .get(contacts.collider1)
+            .or(self.falloffs.get(contacts.collider2));
+        if let Ok(falloff) = falloff
+            && falloff.0 > 0.0
+        {
+            let ball_velocity = self
+                .balls
+                .get(contacts.collider1)
+                .or(self.balls.get(contacts.collider2))
+                .map(|v| v.0)
+                .unwrap_or_default();
+            for manifold in &mut contacts.manifolds {
+                let approach_speed = ball_velocity.dot(manifold.normal).abs();
+                manifold.restitution /= 1.0 + falloff.0 * approach_speed;
+            }
         }
 
         let (gate_entity, ball_entity) = if self.gates.contains(contacts.collider1) {
