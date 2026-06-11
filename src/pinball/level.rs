@@ -5,7 +5,7 @@ use crate::pinball::bumper::spawn_bumper;
 use crate::pinball::flipper::spawn_flipper;
 use crate::pinball::gate::spawn_gate;
 use crate::pinball::kicker::spawn_kicker;
-use crate::pinball::light::{GlowMaterial, LightingAssets, spawn_light};
+use crate::pinball::light::{GlowMaterial, InsertGlowMaterial, LightingAssets, spawn_light};
 use crate::pinball::lightmap::{PlayfieldLightMaterial, lightmap_camera, lightmap_image};
 use crate::pinball::plunger::spawn_plunger;
 use crate::pinball::primitive::spawn_primitive;
@@ -52,6 +52,7 @@ pub fn spawn_level(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     mut glow_materials: ResMut<Assets<GlowMaterial>>,
+    mut insert_glow_materials: ResMut<Assets<InsertGlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
     mut plastic_materials: ResMut<Assets<crate::pinball::lightmap::PlasticMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -184,20 +185,14 @@ pub fn spawn_level(
                         );
                     }
                     GameItemEnum::Light(light) => {
-                        // Phase the demo blinkers by playfield position, a wave
-                        // travelling up the table (0 at the bottom edge).
-                        let gamedata = &vpx_asset.raw.gamedata;
-                        let blink_phase = ((gamedata.bottom - light.center.y)
-                            / (gamedata.bottom - gamedata.top).max(1.0))
-                        .clamp(0.0, 1.0);
                         spawn_light(
                             &mut meshes,
                             &mut glow_materials,
+                            &mut insert_glow_materials,
                             &lighting.glow,
                             vpx_to_bevy_transform,
                             parent,
                             light,
-                            blink_phase,
                         );
                     }
                     GameItemEnum::Rubber(rubber) => spawn_rubber(
