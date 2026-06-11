@@ -26,6 +26,13 @@ struct ProgressCounters {
 }
 
 impl VpxLoadProgress {
+    /// Forget the previous load, so [`Self::fraction`] reads `None` (and the bar
+    /// stays empty) until the next load starts counting.
+    pub fn reset(&self) {
+        self.0.done.store(0, Ordering::Relaxed);
+        self.0.total.store(0, Ordering::Relaxed);
+    }
+
     /// Start counting a new load of `total` items.
     pub(crate) fn start(&self, total: u32) {
         self.0.done.store(0, Ordering::Relaxed);

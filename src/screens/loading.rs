@@ -23,7 +23,11 @@ fn start_loading_table(
     mut commands: Commands,
     table_path: Res<TablePath>,
     assets: Res<AssetServer>,
+    progress: Res<VpxLoadProgress>,
 ) {
+    // Forget the previous table's counters: the bar would otherwise read full
+    // until the new load starts counting.
+    progress.reset();
     let file_name = table_path.path.to_string_lossy().to_string();
     commands.insert_resource(TableAssets {
         // Load through the `tables` asset source rooted at the tables folder.
