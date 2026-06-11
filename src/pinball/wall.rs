@@ -320,6 +320,7 @@ pub(super) fn spawn_wall(
             transform,
             RigidBody::Static,
             Restitution::from(wall.elasticity),
+            crate::pinball::physics::ElasticityFalloff(wall.elasticity_falloff.unwrap_or(0.0)),
             Friction::from(wall.friction),
             collider,
         ));

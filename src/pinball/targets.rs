@@ -106,6 +106,7 @@ pub(super) fn spawn_target(
             RigidBody::Static,
             Collider::rectangle(size.x, size.y),
             Restitution::from(target.elasticity),
+            crate::pinball::physics::ElasticityFalloff(target.elasticity_falloff),
             Friction::from(target.friction),
             CollisionEventsEnabled,
         ));

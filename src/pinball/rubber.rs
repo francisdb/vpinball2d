@@ -101,6 +101,7 @@ pub(super) fn spawn_rubber(
             RigidBody::Static,
             Collider::polyline(outline, None),
             Restitution::from(rubber.elasticity),
+            crate::pinball::physics::ElasticityFalloff(rubber.elasticity_falloff),
             Friction::from(rubber.friction),
         ));
     }
