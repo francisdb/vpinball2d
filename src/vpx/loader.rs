@@ -570,15 +570,19 @@ mod tests {
         material.friction = 0.25;
         material.scatter_angle = 2.0;
 
-        let mut shared = Rubber::default();
-        shared.physics_material = Some("Rubber Posts".to_string());
-        shared.overwrite_physics = Some(false);
-        shared.elasticity = 0.5;
+        let shared = Rubber {
+            physics_material: Some("Rubber Posts".to_string()),
+            overwrite_physics: Some(false),
+            elasticity: 0.5,
+            ..Default::default()
+        };
 
-        let mut own = Rubber::default();
-        own.physics_material = Some("Rubber Posts".to_string());
-        own.overwrite_physics = Some(true);
-        own.elasticity = 0.5;
+        let own = Rubber {
+            physics_material: Some("Rubber Posts".to_string()),
+            overwrite_physics: Some(true),
+            elasticity: 0.5,
+            ..Default::default()
+        };
 
         let mut vpx = VPX::default();
         vpx.gamedata.materials = Some(vec![material]);
