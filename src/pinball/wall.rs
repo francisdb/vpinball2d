@@ -197,34 +197,6 @@ pub(super) fn spawn_wall(
     // A wall with neither face visible is a collision-only guide (e.g. the plunger
     // ball-centering wall); it collides but is not drawn.
     let visible = wall.is_top_bottom_visible || wall.is_side_visible;
-    // Walls standing on the playfield cast their full silhouette; a raised plastics
-    // sheet (base on posts, cut-out art in the texture) casts only its art, and only
-    // when it is sheet-sized - small raised decor must not print through the plastic
-    // it stands on (see ShadowCaster).
-    let shadow_caster = if crate::pinball::light::casts_playfield_shadow(wall.height_bottom) {
-        Some(crate::pinball::light::ShadowCaster {
-            scale: 1.0,
-            texture: None,
-        })
-    } else if crate::pinball::light::footprint_fraction(
-        wall.drag_points.iter().map(|d| (d.x, d.y)),
-        0.0,
-        &vpx_asset.raw.gamedata,
-    ) >= crate::pinball::light::RAISED_MIN_TABLE_FRACTION
-    {
-        // A raised panel whose mesh is its shape (untextured/opaque) casts a solid
-        // silhouette; a sheet with cut-out art in the texture casts the art.
-        Some(crate::pinball::light::ShadowCaster {
-            scale: 1.0,
-            texture: if texture_has_alpha {
-                texture.clone()
-            } else {
-                None
-            },
-        })
-    } else {
-        None
-    };
     // The wall top draws at the wall's centre height (see layer.rs): transparent 2D
     // sorting only sees the entity transform, so the height must live there (not in
     // the mesh vertices) for e.g. an apron at 52 vpu to cover the ball (drawn at its
@@ -287,10 +259,8 @@ pub(super) fn spawn_wall(
             ));
         } else if visible {
             // Visible walls standing on the playfield drop a shadow into the light
-            // map (1:1 mesh copy); raised plastics sheets cast their cut-out art.
-            if let Some(caster) = shadow_caster.clone() {
-                entity.insert(caster);
-            }
+            // map through the static-shadow render pass.
+            entity.insert(crate::pinball::lightmap::casts_shadow_layers());
         } else {
             // Invisible guide wall: collide but don't draw or cast a shadow.
             entity.insert(Visibility::Hidden);
@@ -303,9 +273,7 @@ pub(super) fn spawn_wall(
             MeshMaterial2d(material),
             transform,
         ));
-        if let Some(caster) = shadow_caster.clone() {
-            entity.insert(caster);
-        }
+        entity.insert(crate::pinball::lightmap::casts_shadow_layers());
     } else {
         parent.spawn((
             name_component,

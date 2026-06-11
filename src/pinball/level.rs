@@ -67,10 +67,10 @@ pub fn spawn_level(
 
     // The overhead lamps all shadows are cast from: vpinball's scene lights, at the
     // height this table defines.
-    commands.insert_resource(crate::pinball::light::OverheadLights::for_table(
+    let overhead_lights = crate::pinball::light::OverheadLights::for_table(
         table_depth_m,
         vpx_asset.raw.gamedata.light_height,
-    ));
+    );
 
     // Offscreen light/shadow map, rendered by its own camera over the playfield rect
     // and composited onto the playfield by `PlayfieldLightMaterial`.
@@ -79,6 +79,30 @@ pub fn spawn_level(
         lightmap_camera(light_map.clone(), table_width_m, table_depth_m),
         DespawnOnExit(Screen::Gameplay),
     ));
+
+    // Static-shadow pass: every static shadow-casting item also renders into this
+    // image on a transparent background; the light map darkens the playfield with it
+    // projected away from each lamp (see `light::static_shadow_quads`).
+    let static_render = lightmap_image(&mut images, table_width_m, table_depth_m);
+    commands.spawn((
+        crate::pinball::lightmap::static_shadow_camera(
+            static_render.clone(),
+            table_width_m,
+            table_depth_m,
+        ),
+        DespawnOnExit(Screen::Gameplay),
+    ));
+    for quad in crate::pinball::light::static_shadow_quads(
+        &mut meshes,
+        &mut materials,
+        &overhead_lights,
+        static_render,
+        table_width_m,
+        table_depth_m,
+    ) {
+        commands.spawn(quad);
+    }
+    commands.insert_resource(overhead_lights);
 
     // TODO the walls should probably be children of the table
     commands

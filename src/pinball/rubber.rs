@@ -83,14 +83,10 @@ pub(super) fn spawn_rubber(
         visibility,
     ));
 
-    // Visible rubbers standing near the playfield drop a shadow into the light map
-    // (hidden slingshot-flex rubbers do not, since they are not drawn at rest;
-    // raised rubbers sit on other geometry and must not shade the playfield).
-    if rubber.is_visible && crate::pinball::light::casts_playfield_shadow(rubber.height) {
-        entity.insert(crate::pinball::light::ShadowCaster {
-            scale: 1.0,
-            texture: None,
-        });
+    // Visible rubbers drop a shadow via the static-shadow render pass (hidden
+    // slingshot-flex rubbers do not, since they are not drawn at rest).
+    if rubber.is_visible {
+        entity.insert(crate::pinball::lightmap::casts_shadow_layers());
     }
 
     // Only collidable rubbers get a collider. The slingshots' flexed-frame rubbers are

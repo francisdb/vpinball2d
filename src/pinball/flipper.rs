@@ -78,9 +78,9 @@ fn flipper_bat_primitive<'a>(
             let path = VpxAsset::primitive_mesh_sub_path(&p.name);
             let mesh = vpx_asset.named_meshes.get(path.as_str())?;
             let center_z = vpx_asset
-                .named_mesh_heights
+                .named_mesh_centers
                 .get(path.as_str())
-                .map(|h| h.center)
+                .copied()
                 .unwrap_or(0.0);
             Some((p, mesh.clone(), center_z))
         })

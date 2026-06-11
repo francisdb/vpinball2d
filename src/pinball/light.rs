@@ -27,9 +27,10 @@ pub(crate) struct LightingAssets {
     pub(crate) glow: Handle<Image>,
 }
 
-/// Z of the light glows: a flat surface effect just above the playfield, below the
-/// shadows and the ball. The vpx bulb height is irrelevant for 2D layering.
-const LIGHT_Z: f32 = 0.005;
+/// Z of the light glows in the light map: above the shadows, since an insert lamp
+/// is its own light source and must not be dimmed by an overhead-lamp shadow. The
+/// vpx bulb height is irrelevant for 2D layering.
+const LIGHT_Z: f32 = 0.012;
 /// Additive glow alpha per unit of vpx light intensity. Pinball general
 /// illumination uses many low-power bulbs (intensity ~4); inserts are far
 /// brighter (~90). Scaling by intensity keeps GI gentle while lit inserts stand
@@ -49,8 +50,8 @@ const SHADOW_ALPHA: f32 = 0.22;
 /// upscaled onto the playfield, so a lower value blurs all shadows (and glows)
 /// more. `lightmap` reads this so it stays the single shadow-softness knob.
 pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
-/// Z of the shadows in the light map: above the glows, below the ball.
-const SHADOW_Z: f32 = 0.012;
+/// Z of the shadows in the light map: below the glows (a lamp shines over a shadow).
+const SHADOW_Z: f32 = 0.005;
 /// Ball shadow silhouette radius: the ball's disc, enlarged so the shadow peeks out
 /// from under it.
 const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
@@ -60,49 +61,6 @@ const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
 const SHADOW_OBJECT_HEIGHT_M: f32 = 2.0 * BALL_RADIUS_M;
 /// Fallback lamp height when a table has no usable `light_height` (vpx units).
 const DEFAULT_LAMP_HEIGHT_VPU: f32 = 5000.0;
-/// Items whose base sits at or above this height (vpx units) float over other
-/// geometry (screws fastening a plastic, score cards on the apron) rather than
-/// standing on the playfield.
-const SHADOW_BASE_MAX_VPU: f32 = 50.0;
-
-/// Whether an item with its base at this height (vpx units) drops a shadow into the
-/// playfield light map. The map only represents the playfield surface, so an item
-/// standing on raised geometry must not shade the playfield underneath it.
-pub(crate) fn casts_playfield_shadow(base_height_vpu: f32) -> bool {
-    base_height_vpu < SHADOW_BASE_MAX_VPU
-}
-
-/// A raised item only casts when its footprint covers at least this fraction of the
-/// table: plastics sheets and panels qualify (North Pole's smallest panel is ~0.4%),
-/// while small raised decor (fastening screws on a plastic, ~0.01%) must not print
-/// through whatever it stands on.
-pub(crate) const RAISED_MIN_TABLE_FRACTION: f32 = 0.002;
-
-/// Fraction of the table area covered by the bounding box of the given outline
-/// points (vpx units), widened by `expand` on every side (e.g. a ramp's half width).
-pub(crate) fn footprint_fraction(
-    points: impl Iterator<Item = (f32, f32)>,
-    expand: f32,
-    gamedata: &vpx::gamedata::GameData,
-) -> f32 {
-    let (mut min, mut max) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-    let mut any = false;
-    for (x, y) in points {
-        any = true;
-        min = min.min(Vec2::new(x, y));
-        max = max.max(Vec2::new(x, y));
-    }
-    if !any {
-        return 0.0;
-    }
-    let size = max - min + Vec2::splat(2.0 * expand);
-    let table = (gamedata.right - gamedata.left) * (gamedata.bottom - gamedata.top);
-    if table > 0.0 {
-        (size.x * size.y) / table
-    } else {
-        0.0
-    }
-}
 /// Tables hang their lights very high (typically 5000 vpu, ~2.7 m), which makes the
 /// two shadows short and nearly coincident. Bring the lamps down by this factor so
 /// the double shadows read distinctly, while taller-lit tables still differ.
@@ -150,51 +108,46 @@ impl OverheadLights {
     fn shadow_translation(&self, lamp: usize, pos: Vec2) -> Vec3 {
         self.project(lamp, pos).extend(SHADOW_Z)
     }
+}
 
-    /// The shadow mesh of a static caster: its mesh taken to world space, enlarged
-    /// about its centre by `scale`, with every vertex projected away from the lamp.
-    /// Per vertex, because a caster's mesh can span much of the table (a rubber
-    /// ring, a long wall) while its entity transform may sit far from the geometry;
-    /// a single per-entity offset would aim parts of such a shadow the wrong way.
-    fn project_shadow_mesh(
-        &self,
-        mesh: &Mesh,
-        world: &Transform,
-        scale: f32,
-        lamp: usize,
-    ) -> Option<Mesh> {
-        let points: Vec<Vec2> = mesh
-            .attribute(Mesh::ATTRIBUTE_POSITION)?
-            .as_float3()?
-            .iter()
-            .map(|p| world.transform_point(Vec3::from(*p)).truncate())
-            .collect();
-        let (min, max) = points.iter().fold(
-            (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
-            |(min, max), p| (min.min(*p), max.max(*p)),
-        );
-        let center = (min + max) * 0.5;
-        let positions: Vec<[f32; 3]> = points
-            .iter()
-            .map(|p| {
-                let enlarged = center + (*p - center) * scale;
-                let projected = self.project(lamp, enlarged);
-                [projected.x, projected.y, 0.0]
-            })
-            .collect();
-        let mut shadow = Mesh::new(
-            bevy::mesh::PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
-        );
-        shadow.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        if let Some(uvs) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) {
-            shadow.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone());
-        }
-        if let Some(indices) = mesh.indices() {
-            shadow.insert_indices(indices.clone());
-        }
-        Some(shadow)
-    }
+/// The two quads that composite the static-shadow render into the light map: the
+/// table's static items rendered on a transparent background (see
+/// `lightmap::static_shadow_camera`), darkened and scaled about each lamp. The
+/// projection `p + (p - lamp) * stretch` is a uniform scale about the lamp, so
+/// scaling the whole image casts every pixel exactly: cut-out plastics cast their
+/// art, screws on a plastic merge into the plastic's own shadow.
+pub(crate) fn static_shadow_quads(
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    lights: &OverheadLights,
+    static_render: Handle<Image>,
+    table_width_m: f32,
+    table_depth_m: f32,
+) -> [impl Bundle; 2] {
+    let mesh = meshes.add(Rectangle::new(table_width_m, table_depth_m));
+    let material = materials.add(ColorMaterial {
+        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
+        alpha_mode: AlphaMode2d::Blend,
+        texture: Some(static_render),
+        ..default()
+    });
+    [0, 1].map(|lamp| {
+        let stretch = lights.stretch;
+        (
+            Name::from("Static shadows"),
+            Mesh2d(mesh.clone()),
+            MeshMaterial2d(material.clone()),
+            Transform {
+                // Scaling about the origin then shifting by -lamp * stretch equals
+                // scaling about the lamp: quad point p lands on project(lamp, p).
+                translation: (-lights.lamps[lamp] * stretch).extend(SHADOW_Z),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::new(1.0 + stretch, 1.0 + stretch, 1.0),
+            },
+            lightmap_layer(),
+            DespawnOnExit(Screen::Gameplay),
+        )
+    })
 }
 
 #[derive(Component)]
@@ -204,36 +157,20 @@ pub struct Light {
 }
 
 /// One drop shadow in the light map: a dark silhouette following its source entity,
-/// cast away from one overhead lamp. Every shadow - ball, flipper, static decor -
-/// is one of these, sharing the same lamp model, offset, material and update path.
-/// Shadows are separate entities, not children: a child's lamp offset would rotate
-/// along with its parent (as if the lamp moved), and the ball's spin must not spin
-/// its blob.
+/// cast away from one overhead lamp. The moving parts (ball, flippers) get these;
+/// static items cast through the static-shadow render pass instead (see
+/// `static_shadow_quads`). Shadows are separate entities, not children: a child's
+/// lamp offset would rotate along with its parent (as if the lamp moved), and the
+/// ball's spin must not spin its blob.
 #[derive(Component)]
 struct Shadow {
     /// The entity whose silhouette this is.
     source: Entity,
     /// Which overhead lamp casts it.
     lamp: usize,
-    /// Whether the silhouette follows the source's rotation (flippers and static
-    /// meshes do; the ball's enlarged disc is rotation-independent).
+    /// Whether the silhouette follows the source's rotation (flippers do; the
+    /// ball's enlarged disc is rotation-independent).
     follow_rotation: bool,
-}
-
-/// Marks a static object that drops a shadow into the light map. A dark copy of the
-/// object's mesh is rendered into the map, offset per overhead light, so the shadow
-/// matches the object's shape. `scale` enlarges the shadow about the object centre
-/// (e.g. so a bumper's shadow clears its wider cap); use 1.0 for a 1:1 copy. Spawn
-/// the object as a direct child of the level (so its `Transform` is world space) for
-/// the shadow to land in the right place.
-///
-/// `texture` makes the shadow a cut-out: the dark copy is multiplied by the texture,
-/// so only its opaque areas cast (a raised plastics sheet shades the playfield with
-/// the shape of its printed art, not its full polygon).
-#[derive(Component, Clone)]
-pub(crate) struct ShadowCaster {
-    pub(crate) scale: f32,
-    pub(crate) texture: Option<Handle<Image>>,
 }
 
 /// Additive material for light glows: light is added to the playfield rather than
@@ -285,14 +222,7 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_lighting);
     app.add_systems(
         Update,
-        (
-            (
-                spawn_ball_shadows,
-                spawn_flipper_shadows,
-                spawn_static_shadows,
-            ),
-            update_shadows,
-        )
+        ((spawn_ball_shadows, spawn_flipper_shadows), update_shadows)
             .chain()
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -319,18 +249,6 @@ fn shadow_material(materials: &mut Assets<ColorMaterial>) -> Handle<ColorMateria
 /// The cut-out variant: the dark shadow colour multiplied by a texture, so only the
 /// texture's opaque areas darken the light map (a plastics sheet casts its printed
 /// art, the holes around each plastic cast nothing).
-fn cut_out_shadow_material(
-    materials: &mut Assets<ColorMaterial>,
-    texture: Handle<Image>,
-) -> Handle<ColorMaterial> {
-    materials.add(ColorMaterial {
-        color: Color::srgba(0.0, 0.0, 0.0, SHADOW_ALPHA),
-        alpha_mode: AlphaMode2d::Blend,
-        texture: Some(texture),
-        ..default()
-    })
-}
-
 /// Builds a white radial texture whose alpha is `falloff(distance)`, where
 /// `distance` is 0 at the center and 1 at the inscribed-circle edge. The shape of
 /// the falloff controls how soft or hard the glow/shadow reads.
@@ -493,46 +411,6 @@ fn spawn_flipper_shadows(
             1.0,
             true,
         );
-    }
-}
-
-/// Spawns the drop shadows of each new [`ShadowCaster`]: its mesh projected away
-/// from each lamp, baked in world space (static casters never move). The projection
-/// is per vertex (see [`OverheadLights::project_shadow_mesh`]): a caster's entity
-/// transform often anchors at the table corner with the real geometry in the mesh
-/// (walls, rubbers, ramps), so a per-entity offset would cast from the wrong spot.
-fn spawn_static_shadows(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    lights: Res<OverheadLights>,
-    casters: Query<(&Transform, &Mesh2d, &ShadowCaster), Added<ShadowCaster>>,
-) {
-    if casters.is_empty() {
-        return;
-    }
-    let solid = shadow_material(&mut materials);
-    for (transform, mesh, shadow_caster) in &casters {
-        let material = match &shadow_caster.texture {
-            Some(texture) => cut_out_shadow_material(&mut materials, texture.clone()),
-            None => solid.clone(),
-        };
-        for lamp in 0..2 {
-            let Some(shadow) = meshes
-                .get(&mesh.0)
-                .and_then(|m| lights.project_shadow_mesh(m, transform, shadow_caster.scale, lamp))
-            else {
-                continue;
-            };
-            commands.spawn((
-                Name::from("Static shadow"),
-                Mesh2d(meshes.add(shadow)),
-                MeshMaterial2d(material.clone()),
-                Transform::from_xyz(0.0, 0.0, SHADOW_Z),
-                lightmap_layer(),
-                DespawnOnExit(Screen::Gameplay),
-            ));
-        }
     }
 }
 

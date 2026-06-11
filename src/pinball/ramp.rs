@@ -153,44 +153,15 @@ pub(super) fn spawn_ramp(
         MeshMaterial2d(material),
         transform,
     ));
-    // A ramp lying fully below the playfield (e.g. North Pole's subway return at
-    // -62 vpu) is hidden by the playfield itself in vpinball, so it must not drop a
-    // shadow onto it either. A ramp whose low end is near the playfield casts its
-    // full silhouette; a raised plastics sheet (e.g. 8 Ball's full-table Ramp19)
-    // casts only its cut-out art, and only when sheet-sized - raised score cards
-    // and the like must not shade the playfield (see ShadowCaster).
+    // Invisible ramps are collision guides in vpinball; we don't draw them, and a
+    // ramp lying fully below the playfield (e.g. North Pole's subway return at
+    // -62 vpu) is hidden by the playfield itself. Everything else casts a shadow
+    // via the static-shadow render pass.
     let below_playfield = ramp.height_bottom.max(ramp.height_top) < 0.0;
-    let base = ramp.height_bottom.min(ramp.height_top);
-    let shadow_caster = if crate::pinball::light::casts_playfield_shadow(base) {
-        Some(crate::pinball::light::ShadowCaster {
-            scale: 1.0,
-            texture: None,
-        })
-    } else if crate::pinball::light::footprint_fraction(
-        ramp.drag_points.iter().map(|d| (d.x, d.y)),
-        ramp.width_bottom.max(ramp.width_top) * 0.5,
-        &vpx_asset.raw.gamedata,
-    ) >= crate::pinball::light::RAISED_MIN_TABLE_FRACTION
-    {
-        // A raised panel whose mesh is its shape (untextured/opaque) casts a solid
-        // silhouette; a sheet with cut-out art in the texture casts the art.
-        Some(crate::pinball::light::ShadowCaster {
-            scale: 1.0,
-            texture: if texture_has_alpha {
-                texture.clone()
-            } else {
-                None
-            },
-        })
-    } else {
-        None
-    };
     if !ramp.is_visible || below_playfield {
-        // Invisible ramps are collision guides in vpinball; we don't draw them, and
-        // a below-playfield ramp is hidden by the playfield itself.
         entity.insert(Visibility::Hidden);
-    } else if let Some(caster) = shadow_caster {
-        entity.insert(caster);
+    } else {
+        entity.insert(crate::pinball::lightmap::casts_shadow_layers());
     }
 
     // Treat a guide ramp as a wall when it sits within the ball's vertical reach: in 2D

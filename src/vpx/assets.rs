@@ -4,16 +4,6 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use vpin::vpx::VPX;
 
-/// Height range (vpx units) of a projected top-down mesh in world space.
-#[derive(Debug, Clone, Copy)]
-pub struct MeshHeights {
-    /// Centre of the geometry's height range; the mesh vertices carry z offsets
-    /// relative to it.
-    pub center: f32,
-    /// Lowest point of the geometry, e.g. where a post meets the playfield.
-    pub base: f32,
-}
-
 /// Representation of a loaded vpx file.
 #[derive(Asset, Debug, TypePath)]
 pub struct VpxAsset {
@@ -32,10 +22,9 @@ pub struct VpxAsset {
     pub meshes: Vec<Handle<Mesh>>,
     /// Named meshes loaded from the vpx file.
     pub named_meshes: HashMap<Box<str>, Handle<Mesh>>,
-    /// Heights (vpx units) of each named mesh whose vertices are stored relative to
-    /// the centre; the spawner puts the centre into the entity transform as the
-    /// render layer and gates shadows on the base.
-    pub named_mesh_heights: HashMap<Box<str>, MeshHeights>,
+    /// Centre height (vpx units) of each named mesh whose vertices are stored relative
+    /// to it; the spawner puts this into the entity transform as the render layer.
+    pub named_mesh_centers: HashMap<Box<str>, f32>,
     /// The raw VPX data structure.
     pub raw: VPX,
 }
