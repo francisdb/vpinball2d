@@ -280,9 +280,14 @@ impl Material2d for GlowMaterial {
 /// Uniform parameters of [`InsertGlowMaterial`].
 #[derive(ShaderType, Clone, Debug)]
 pub(crate) struct InsertLightParams {
-    /// rgb: the light colour (linear); a: the current animated intensity in raw
-    /// vpx units (inserts author 10-90; saturation in the shader does the rest).
+    /// rgb: the light colour at the falloff edge (linear); a: the current
+    /// animated intensity in raw vpx units (inserts author 10-90; saturation in
+    /// the shader does the rest).
     pub(crate) color: Vec4,
+    /// rgb: the light colour at the centre, vpx "color full" (`color2`). vpinball
+    /// lerps centre to edge by sqrt of the falloff distance; tables author e.g. a
+    /// warm-white centre fading to a near-black rim.
+    pub(crate) color_full: Vec4,
     /// The vpx falloff power shaping the attenuation curve (default 2).
     pub(crate) falloff_power: f32,
     /// Playfield extent in world metres (the table is centred on the origin),
@@ -542,29 +547,19 @@ pub(super) fn spawn_light(
     // we do not run scripts, so they all get the blinker animation instead
     // (attract-style demo of vpinball's light animation).
     let is_gi = light.name.to_lowercase().contains("gi");
-    // Inserts shaped by drag points render as that shape (vpinball's classic
-    // light); bulb lights render as a halo over the bulb mesh radius (vpinball
-    // sizes the halo by m_meshRadius, not the falloff - tables stack e.g. digit
-    // bulbs whose falloff discs would merge into one misplaced blob), and
-    // shapeless classic lights as a glow over the falloff radius.
-    let mesh = if light.is_bulb_light && !is_gi {
-        let radius = if light.mesh_radius > 0.0 {
-            light.mesh_radius
-        } else {
-            light.falloff_radius
-        };
-        Some(meshes.add(Circle::new(vpu_to_m(radius))))
-    } else {
-        insert_mesh(light).map(|mesh| meshes.add(mesh))
-    };
-    let mesh = mesh.unwrap_or_else(|| {
-        // Cover the falloff radius, but never collapse to nothing for lights that
-        // only define a small core. GI keeps this path even for bulbs: its wash
-        // over the playfield is the point, and GI bulbs often author no mesh
-        // radius at all.
-        let radius = vpu_to_m(light.falloff_radius).max(vpu_to_m(light.mesh_radius));
-        meshes.add(Circle::new(radius))
-    });
+    // Every light renders its drag-point shape: vpinball draws the same shape
+    // mesh for classic inserts and bulb lights alike (m_lightmapMeshBuffer in
+    // light.cpp Render; only the shader differs), so a bulb-light insert still
+    // fills its authored insert outline. Shapeless/degenerate lights fall back
+    // to a glow disc over the falloff radius.
+    let mesh = insert_mesh(light)
+        .map(|mesh| meshes.add(mesh))
+        .unwrap_or_else(|| {
+            // Cover the falloff radius, but never collapse to nothing for lights
+            // that only define a small core.
+            let radius = vpu_to_m(light.falloff_radius).max(vpu_to_m(light.mesh_radius));
+            meshes.add(Circle::new(radius))
+        });
     let base = (
         Light {
             name: light.name.clone(),
@@ -603,12 +598,30 @@ pub(super) fn spawn_light(
             .or_else(|| vpx_asset.image(vpx_asset.raw.gamedata.image.as_str()))
             .cloned()
             .unwrap_or_default();
+        let color_full = Color::from(Srgba::rgb_u8(
+            light.color2.r,
+            light.color2.g,
+            light.color2.b,
+        ))
+        .to_linear();
+        // vpinball's no-contribution early-out: a light with both colours black
+        // adds nothing and is not drawn at all (light.cpp Render).
+        if color.red == 0.0
+            && color.green == 0.0
+            && color.blue == 0.0
+            && color_full.red == 0.0
+            && color_full.green == 0.0
+            && color_full.blue == 0.0
+        {
+            return;
+        }
         parent.spawn((
             base,
             Transform::from_translation(translation.extend(INSERT_LIGHT_Z)),
             MeshMaterial2d(insert_materials.add(InsertGlowMaterial {
                 params: InsertLightParams {
                     color: Vec4::new(color.red, color.green, color.blue, 0.0),
+                    color_full: Vec4::new(color_full.red, color_full.green, color_full.blue, 0.0),
                     // vpx defaults the falloff power to 2; guard degenerate 0,
                     // which would make pow() a hard-edged disc.
                     falloff_power: if light.falloff_power > 0.0 {

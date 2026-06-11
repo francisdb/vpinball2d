@@ -8,9 +8,12 @@
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
 struct InsertLight {
-    // rgb: the light colour (linear); a: the current animated intensity in raw
-    // vpx units (inserts author 10-90; the saturate below does the rest).
+    // rgb: the light colour at the falloff edge (linear); a: the current animated
+    // intensity in raw vpx units (inserts author 10-90; the saturate below does
+    // the rest).
     color: vec4<f32>,
+    // rgb: the light colour at the centre (vpx "color full").
+    color_full: vec4<f32>,
     // The vpx falloff power shaping the attenuation curve (default 2).
     falloff_power: f32,
     // Playfield extent in world metres (the table is centred on the origin).
@@ -50,7 +53,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         0.5 - mesh.world_position.y / material.table_size.y,
     );
     let art = textureSample(art_texture, art_sampler, art_uv).rgb;
-    var lit = art + material.color.rgb * (atten * material.color.a);
+    // vpinball lerps the light colour from "color full" at the centre to the
+    // edge colour over sqrt of the falloff distance (both light shaders).
+    let lcolor = mix(material.color_full.rgb, material.color.rgb, sqrt(min(len, 1.0)));
+    var lit = art + lcolor * (atten * material.color.a);
     // vpinball runs this composite in HDR and tonemaps; in LDR, clamping before
     // the overlay is what keeps dark art (decal prints) readable on a lit insert
     // instead of washing it out with the unbounded added intensity.
