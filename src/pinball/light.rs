@@ -53,9 +53,6 @@ const SHADOW_ALPHA: f32 = 0.22;
 pub(crate) const SHADOW_SOFTNESS_PX: u32 = 400;
 /// Z of the shadows in the light map: above the glows (see [`LIGHT_Z`]).
 const SHADOW_Z: f32 = 0.012;
-/// Ball shadow silhouette radius: the ball's disc, enlarged so the shadow peeks out
-/// from under it.
-const BALL_SHADOW_RADIUS: f32 = BALL_RADIUS_M * 1.6;
 /// Nominal height of the moving shadow casters (metres): the ball's diameter, also
 /// about a flipper's height. With the lamp height it sets how far their shadows
 /// stretch away from the lamp.
@@ -343,8 +340,10 @@ pub(super) fn spawn_light(
 }
 
 /// Spawns the [`Shadow`] entities of one source: a dark copy of its silhouette per
-/// overhead lamp, starting at the source's current pose.
-#[allow(clippy::too_many_arguments)]
+/// overhead lamp, starting at the source's current pose. Like the static-shadow
+/// quads, the silhouette is enlarged by the projection factor `1 + stretch`, so the
+/// ball's shadow derives from its own disc exactly as a rubber's derives from its
+/// ring - the same rule everywhere.
 fn spawn_shadows_for(
     commands: &mut Commands,
     lights: &OverheadLights,
@@ -352,13 +351,12 @@ fn spawn_shadows_for(
     source: Entity,
     mesh: Handle<Mesh>,
     source_transform: &Transform,
-    scale: f32,
     follow_rotation: bool,
 ) {
     let pos = source_transform.translation.truncate();
+    let scale = 1.0 + lights.stretch;
     for lamp in 0..2 {
         let mut transform = Transform::from_translation(lights.shadow_translation(lamp, pos))
-            // Enlarge about the source centre (e.g. so a bumper shadow clears its cap).
             .with_scale(source_transform.scale * Vec3::new(scale, scale, 1.0));
         if follow_rotation {
             transform.rotation = source_transform.rotation;
@@ -388,7 +386,7 @@ fn spawn_ball_shadows(
     balls: Query<(Entity, &Transform), Added<Ball>>,
 ) {
     for (ball, transform) in &balls {
-        let mesh = meshes.add(Circle::new(BALL_SHADOW_RADIUS));
+        let mesh = meshes.add(Circle::new(BALL_RADIUS_M));
         let material = shadow_material(&mut materials);
         spawn_shadows_for(
             &mut commands,
@@ -397,7 +395,6 @@ fn spawn_ball_shadows(
             ball,
             mesh,
             transform,
-            1.0,
             false,
         );
     }
@@ -423,7 +420,6 @@ fn spawn_flipper_shadows(
             flipper,
             mesh.0.clone(),
             transform,
-            1.0,
             true,
         );
     }
