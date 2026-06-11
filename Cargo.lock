@@ -5746,8 +5746,9 @@ dependencies = [
 
 [[package]]
 name = "vpin"
-version = "0.26.7"
-source = "git+https://github.com/francisdb/vpin.git?branch=expose-material-physics#cea3f311405db733ca7852056c0e3769aed27100"
+version = "0.26.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0947e36af4311c571cad74284c9d0edd6de6c415fbe257d630152501894ce6e7"
 dependencies = [
  "byteorder",
  "bytes",
