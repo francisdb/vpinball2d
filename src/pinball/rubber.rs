@@ -107,13 +107,39 @@ pub(super) fn spawn_rubber(
     // visual-only (is_collidable = false): the contact surface stays the flat rest band,
     // not the extended frame shown during the flex animation.
     if rubber.is_collidable {
-        // Collide along the band centerline (a thin closed loop).
-        let mut outline: Vec<Vector> = centerline.iter().map(|p| Vector::new(p.x, p.y)).collect();
-        outline.push(outline[0]);
+        // Collide as a SOLID region filling the ring (centerline plus band
+        // width), not a thin polyline loop: a fast ball can slip through a line
+        // and end up trapped inside the ring, where a real rubber wraps solid
+        // posts and has no inside to reach. Trimesh-fill the outer outline.
+        let outer: Vec<Vec2> = {
+            let n = centerline.len();
+            (0..n)
+                .map(|i| {
+                    let prev = centerline[(i + n - 1) % n];
+                    let next = centerline[(i + 1) % n];
+                    let normal = (next - prev).normalize_or_zero().perp();
+                    // The outline winds counter-clockwise after the y flip, so
+                    // +perp of the direction points outward.
+                    centerline[i] + normal * half_width
+                })
+                .collect()
+        };
+        let indices = crate::vpx::triangulate::triangulate_polygon(&outer);
+        let vertices: Vec<Vector> = outer.iter().map(|p| Vector::new(p.x, p.y)).collect();
+        let tris: Vec<[u32; 3]> = indices.chunks(3).map(|c| [c[0], c[1], c[2]]).collect();
+        let collider = if tris.is_empty() {
+            // Degenerate outline: keep the old polyline as a fallback.
+            let mut outline: Vec<Vector> =
+                centerline.iter().map(|p| Vector::new(p.x, p.y)).collect();
+            outline.push(outline[0]);
+            Collider::polyline(outline, None)
+        } else {
+            Collider::trimesh(vertices, tris)
+        };
         entity.insert((
             CollisionEventsEnabled,
             RigidBody::Static,
-            Collider::polyline(outline, None),
+            collider,
             Restitution::from(rubber.elasticity),
             crate::pinball::physics::ElasticityFalloff(rubber.elasticity_falloff),
             Friction::from(rubber.friction),

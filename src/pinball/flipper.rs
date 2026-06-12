@@ -243,6 +243,28 @@ pub(super) fn spawn_flipper(
                 scale: Vec3::ONE,
             },
         )
+    } else if let Some((texture, mesh)) = flipper_image_mesh(vpx_asset, flipper) {
+        // The flipper's own image (vpx `image`): a UV atlas for vpinball's
+        // flipper mesh, so draw the top faces of that mesh with their authored
+        // UVs. The vpin mesh is pivot-centred with the rest pose baked in, so
+        // undoing the parent's rest rotation pins it to the baked pose while it
+        // still swings with the body.
+        let material = materials.add(ColorMaterial {
+            color: Color::WHITE,
+            alpha_mode: AlphaMode2d::Blend,
+            texture: Some(texture),
+            ..default()
+        });
+        (
+            Name::from(format!("Flipper {} Bat", flipper.name)),
+            Mesh2d(meshes.add(mesh)),
+            MeshMaterial2d(material),
+            Transform {
+                translation: Vec3::new(0.0, 0.0, 0.02),
+                rotation: Quat::from_rotation_z(-rest_angle),
+                scale: Vec3::ONE,
+            },
+        )
     } else {
         let bat_mesh = meshes.add(convex_mesh(&bat_outline));
         let bat_material = materials.add(ColorMaterial::from(bat_color));
@@ -332,10 +354,62 @@ fn flipper_outline(base_radius: f32, end_radius: f32, length: f32, mirror: bool)
 }
 
 /// Triangulate a convex, counter-clockwise polygon into a bevy mesh as a triangle fan.
+/// The textured bat for a flipper that carries its own image: vpinball's flipper
+/// base mesh (vpin `build_flipper_meshes`, baked in table space at the rest pose)
+/// reduced to its upward faces, with the authored atlas UVs. Returns the image
+/// handle and the 2D mesh, or `None` when the flipper has no (loadable) image.
+fn flipper_image_mesh(
+    vpx_asset: &VpxAsset,
+    flipper: &vpx::gameitem::flipper::Flipper,
+) -> Option<(Handle<Image>, Mesh)> {
+    let image = flipper
+        .image
+        .as_deref()
+        .filter(|image| !image.is_empty())
+        .and_then(|image| vpx_asset.image(image).cloned())?;
+    let built = vpin::vpx::mesh::flippers::build_flipper_meshes(flipper, 0.0)?;
+    let (verts, faces) = built.base;
+    let positions: Vec<[f32; 3]> = verts
+        .iter()
+        .map(|v| [vpu_to_m(v.vertex.x), -vpu_to_m(v.vertex.y), 0.0])
+        .collect();
+    let uvs: Vec<[f32; 2]> = verts.iter().map(|v| [v.vertex.tu, v.vertex.tv]).collect();
+    // Top-down view: keep the faces whose normal points up, like the primitive
+    // projection (the bat top and its upward-sloping rim).
+    let mut indices: Vec<u32> = Vec::new();
+    for face in &faces {
+        // The y flip into bevy space reverses the winding; swap back to CCW.
+        let tri = [face.i0 as usize, face.i2 as usize, face.i1 as usize];
+        let avg_nz: f32 = tri.iter().map(|&i| verts[i].vertex.nz).sum::<f32>() / 3.0;
+        if avg_nz > 0.0 {
+            indices.extend(tri.map(|i| i as u32));
+        }
+    }
+    if indices.is_empty() {
+        return None;
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    Some((image, mesh))
+}
+
 fn convex_mesh(points: &[Vec2]) -> Mesh {
     let positions: Vec<[f32; 3]> = points.iter().map(|p| [p.x, p.y, 0.0]).collect();
     let normals = vec![[0.0, 0.0, 1.0]; points.len()];
-    let uvs = vec![[0.0, 0.0]; points.len()];
+    // Bounding-box UVs, oriented for the flipper art: the outline's +x runs from
+    // pivot to tip, and flipper images are authored tip-up, so v runs against x.
+    let min = points.iter().fold(Vec2::MAX, |m, p| m.min(*p));
+    let max = points.iter().fold(Vec2::MIN, |m, p| m.max(*p));
+    let size = (max - min).max(Vec2::splat(1e-6));
+    let uvs: Vec<[f32; 2]> = points
+        .iter()
+        .map(|p| [(p.y - min.y) / size.y, 1.0 - (p.x - min.x) / size.x])
+        .collect();
     let mut indices = Vec::new();
     for i in 1..points.len() as u32 - 1 {
         indices.extend_from_slice(&[0, i, i + 1]);

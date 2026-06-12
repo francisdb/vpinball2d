@@ -115,7 +115,8 @@ impl Plugin for AppPlugin {
                 .with_collision_hooks::<crate::pinball::gate::GateCollisionHooks>()
                 .set(PhysicsInterpolationPlugin::interpolate_all()),
         );
-        // gravity of approx. 9.81 m/s² but with a table at 7° angle
+        // Default until a table loads; spawn_level sets the table's own gravity
+        // (vpinball's sin(slope) * gravity, see pinball::level).
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
         // to improve physics stability
         app.insert_resource(SubstepCount(50));

@@ -132,8 +132,9 @@ pub(super) fn spawn_bumper(
         -vpu_to_m(bumper.center.y) + vpx_to_bevy_transform.translation.y,
         0.1,
     );
-    // not sure what vpinball uses as force but we want newtons
-    let force = bumper.force * 0.008;
+    // vpinball adds `force` straight to the ball velocity in VP speed units
+    // (BumperHitCircle::Collide); convert to a velocity delta in m/s.
+    let force = bumper.force * crate::pinball::physics::VP_SPEED_TO_M_S;
     let mut entity = parent.spawn((
         Bumper { force },
         Name::from(format!("Bumper{}", bumper.name)),
@@ -241,7 +242,10 @@ fn handle_bumper_collisions(
                     let ball_pos = ball_transform.translation.truncate();
                     let direction = (ball_pos - bumper_pos).normalize();
 
-                    forces.apply_linear_impulse(direction * bumper.force);
+                    // The kick is a velocity change, so scale by the ball mass.
+                    forces.apply_linear_impulse(
+                        direction * bumper.force * crate::pinball::ball::BALL_MASS_KG,
+                    );
                 }
             }
         }
