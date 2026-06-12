@@ -34,7 +34,7 @@ use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use api::{HostState, ItemKind, ItemState, ScriptCommand, ScriptEngine, ScriptValue, SharedHost};
-use avian2d::prelude::{CollisionEnd, CollisionStart, LinearVelocity};
+use avian2d::prelude::{CollisionEnd, CollisionStart, LinearVelocity, RigidBody};
 use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -81,6 +81,29 @@ struct ScriptSounds(HashMap<String, Handle<AudioSource>>);
 #[derive(Component)]
 struct PlayingSound(String);
 
+/// A ball held in a kicker (saucer or drain), frozen at its centre until the
+/// script kicks or destroys it - vpinball's locked-in-kicker state.
+#[derive(Component)]
+pub struct CapturedBall {
+    kicker: Entity,
+}
+
+/// Suppresses re-capture by the kicker a ball was just kicked out of (or
+/// created in), until the ball actually leaves its sensor.
+#[derive(Component)]
+struct KickerEscape {
+    kicker: Entity,
+}
+
+/// A kick whose target ball did not exist yet (ball spawns are deferred a
+/// frame); retried until the ball appears or the tries run out.
+struct PendingKick {
+    name: String,
+    angle: f32,
+    speed: f32,
+    tries: u32,
+}
+
 /// One scripting timer, from a vpx Timer gameitem. Fires `<name>_timer`.
 struct ScriptTimer {
     /// Lowercase name, the event prefix.
@@ -97,6 +120,7 @@ pub struct ScriptRuntime {
     host: SharedHost,
     timers: Vec<ScriptTimer>,
     store_path: PathBuf,
+    pending_kicks: Vec<PendingKick>,
 }
 
 impl ScriptRuntime {
@@ -114,6 +138,8 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         (
+            capture_balls,
+            clear_kicker_escapes,
             forward_keys,
             forward_collisions,
             forward_slingshots,
@@ -233,6 +259,7 @@ pub fn init_script(world: &mut World) {
         host,
         timers,
         store_path,
+        pending_kicks: Vec::new(),
     };
     runtime.dispatch("table_init", &[]);
 
@@ -343,6 +370,72 @@ fn key_code(key: KeyCode) -> Option<i64> {
     })
 }
 
+/// Captures a ball entering a kicker sensor: frozen kinematic at the kicker
+/// centre until the script kicks or destroys it, vpinball's locked-in-kicker
+/// behaviour. Balls escaping a kicker they were just kicked out of (or created
+/// in) are left alone until they exit its sensor.
+fn capture_balls(
+    mut commands: Commands,
+    mut started: MessageReader<CollisionStart>,
+    kickers: Query<&Transform, With<Kicker>>,
+    mut balls: Query<
+        (
+            &mut Transform,
+            &mut LinearVelocity,
+            Option<&KickerEscape>,
+            Option<&CapturedBall>,
+        ),
+        (With<Ball>, Without<Kicker>),
+    >,
+) {
+    for collision in started.read() {
+        let (ball_entity, kicker_entity) =
+            if balls.contains(collision.collider1) && kickers.contains(collision.collider2) {
+                (collision.collider1, collision.collider2)
+            } else if balls.contains(collision.collider2) && kickers.contains(collision.collider1) {
+                (collision.collider2, collision.collider1)
+            } else {
+                continue;
+            };
+        let Ok((mut transform, mut velocity, escape, captured)) = balls.get_mut(ball_entity) else {
+            continue;
+        };
+        if captured.is_some() || escape.is_some_and(|e| e.kicker == kicker_entity) {
+            continue;
+        }
+        let kicker_pos = kickers.get(kicker_entity).unwrap().translation.truncate();
+        transform.translation.x = kicker_pos.x;
+        transform.translation.y = kicker_pos.y;
+        velocity.0 = Vec2::ZERO;
+        commands.entity(ball_entity).insert((
+            CapturedBall {
+                kicker: kicker_entity,
+            },
+            RigidBody::Kinematic,
+        ));
+    }
+}
+
+/// Drops the escape marker once the kicked ball has actually left the kicker.
+fn clear_kicker_escapes(
+    mut commands: Commands,
+    mut ended: MessageReader<CollisionEnd>,
+    balls: Query<&KickerEscape, With<Ball>>,
+) {
+    for collision in ended.read() {
+        for (ball, other) in [
+            (collision.collider1, collision.collider2),
+            (collision.collider2, collision.collider1),
+        ] {
+            if let Ok(escape) = balls.get(ball)
+                && escape.kicker == other
+            {
+                commands.entity(ball).remove::<KickerEscape>();
+            }
+        }
+    }
+}
+
 /// Forwards key transitions to the script. Diffs the `pressed` state against the
 /// previous frame instead of reading `just_pressed`: the remote-control interface
 /// injects presses mid-`Update` (after this system), which `just_pressed` would
@@ -451,8 +544,16 @@ fn apply_commands(
     mut commands: Commands,
     mut runtime: NonSendMut<ScriptRuntime>,
     mut lights: Query<(&Light, Option<&mut LightAnimation>, &mut Visibility)>,
-    kickers: Query<(&Kicker, &Transform)>,
-    mut balls: Query<(Entity, &Transform, &mut LinearVelocity), With<Ball>>,
+    kickers: Query<(Entity, &Kicker, &Transform)>,
+    mut balls: Query<
+        (
+            Entity,
+            &Transform,
+            &mut LinearVelocity,
+            Option<&CapturedBall>,
+        ),
+        With<Ball>,
+    >,
     sounds: Res<ScriptSounds>,
     playing: Query<(Entity, &PlayingSound)>,
     mut flippers_enabled: ResMut<FlippersEnabled>,
@@ -462,6 +563,27 @@ fn apply_commands(
     ball_assets: Option<Res<BallAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
 ) {
+    // Retry kicks whose ball had not spawned yet.
+    let mut pending = std::mem::take(&mut runtime.pending_kicks);
+    pending.retain_mut(|kick| {
+        if try_kick(
+            &mut commands,
+            &kickers,
+            &mut balls,
+            &kick.name,
+            kick.angle,
+            kick.speed,
+        ) {
+            return false;
+        }
+        kick.tries -= 1;
+        if kick.tries == 0 {
+            warn!("kicker {} kick found no ball to kick", kick.name);
+        }
+        kick.tries > 0
+    });
+    runtime.pending_kicks = pending;
+
     let queued: Vec<ScriptCommand> = std::mem::take(&mut runtime.host.borrow_mut().commands);
     for command in queued {
         match command {
@@ -529,9 +651,9 @@ fn apply_commands(
                     .unwrap_or(ItemKind::Other);
                 match (kind, method.as_str()) {
                     (ItemKind::Kicker, "createball") => {
-                        let Some((_, transform)) = kickers
+                        let Some((_, _, transform)) = kickers
                             .iter()
-                            .find(|(k, _)| k.name.eq_ignore_ascii_case(&name))
+                            .find(|(_, k, _)| k.name.eq_ignore_ascii_case(&name))
                         else {
                             continue;
                         };
@@ -554,42 +676,40 @@ fn apply_commands(
                         ));
                     }
                     (ItemKind::Kicker, "kick") => {
-                        let Some((_, kicker_transform)) = kickers
-                            .iter()
-                            .find(|(k, _)| k.name.eq_ignore_ascii_case(&name))
-                        else {
-                            continue;
-                        };
                         let angle = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
                         let speed = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
-                        // vpinball speed units: 18.53 per m/s (see physics).
-                        let speed_m = speed / 18.53;
-                        // Angle 0 kicks up the table, 90 to the right.
-                        let direction =
-                            Vec2::new(angle.to_radians().sin(), angle.to_radians().cos());
-                        let kicker_pos = kicker_transform.translation.truncate();
-                        // Kick the ball sitting in/near the kicker.
-                        if let Some((_, _, mut velocity)) = balls
-                            .iter_mut()
-                            .map(|(e, t, v)| (e, t.translation.truncate().distance(kicker_pos), v))
-                            .filter(|(_, d, _)| *d < 0.05)
-                            .min_by(|a, b| a.1.total_cmp(&b.1))
-                        {
-                            velocity.0 = direction * speed_m;
+                        if !try_kick(&mut commands, &kickers, &mut balls, &name, angle, speed) {
+                            // The ball may have been created this very frame
+                            // (spawns are deferred); retry for a while.
+                            runtime.pending_kicks.push(PendingKick {
+                                name,
+                                angle,
+                                speed,
+                                tries: 60,
+                            });
                         }
                     }
                     (ItemKind::Kicker, "destroyball") => {
-                        let Some((_, kicker_transform)) = kickers
+                        let Some((kicker_entity, _, kicker_transform)) = kickers
                             .iter()
-                            .find(|(k, _)| k.name.eq_ignore_ascii_case(&name))
+                            .find(|(_, k, _)| k.name.eq_ignore_ascii_case(&name))
                         else {
                             continue;
                         };
                         let kicker_pos = kicker_transform.translation.truncate();
-                        if let Some((entity, _, _)) = balls
+                        // Prefer the ball captured by this kicker, else nearest.
+                        if let Some((entity, _, _, _)) = balls
                             .iter_mut()
-                            .map(|(e, t, v)| (e, t.translation.truncate().distance(kicker_pos), v))
-                            .filter(|(_, d, _)| *d < 0.05)
+                            .map(|(e, t, v, c)| {
+                                let captured = c.is_some_and(|c| c.kicker == kicker_entity);
+                                (
+                                    e,
+                                    t.translation.truncate().distance(kicker_pos),
+                                    v,
+                                    captured,
+                                )
+                            })
+                            .filter(|(_, d, _, captured)| *captured || *d < 0.05)
                             .min_by(|a, b| a.1.total_cmp(&b.1))
                         {
                             commands.entity(entity).despawn();
@@ -640,6 +760,61 @@ fn apply_commands(
             }
         }
     }
+}
+
+/// Kick the ball sitting in the named kicker: release a captured ball back to
+/// dynamic and throw it at the vpinball angle/speed (degrees, VP speed units;
+/// angle 0 is up the table, 90 to the right). Returns whether a ball was hit.
+fn try_kick(
+    commands: &mut Commands,
+    kickers: &Query<(Entity, &Kicker, &Transform)>,
+    balls: &mut Query<
+        (
+            Entity,
+            &Transform,
+            &mut LinearVelocity,
+            Option<&CapturedBall>,
+        ),
+        With<Ball>,
+    >,
+    name: &str,
+    angle: f32,
+    speed: f32,
+) -> bool {
+    let Some((kicker_entity, _, kicker_transform)) = kickers
+        .iter()
+        .find(|(_, k, _)| k.name.eq_ignore_ascii_case(name))
+    else {
+        return true; // unknown kicker: drop the kick, nothing to retry
+    };
+    let kicker_pos = kicker_transform.translation.truncate();
+    // vpinball speed units: 18.53 per m/s (see pinball::physics).
+    let speed_m = speed / 18.53;
+    let direction = Vec2::new(angle.to_radians().sin(), angle.to_radians().cos());
+    let Some((entity, _, mut velocity, _)) = balls
+        .iter_mut()
+        .map(|(e, t, v, c)| {
+            let captured = c.is_some_and(|c| c.kicker == kicker_entity);
+            (
+                e,
+                t.translation.truncate().distance(kicker_pos),
+                v,
+                captured,
+            )
+        })
+        .filter(|(_, d, _, captured)| *captured || *d < 0.05)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+    else {
+        return false;
+    };
+    velocity.0 = direction * speed_m;
+    commands.entity(entity).remove::<CapturedBall>().insert((
+        RigidBody::Dynamic,
+        KickerEscape {
+            kicker: kicker_entity,
+        },
+    ));
+    true
 }
 
 /// Write a reel's value into the shadow state (the scoreboard reads it).
