@@ -170,9 +170,16 @@ pub(super) fn spawn_ramp(
     // lane at ~16mm (height_bottom 30 vpu), low enough that the ball strikes it - the
     // same height gate walls use. A solid trimesh (not a thin polyline) is used so the
     // ball does not wedge or tunnel (see the wall collider notes).
+    // The wire must also REACH the ball: a wire lying on the playfield (heights
+    // 0/0, e.g. a switch wire crossing a lane) is rolled over in vpinball, not
+    // bounced off - a kicked ball must not slam into it in 2D. Use the same z
+    // window walls use: the span (plus the wire's own diameter) has to cover the
+    // ball's rolling centre +- half a radius.
+    let wire_top = ramp.height_bottom.max(ramp.height_top) + ramp.wire_diameter;
     if ramp.is_collidable
         && is_guide(ramp)
-        && vpu_to_m(ramp.height_bottom) < BALL_RADIUS_M * 2.0
+        && vpu_to_m(ramp.height_bottom) < BALL_RADIUS_M * 1.5
+        && vpu_to_m(wire_top) > BALL_RADIUS_M * 0.5
         && let Some(mesh) = meshes.get(mesh_handle)
     {
         entity.insert((

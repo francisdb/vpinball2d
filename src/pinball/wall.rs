@@ -303,15 +303,17 @@ pub(super) fn spawn_wall(
             ));
         }
     }
-    // A wall collides when its vertical span covers the ball's rolling centre,
-    // vpinball's LineSeg z window (collide.cpp HitTestBasic): hit only when
-    // `centre + r/2 >= zlow` and `centre - r/2 <= zhigh`, i.e. zlow < 1.5 r and
-    // zhigh > 0.5 r. This is what lets the ball roll under a plastic authored at
-    // 49-50 vpu (e.g. a plunger-lane cover) and over decorative sub-12 vpu trim,
-    // while slingshot guides at 0-30 vpu still collide.
+    // A wall collides when it reaches into the ball's rolling centre from above:
+    // vpinball's LineSeg z window (collide.cpp HitTestBasic) hits only when
+    // `centre + r/2 >= zlow`, i.e. zlow < 1.5 r - this is what lets the ball
+    // roll under a plastic authored at 49-50 vpu (e.g. a plunger-lane cover).
+    // vpinball's window also drops walls topping out below `centre - r/2`, but
+    // this flat world keeps those: tables use low invisible walls as rolling
+    // guides (e.g. the example table's 4 vpu plunger ball-centering V) whose job
+    // is done by 3D lane geometry in vpinball that we do not have.
     if wall.is_collidable
         && vpu_to_m(wall.height_bottom) < BALL_RADIUS_M * 1.5
-        && vpu_to_m(wall.height_top) > BALL_RADIUS_M * 0.5
+        && wall.height_top > 0.0
     {
         let mesh = meshes.get(mesh_handle).unwrap();
         let collider = mesh_collider(mesh);
