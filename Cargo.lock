@@ -5746,7 +5746,9 @@ dependencies = [
 
 [[package]]
 name = "vpin"
-version = "0.26.8"
+version = "0.26.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91aae2bac97dbc02ddfcdab810ff722b65983ccd0d705035ff862c7d3f298cbe"
 dependencies = [
  "byteorder",
  "bytes",
