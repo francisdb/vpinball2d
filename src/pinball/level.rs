@@ -106,6 +106,24 @@ pub fn spawn_level(
     }
     commands.insert_resource(overhead_lights);
 
+    // The table's own gravity, vpinball's model (player.cpp / PhysicsEngine):
+    // slope = lerp(tilt min, tilt max, global difficulty), in-plane acceleration
+    // = sin(slope) * gravity. The vpx gravity is in VP units per 10 ms tick
+    // squared; the default GRAVITYCONST 1.81751 is exactly 9.81 m/s^2.
+    let gamedata = &vpx_asset.raw.gamedata;
+    let slope_deg = gamedata.angle_tilt_min
+        + (gamedata.angle_tilt_max - gamedata.angle_tilt_min)
+            * gamedata.global_difficulty.clamp(0.0, 1.0);
+    // VPU/tick^2 -> m/s^2 (tick = 10 ms).
+    let gravity_m_s2 = vpu_to_m(gamedata.gravity) / (0.01 * 0.01);
+    commands.insert_resource(avian2d::prelude::Gravity(
+        avian2d::math::Vector::NEG_Y * gravity_m_s2 * slope_deg.to_radians().sin(),
+    ));
+    info!(
+        "Table gravity: slope {slope_deg:.1} deg, g {gravity_m_s2:.2} m/s^2 -> {:.3} m/s^2 down-table",
+        gravity_m_s2 * slope_deg.to_radians().sin()
+    );
+
     // TODO the walls should probably be children of the table
     commands
         .spawn((
@@ -172,7 +190,13 @@ pub fn spawn_level(
                         );
                     }
                     GameItemEnum::Trigger(trigger) => {
-                        spawn_trigger(vpx_to_bevy_transform, parent, trigger);
+                        spawn_trigger(
+                            &mut meshes,
+                            &mut materials,
+                            vpx_to_bevy_transform,
+                            parent,
+                            trigger,
+                        );
                     }
                     GameItemEnum::Kicker(kicker) => {
                         // TODO implement kicker spawning

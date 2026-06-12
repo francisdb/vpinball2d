@@ -18,13 +18,9 @@ use vpin::vpx::gameitem::dragpoint::DragPoint;
 use vpin::vpx::gameitem::wall;
 use vpin::vpx::units::vpu_to_m;
 
-/// vpinball measures slingshot strength in its own units and scales it by 1/10 internally
-/// (`Surface::GetSlingshotStrength`). We additionally scale into this 2D world's impulse
-/// units; tuned so a normal hit kicks the ball back into play. TODO calibrate against vpx.
-const SLINGSHOT_FORCE_SCALE: f32 = 0.1 * 0.02;
-/// Minimum ball speed towards the slingshot face (m/s) for it to fire. vpinball uses the
-/// per-surface `slingshot_threshold`; we scale it into m/s. TODO calibrate against vpx.
-const SLINGSHOT_THRESHOLD_SCALE: f32 = 0.05;
+/// The vpx slingshot threshold is an approach speed in VP speed units; convert
+/// to m/s like every other VP velocity.
+const SLINGSHOT_THRESHOLD_SCALE: f32 = crate::pinball::physics::VP_SPEED_TO_M_S;
 /// Width (vpx units) of the band that visualises a wall's translucent side faces
 /// (edge-lit acrylic outlines).
 const SIDE_BAND_WIDTH_VPU: f32 = 6.0;
@@ -105,15 +101,20 @@ pub struct Wall {
 pub struct Slingshot {
     /// The slingshot wall's name (matches the vpx Wall name), used to find its animation.
     pub(crate) name: String,
-    /// Outward impulse strength (already scaled into this world's units).
+    /// The authored vpx `slingshot_force`, in VP speed units (the velocity kick
+    /// at the segment centre is half of it, see `handle_slingshot_collisions`).
     pub(crate) force: f32,
     /// Minimum inbound speed (m/s) before the slingshot fires.
     pub(crate) threshold: f32,
-    /// World-space centre of the slingshot, used to orient the kick towards the ball.
+    /// World-space centre of the kicking segment.
     pub(crate) center: Vec2,
     /// Unit normal of the kicking segment (sign arbitrary; oriented towards the ball at hit
     /// time). vpinball applies the slingshot force along this segment normal.
     normal: Vec2,
+    /// Unit tangent and half-length (m) of the kicking segment, to scale the kick
+    /// by where the ball hits, like vpinball.
+    tangent: Vec2,
+    half_len: f32,
 }
 
 /// Sounds a table plays when a slingshot fires. A random entry is picked and played
@@ -302,14 +303,15 @@ pub(super) fn spawn_wall(
             ));
         }
     }
-    // A wall collides with the ball when its vertical span reaches into the ball's height.
-    // VPX wall heights are in vpu, so convert to metres before comparing with the ball size.
-    //   - height_bottom below the ball top: not floating above the ball (e.g. raised plastics
-    //     at 50 vpu sit at the ball top and stay visual; slingshot guides at 30 vpu collide)
-    //   - height_top above the playfield: not sunk below it (e.g. the trigger wire hole)
+    // A wall collides when its vertical span covers the ball's rolling centre,
+    // vpinball's LineSeg z window (collide.cpp HitTestBasic): hit only when
+    // `centre + r/2 >= zlow` and `centre - r/2 <= zhigh`, i.e. zlow < 1.5 r and
+    // zhigh > 0.5 r. This is what lets the ball roll under a plastic authored at
+    // 49-50 vpu (e.g. a plunger-lane cover) and over decorative sub-12 vpu trim,
+    // while slingshot guides at 0-30 vpu still collide.
     if wall.is_collidable
-        && vpu_to_m(wall.height_bottom) < BALL_RADIUS_M * 2.0
-        && wall.height_top > 0.0
+        && vpu_to_m(wall.height_bottom) < BALL_RADIUS_M * 1.5
+        && vpu_to_m(wall.height_top) > BALL_RADIUS_M * 0.5
     {
         let mesh = meshes.get(mesh_handle).unwrap();
         let collider = mesh_collider(mesh);
@@ -333,13 +335,17 @@ pub(super) fn spawn_wall(
                 .iter()
                 .any(|dp| dp.is_slingshot == Some(true));
         if is_slingshot {
+            let (v1, v2) = slingshot_segment(&wall.drag_points, vpx_to_bevy_transform);
+            let segment = v2 - v1;
             entity.insert((
                 Slingshot {
                     name: wall.name.clone(),
-                    force: wall.slingshot_force * SLINGSHOT_FORCE_SCALE,
+                    force: wall.slingshot_force,
                     threshold: wall.slingshot_threshold * SLINGSHOT_THRESHOLD_SCALE,
-                    center: slingshot_center(&wall.drag_points, vpx_to_bevy_transform),
-                    normal: slingshot_normal(&wall.drag_points, vpx_to_bevy_transform),
+                    center: (v1 + v2) * 0.5,
+                    normal: Vec2::new(segment.y, -segment.x).normalize_or_zero(),
+                    tangent: segment.normalize_or_zero(),
+                    half_len: (segment.length() * 0.5).max(1e-4),
                 },
                 CollisionEventsEnabled,
                 // The slingshot's visual band is a separate Rubber gameitem; hide the wall
@@ -409,31 +415,25 @@ pub(super) fn mesh_collider(mesh: &Mesh) -> Collider {
 }
 
 /// World-space centre of a wall's drag points (vpx coords -> bevy, like the mesh).
-fn slingshot_center(drag_points: &[DragPoint], transform: Transform) -> Vec2 {
-    let sum: Vec2 = drag_points.iter().fold(Vec2::ZERO, |acc, dp| {
-        acc + Vec2::new(vpu_to_m(dp.x), -vpu_to_m(dp.y))
-    });
-    let mean = sum / drag_points.len().max(1) as f32;
-    transform.translation.truncate() + mean
-}
-
-/// Unit normal of the slingshot's kicking segment, the segment that starts at the `is_slingshot`
-/// drag point (this is the line vpinball builds the `LineSegSlingshot` from). Perpendicular to
-/// that segment; the sign is arbitrary here and is oriented towards the ball at hit time.
-fn slingshot_normal(drag_points: &[DragPoint], transform: Transform) -> Vec2 {
+/// World endpoints of the slingshot's kicking segment, the segment that starts at the
+/// `is_slingshot` drag point (this is the line vpinball builds the `LineSegSlingshot`
+/// from).
+fn slingshot_segment(drag_points: &[DragPoint], transform: Transform) -> (Vec2, Vec2) {
     let n = drag_points.len();
+    let to_world = |dp: &DragPoint| {
+        transform.translation.truncate() + Vec2::new(vpu_to_m(dp.x), -vpu_to_m(dp.y))
+    };
     if n < 2 {
-        return Vec2::Y;
+        return (Vec2::ZERO, Vec2::X * 1e-4);
     }
     let i = drag_points
         .iter()
         .position(|dp| dp.is_slingshot == Some(true))
         .unwrap_or(0);
-    let to_world = |dp: &DragPoint| {
-        transform.translation.truncate() + Vec2::new(vpu_to_m(dp.x), -vpu_to_m(dp.y))
-    };
-    let segment = to_world(&drag_points[(i + 1) % n]) - to_world(&drag_points[i]);
-    Vec2::new(segment.y, -segment.x).normalize_or_zero()
+    (
+        to_world(&drag_points[i]),
+        to_world(&drag_points[(i + 1) % n]),
+    )
 }
 
 /// When a ball hits a slingshot fast enough, kick it back out. Like vpinball's
@@ -511,7 +511,14 @@ fn handle_slingshot_collisions(
             continue;
         }
 
-        forces.apply_linear_impulse(outward * slingshot.force);
+        // vpinball's kick (LineSegSlingshot::Collide): a velocity boost of
+        // `0.5 * (1 - t^2) * force` VP speed units, strongest at the segment
+        // centre (t = 0) and fading to nothing at the ends (t = +-1).
+        let t = ((ball_pos - slingshot.center).dot(slingshot.tangent) / slingshot.half_len)
+            .clamp(-1.0, 1.0);
+        let kick_m_s =
+            0.5 * (1.0 - t * t) * slingshot.force * crate::pinball::physics::VP_SPEED_TO_M_S;
+        forces.apply_linear_impulse(outward * kick_m_s * crate::pinball::ball::BALL_MASS_KG);
 
         // play the slingshot sound at the slingshot (spatial panning from its position)
         if let (Some(sounds), Some(table_assets)) = (&sounds, &table_assets) {

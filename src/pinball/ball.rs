@@ -18,7 +18,7 @@ use vpin::vpx::units::vpu_to_m;
 pub const BALL_RADIUS_M: f32 = 0.027 / 2.0;
 
 // A typical pinball ball mass is around 80 grams
-const BALL_MASS_KG: f32 = 0.08;
+pub(crate) const BALL_MASS_KG: f32 = 0.08;
 
 // Overhead light directions (screen space, y up) the chrome ball reflects as
 // specular hotspots. These roughly mirror the two overhead lamps the shadow system

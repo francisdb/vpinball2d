@@ -135,14 +135,15 @@ pub(super) fn spawn_ramp(
     // cards at 51 vpu sort above the playfield and below the apron, and an elevated
     // ramp covers lower geometry. The mesh vertices carry per-point offsets relative
     // to this height.
+    // Tables author playfield-level wire guides with height 0/0; at z 0 exactly
+    // they z-fight the playfield and vanish (while still showing in the
+    // separate static-shadow pass). A real guide wire sits above the floor, so
+    // give the centre height a small floor.
+    let center_height = ((ramp.height_bottom + ramp.height_top) * 0.5).max(2.0);
     let transform = Transform::from_xyz(
         vpx_to_bevy_transform.translation.x,
         vpx_to_bevy_transform.translation.y,
-        crate::pinball::layer::render_z(
-            (ramp.height_bottom + ramp.height_top) * 0.5,
-            ramp.depth_bias,
-            item_index,
-        ),
+        crate::pinball::layer::render_z(center_height, ramp.depth_bias, item_index),
     );
     let mut entity = parent.spawn((
         Name::from(format!("Ramp {}", ramp.name)),

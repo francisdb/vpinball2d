@@ -7,11 +7,11 @@ use avian2d::prelude::*;
 use bevy::asset::Assets;
 use bevy::color::Color;
 use bevy::color::Srgba;
-use bevy::color::palettes::css;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
 use bevy::prelude::*;
 use vpin::vpx;
+use vpin::vpx::gameitem::kicker::KickerType;
 use vpin::vpx::units::vpu_to_m;
 
 #[derive(Component)]
@@ -20,7 +20,10 @@ pub struct Kicker {
     pub name: String,
 }
 
-const KICKER_COLOR: Srgba = css::GREEN;
+/// The visible saucer: a dark hole in the playfield, drawn just above it and
+/// under the ball.
+const KICKER_HOLE_COLOR: Srgba = Srgba::new(0.06, 0.05, 0.05, 1.0);
+const KICKER_HOLE_Z: f32 = 0.002;
 
 /// Sounds a table plays for the generic drain / ball-release cycle. A random entry is
 /// picked each time, so a single-element list gives a fixed sound. A table enables the
@@ -53,7 +56,7 @@ pub(super) fn spawn_kicker(
     //   0 is up (positive Y), 90 is right (positive X), etc.
     //   we can draw a small arrow or to indicate the direction visually
 
-    parent.spawn((
+    let mut entity = parent.spawn((
         Kicker {
             name: kicker.name.clone(),
         },
@@ -61,16 +64,22 @@ pub(super) fn spawn_kicker(
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x + vpu_to_m(kicker.center.x),
             vpx_to_bevy_transform.translation.y - vpu_to_m(kicker.center.y),
-            10.0,
+            KICKER_HOLE_Z,
         ),
-        Mesh2d(meshes.add(Annulus::new(radius - 0.001, radius))),
-        MeshMaterial2d(materials.add(Color::from(KICKER_COLOR))),
         // physics
         CollisionEventsEnabled,
-        //RigidBody::Static,
         Collider::circle(radius),
         Sensor,
     ));
+    // Invisible kickers (most tables' drains and saucers, with the cup art in
+    // the playfield image) get no visual; the modelled types draw as the dark
+    // hole the ball can sit in. The collider stays visible in the collider view.
+    if !matches!(kicker.kicker_type, KickerType::Invisible) {
+        entity.insert((
+            Mesh2d(meshes.add(Circle::new(radius))),
+            MeshMaterial2d(materials.add(Color::from(KICKER_HOLE_COLOR))),
+        ));
+    }
 }
 
 /// Generic drain handling shared by all tables: when the ball hits the "Drain" kicker,

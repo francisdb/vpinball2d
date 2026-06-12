@@ -34,7 +34,11 @@ const NUDGE_PUSH_DECAY: f32 = 0.04;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Nudge>()
-        .add_systems(Startup, capture_base_gravity)
+        // After spawn_level, which sets the table's own gravity.
+        .add_systems(
+            OnEnter(Screen::Gameplay),
+            capture_base_gravity.after(crate::pinball::level::spawn_level),
+        )
         // Read input every render frame, but step the oscillator and set gravity in
         // FixedUpdate so it runs in lockstep with Avian's fixed-timestep physics
         // (FixedPostUpdate); otherwise the ringing gravity gets aliased by the

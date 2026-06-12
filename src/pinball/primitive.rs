@@ -26,8 +26,14 @@ pub struct Primitive {
 /// `FlipperLSh` with image `flippers_shadow`). We render generated shadows instead
 /// (see `pinball::light`), so these are discarded at spawn.
 pub(crate) fn is_table_shadow(primitive: &primitive::Primitive) -> bool {
-    primitive.name.to_lowercase().contains("shadow")
-        || primitive.image.to_lowercase().contains("shadow")
+    // Tables name these "FlipperShadow", "LeftFlipperSh", image "flipper-sh", ...
+    let name = primitive.name.to_lowercase();
+    let image = primitive.image.to_lowercase();
+    name.contains("shadow")
+        || image.contains("shadow")
+        || name.ends_with("sh")
+        || image.ends_with("-sh")
+        || image.ends_with("_sh")
 }
 
 pub(super) fn spawn_primitive(
