@@ -437,7 +437,7 @@ fn slingshot_segment(drag_points: &[DragPoint], transform: Transform) -> (Vec2, 
 }
 
 /// When a ball hits a slingshot fast enough, kick it back out. Like vpinball's
-/// `LineSegSlingshot`, the kick is along the kicking segment's normal (see [`slingshot_normal`]),
+/// `LineSegSlingshot`, the kick is along the kicking segment's normal (see [`slingshot_segment`]),
 /// oriented out of the face towards the ball. The magnitude is a constant impulse above the speed
 /// threshold (a solenoid fires the same each time), tuned via the scale consts. The rest/flexed
 /// rubbers, if the table maps them, only drive the brief flex animation.
