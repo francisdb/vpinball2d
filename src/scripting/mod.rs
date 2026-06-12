@@ -14,6 +14,7 @@
 //! `<item>_slingshot`, `<item>_spin` and `<timer>_timer`.
 
 pub mod api;
+#[cfg(not(target_arch = "wasm32"))]
 mod lua;
 mod scoreboard;
 pub mod sidecar;
@@ -134,9 +135,17 @@ pub fn has_script_sidecar(tables_dir: &std::path::Path, rel_path: &str) -> bool 
     tables_dir.join(rel_path).with_extension("lua").is_file()
 }
 
+/// Web builds have no script engine (the vendored Lua C sources do not build
+/// for wasm); tables run scriptless like before.
+#[cfg(target_arch = "wasm32")]
+pub fn init_script(world: &mut World) {
+    world.remove_resource::<ScriptActive>();
+}
+
 /// Loads and starts the table's sidecar script, if it has one. Runs before
 /// `spawn_level` so the level spawn can adapt (no auto ball, lights start in
 /// their authored state instead of the attract blinker).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init_script(world: &mut World) {
     let Some(tables_dir) = world.get_resource::<crate::tables::TablesDir>() else {
         return;
@@ -637,7 +646,7 @@ fn set_reel(runtime: &ScriptRuntime, name: &str, value: Option<i64>) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::api::*;
     use super::lua::LuaEngine;
