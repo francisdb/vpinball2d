@@ -139,6 +139,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             capture_balls,
+            release_displaced_captures,
             clear_kicker_escapes,
             forward_keys,
             forward_collisions,
@@ -432,6 +433,35 @@ fn clear_kicker_escapes(
             {
                 commands.entity(ball).remove::<KickerEscape>();
             }
+        }
+    }
+}
+
+/// Releases a captured ball that something else moved away from its kicker
+/// (mouse ball control, the remote-control teleport): it would otherwise stay
+/// kinematic forever and float through every collider.
+fn release_displaced_captures(
+    mut commands: Commands,
+    kickers: Query<&Transform, With<Kicker>>,
+    balls: Query<(Entity, &Transform, &CapturedBall), With<Ball>>,
+) {
+    for (entity, transform, captured) in &balls {
+        let displaced = match kickers.get(captured.kicker) {
+            Ok(kicker_transform) => {
+                transform
+                    .translation
+                    .truncate()
+                    .distance(kicker_transform.translation.truncate())
+                    > 0.02
+            }
+            // Kicker gone: nothing will ever kick this ball free.
+            Err(_) => true,
+        };
+        if displaced {
+            commands
+                .entity(entity)
+                .remove::<CapturedBall>()
+                .insert(RigidBody::Dynamic);
         }
     }
 }
