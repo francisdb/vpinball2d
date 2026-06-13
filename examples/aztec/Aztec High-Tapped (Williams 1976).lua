@@ -385,6 +385,12 @@ function drain_hit()
         drain:destroyball()
         return
     end
+    -- A second ball reaching the drain while the bonus is still paying out
+    -- (e.g. one that was stuck and came loose) must not restart the payout.
+    if draining then
+        drain:destroyball()
+        return
+    end
     drain:destroyball()
     if tilted then
         next_ball()

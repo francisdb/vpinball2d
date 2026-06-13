@@ -11,13 +11,15 @@ use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::mesh::{Mesh, Mesh2d};
 use bevy::prelude::*;
 use vpin::vpx;
-use vpin::vpx::gameitem::kicker::KickerType;
 use vpin::vpx::units::vpu_to_m;
 
 #[derive(Component)]
 pub struct Kicker {
     #[allow(dead_code)]
     pub name: String,
+    /// The hit-circle radius (metres): the ball is "inside" this kicker's volume
+    /// while its centre is within this distance, vpinball's KickerHitCircle.
+    pub radius: f32,
 }
 
 /// The visible saucer: a dark hole in the playfield, drawn just above it and
@@ -59,6 +61,7 @@ pub(super) fn spawn_kicker(
     let mut entity = parent.spawn((
         Kicker {
             name: kicker.name.clone(),
+            radius,
         },
         crate::scripting::ScriptName(kicker.name.clone()),
         Name::from(format!("Kicker {}", kicker.name)),
@@ -72,15 +75,14 @@ pub(super) fn spawn_kicker(
         Collider::circle(radius),
         Sensor,
     ));
-    // Invisible kickers (most tables' drains and saucers, with the cup art in
-    // the playfield image) get no visual; the modelled types draw as the dark
-    // hole the ball can sit in. The collider stays visible in the collider view.
-    if !matches!(kicker.kicker_type, KickerType::Invisible) {
-        entity.insert((
-            Mesh2d(meshes.add(Circle::new(radius))),
-            MeshMaterial2d(materials.add(Color::from(KICKER_HOLE_COLOR))),
-        ));
-    }
+    // Every kicker draws as the dark hole the ball can sit in. vpinball leaves
+    // invisible-type kickers to the playfield art, but in this top-down view an
+    // unmarked saucer reads as the ball stopping on bare playfield, so the hole
+    // is always drawn.
+    entity.insert((
+        Mesh2d(meshes.add(Circle::new(radius))),
+        MeshMaterial2d(materials.add(Color::from(KICKER_HOLE_COLOR))),
+    ));
 }
 
 /// Generic drain handling shared by all tables: when the ball hits the "Drain" kicker,
