@@ -30,6 +30,7 @@ pub(super) fn spawn_trigger(
         Trigger {
             name: trigger.name.clone(),
         },
+        crate::scripting::ScriptName(trigger.name.clone()),
         Name::from(format!("Trigger {}", trigger.name)),
         Transform::from_xyz(
             vpx_to_bevy_transform.translation.x + vpu_to_m(trigger.center.x),

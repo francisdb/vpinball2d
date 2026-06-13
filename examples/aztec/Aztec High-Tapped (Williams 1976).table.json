@@ -1,0 +1,13 @@
+{
+  "drain": { "down": ["Drainshort"], "up": [] },
+  "flippers": { "up": ["FlipperUp"], "down": ["FlipperDown"] },
+  "bumpers": { "hit": ["jet2"] },
+  "slingshots": { "hit": ["LSling", "RSling"] },
+  "slingshot_animations": [
+    { "slingshot": "leftsling", "rest": "Rubber2", "flexed": "Rubber2a" },
+    { "slingshot": "rightsling", "rest": "Rubber3", "flexed": "Rubber3a" }
+  ],
+  "targets": { "hit": ["target"] },
+  "spinners": { "hit": ["spinner"] },
+  "gates": { "hit": ["gate4"] }
+}

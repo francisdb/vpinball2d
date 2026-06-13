@@ -8,7 +8,12 @@ use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Gameplay), (spawn_level, fit_camera));
+    // The table script (if any) loads first so the level spawn can adapt
+    // (no auto ball, lights start in their authored state).
+    app.add_systems(
+        OnEnter(Screen::Gameplay),
+        (crate::scripting::init_script, spawn_level, fit_camera).chain(),
+    );
     app.add_systems(
         Update,
         leave_gameplay.run_if(in_state(Screen::Gameplay).and(input_just_pressed(KeyCode::Escape))),

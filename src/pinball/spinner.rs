@@ -52,6 +52,8 @@ pub struct SpinnerSounds {
 
 #[derive(Component)]
 struct Spinner {
+    /// The vpx spinner name, the script event prefix (`<name>_spin`).
+    name: String,
     /// Plate angle (rad); 0 is flat (fully visible).
     angle: f32,
     /// Angular velocity (rad/s).
@@ -122,6 +124,7 @@ pub(super) fn spawn_spinner(
             angular_velocity: 0.0,
             damping: spinner.damping,
             shaft_perp,
+            name: spinner.name.clone(),
             last_click: 0,
             next_click_at: 0.0,
         },
@@ -258,6 +261,7 @@ fn spin_spinners(
     sounds: Option<Res<SpinnerSounds>>,
     table_assets: Option<Res<TableAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    mut spinner_spun: MessageWriter<crate::scripting::SpinnerSpun>,
 ) {
     let dt = time.delta_secs();
     for (entity, mut spinner, children) in &mut spinners {
@@ -271,6 +275,10 @@ fn spin_spinners(
         let click = (spinner.angle / PI).floor() as i32;
         if click != spinner.last_click {
             spinner.last_click = click;
+            // Table scripts score every spin (`<name>_spin`), unthrottled.
+            spinner_spun.write(crate::scripting::SpinnerSpun {
+                name: spinner.name.clone(),
+            });
             let now = time.elapsed_secs();
             if now >= spinner.next_click_at {
                 spinner.next_click_at = now + MIN_CLICK_INTERVAL;

@@ -95,6 +95,7 @@ pub(super) fn spawn_target(
 
     let mut entity = parent.spawn((
         Target,
+        crate::scripting::ScriptName(target.name.clone()),
         Name::from(format!("Target {}", target.name)),
         Mesh2d(meshes.add(Rectangle::new(size.x, size.y))),
         MeshMaterial2d(materials.add(material_color(vpx_asset, &target.material))),

@@ -20,6 +20,12 @@ tracing = { version = "0.1", features = [
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
 rand = "0.9.3"
+serde_json = "1.0.150"
+
+# Table scripting: the vendored Lua C sources do not build for wasm, so web
+# builds run tables without scripts (see scripting::init_script).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mlua = { version = "0.11.6", features = ["lua54", "vendored"] }
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
