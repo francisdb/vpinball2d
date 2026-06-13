@@ -80,7 +80,11 @@ pub struct SlingshotAnimationConfig {
 }
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Gameplay), load_sidecar);
+    // After spawn_level, which inserts the DesktopLayout the credit reel needs.
+    app.add_systems(
+        OnEnter(Screen::Gameplay),
+        load_sidecar.after(crate::pinball::level::spawn_level),
+    );
 }
 
 /// Load `<table>.table.json` next to the vpx and insert the configured
@@ -94,6 +98,7 @@ fn load_sidecar(
     table_assets: Option<Res<crate::pinball::table::TableAssets>>,
     assets_vpx: Res<Assets<crate::vpx::VpxAsset>>,
     mut atlas_layouts: ResMut<Assets<bevy::image::TextureAtlasLayout>>,
+    desktop_layout: Option<Res<crate::pinball::desktop::DesktopLayout>>,
 ) {
     let (Some(tables_dir), Some(table_path)) = (tables_dir, table_path) else {
         return;
@@ -156,12 +161,13 @@ fn load_sidecar(
     if let Some(gates) = config.gates {
         commands.insert_resource(GateSounds { hit: gates.hit });
     }
-    if let Some(credit) = config.credit_reel {
+    if let (Some(credit), Some(layout)) = (config.credit_reel, desktop_layout.as_deref()) {
         spawn_credit_reel(
             &mut commands,
             &mut atlas_layouts,
             table_assets.as_deref(),
             &assets_vpx,
+            layout,
             &credit,
         );
     }
@@ -175,10 +181,10 @@ fn spawn_credit_reel(
     atlas_layouts: &mut Assets<bevy::image::TextureAtlasLayout>,
     table_assets: Option<&crate::pinball::table::TableAssets>,
     assets_vpx: &Assets<crate::vpx::VpxAsset>,
+    layout: &crate::pinball::desktop::DesktopLayout,
     config: &CreditReelConfig,
 ) {
     use vpin::vpx::gameitem::GameItemEnum;
-    use vpin::vpx::units::vpu_to_m;
     let Some(vpx_asset) = table_assets.and_then(|t| assets_vpx.get(&t.vpx)) else {
         return;
     };
@@ -189,17 +195,12 @@ fn spawn_credit_reel(
         warn!("credit_reel textbox '{}' not found", config.textbox);
         return;
     };
-    // Table centred on the origin (matches pinball::level::spawn_level).
-    let gamedata = &vpx_asset.raw.gamedata;
-    let half_w = vpu_to_m(gamedata.right - gamedata.left) * 0.5;
-    let half_d = vpu_to_m(gamedata.bottom - gamedata.top) * 0.5;
-    let vpx_to_bevy = Transform::from_xyz(-half_w, half_d, 0.0);
 
     if let Some(entity) = crate::pinball::reel::spawn_credit_reel(
         commands,
         atlas_layouts,
         vpx_asset,
-        vpx_to_bevy,
+        layout,
         textbox,
         &config.image,
         config.digit_range,

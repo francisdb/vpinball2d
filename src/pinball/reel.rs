@@ -13,6 +13,7 @@
 //! `.table.json` sidecar, and the engine renders that single-window reel from
 //! the textbox's value - see [`spawn_credit_reel`] and `scripting::sidecar`.
 
+use crate::pinball::desktop::DesktopLayout;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings};
@@ -21,7 +22,6 @@ use bevy::image::{TextureAtlas, TextureAtlasLayout};
 use bevy::prelude::*;
 use vpin::vpx::gameitem::reel;
 use vpin::vpx::gameitem::textbox;
-use vpin::vpx::units::vpu_to_m;
 
 /// Z of the reels: above all table geometry. Like vpinball's backglass reels
 /// these are score displays sitting on the backbox graphic at the table top
@@ -265,13 +265,22 @@ fn build_reel(
     reel_entity
 }
 
-/// Spawn an animated reel from its Reel gameitem: digits laid out across the
-/// reel's box (`ver1`..`ver2`) with `reel_spacing` borders, like vpinball.
+/// vpinball lays score reels out in a normalized "desktop backdrop" space
+/// (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`): every coordinate is divided by these
+/// to get a [0,1] fraction of the backdrop. We map that fraction onto the desktop
+/// backdrop quad (see [`DesktopLayout`]), so a reel lands over the window printed
+/// for it in the backdrop image.
+const EDITOR_BG_WIDTH: f32 = 1000.0;
+const EDITOR_BG_HEIGHT: f32 = 750.0;
+
+/// Spawn an animated reel from its Reel gameitem, laid out exactly as vpinball's
+/// desktop renderer does (`DispReel::Render`): digits stride across the backdrop
+/// from `ver1` by `width + reel_spacing`, each inset by `reel_spacing`.
 pub(super) fn spawn_reel(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     atlas_layouts: &mut Assets<TextureAtlasLayout>,
     vpx_asset: &VpxAsset,
-    vpx_to_bevy_transform: Transform,
+    layout: &DesktopLayout,
     reel: &reel::Reel,
 ) {
     if !reel.is_visible {
@@ -288,14 +297,17 @@ pub(super) fn spawn_reel(
     let columns = base as u32;
     let cell = UVec2::new((image_data.0 / columns).max(1), image_data.1.max(1));
 
-    let width = reel.width;
-    let spacing = reel.reel_spacing;
-    let center_y = (reel.ver1.y + reel.ver2.y) * 0.5;
-    let y = vpx_to_bevy_transform.translation.y - vpu_to_m(center_y);
+    // Fractions of the backdrop, matching dispreel.cpp.
+    let render_w = reel.width / EDITOR_BG_WIDTH;
+    let render_h = reel.height / EDITOR_BG_HEIGHT;
+    let spacing_x = reel.reel_spacing / EDITOR_BG_WIDTH;
+    let spacing_y = reel.reel_spacing / EDITOR_BG_HEIGHT;
+    let x1 = reel.ver1.x / EDITOR_BG_WIDTH + spacing_x;
+    let y1 = reel.ver1.y / EDITOR_BG_HEIGHT + spacing_y;
     let digit_centers = (0..count)
         .map(|d| {
-            let cx = reel.ver1.x + spacing + d as f32 * (width + spacing) + width * 0.5;
-            Vec2::new(vpx_to_bevy_transform.translation.x + vpu_to_m(cx), y)
+            let fx = x1 + d as f32 * (spacing_x + render_w) + render_w * 0.5;
+            layout.to_world(fx, y1 + render_h * 0.5)
         })
         .collect();
 
@@ -314,7 +326,7 @@ pub(super) fn spawn_reel(
             columns,
             base,
             digit_centers,
-            digit_size: Vec2::new(vpu_to_m(reel.width), vpu_to_m(reel.height)),
+            digit_size: layout.to_world_size(render_w, render_h),
             motor_steps: reel.motor_steps.max(1.0) as u32,
             update_interval_ms: reel.update_interval as f32,
             sound,
@@ -329,7 +341,7 @@ pub(crate) fn spawn_credit_reel(
     commands: &mut Commands,
     atlas_layouts: &mut Assets<TextureAtlasLayout>,
     vpx_asset: &VpxAsset,
-    vpx_to_bevy_transform: Transform,
+    layout: &DesktopLayout,
     textbox: &textbox::TextBox,
     image: &str,
     digit_range: i32,
@@ -338,15 +350,13 @@ pub(crate) fn spawn_credit_reel(
     let columns = (digit_range.max(1) + 1) as u32;
     let cell = UVec2::new((img_w / columns).max(1), img_h.max(1));
 
-    // Fill the textbox box, a touch inset so the window border shows.
-    let cx = (textbox.ver1.x + textbox.ver2.x) * 0.5;
-    let cy = (textbox.ver1.y + textbox.ver2.y) * 0.5;
-    let box_w = (textbox.ver2.x - textbox.ver1.x).abs();
-    let box_h = (textbox.ver2.y - textbox.ver1.y).abs();
-    let center = Vec2::new(
-        vpx_to_bevy_transform.translation.x + vpu_to_m(cx),
-        vpx_to_bevy_transform.translation.y - vpu_to_m(cy),
-    );
+    // The credit textbox is a backdrop element too, so it lives in the same
+    // normalized space; fill its box over the backdrop window.
+    let fx = (textbox.ver1.x + textbox.ver2.x) * 0.5 / EDITOR_BG_WIDTH;
+    let fy = (textbox.ver1.y + textbox.ver2.y) * 0.5 / EDITOR_BG_HEIGHT;
+    let box_w = (textbox.ver2.x - textbox.ver1.x).abs() / EDITOR_BG_WIDTH;
+    let box_h = (textbox.ver2.y - textbox.ver1.y).abs() / EDITOR_BG_HEIGHT;
+    let center = layout.to_world(fx, fy);
 
     Some(build_reel(
         commands,
@@ -358,7 +368,7 @@ pub(crate) fn spawn_credit_reel(
             columns,
             base: columns as i32,
             digit_centers: vec![center],
-            digit_size: Vec2::new(vpu_to_m(box_w), vpu_to_m(box_h)),
+            digit_size: layout.to_world_size(box_w, box_h),
             motor_steps: 1,
             update_interval_ms: 60.0,
             sound: None,

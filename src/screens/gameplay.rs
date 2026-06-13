@@ -1,11 +1,8 @@
 //! The gameplay screen: spawn the selected table and play it.
 
 use crate::pinball::level::spawn_level;
-use crate::pinball::table::TableAssets;
 use crate::screens::{ExternalFrontend, Screen};
-use crate::vpx::VpxAsset;
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
-use vpin::vpx::units::vpu_to_m;
 
 pub(super) fn plugin(app: &mut App) {
     // The table script (if any) loads first so the level spawn can adapt
@@ -36,24 +33,31 @@ fn leave_gameplay(
 
 fn fit_camera(
     mut cameras: Query<
-        &mut Projection,
+        (&mut Projection, &Camera),
         (
             With<Camera2d>,
             Without<crate::pinball::lightmap::LightmapCamera>,
         ),
     >,
-    table_assets: Res<TableAssets>,
-    assets_vpx: Res<Assets<VpxAsset>>,
+    layout: Res<crate::pinball::desktop::DesktopLayout>,
 ) {
-    let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
-    let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
-    let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
-    for mut projection in &mut cameras {
+    use bevy::camera::CameraProjection;
+    // Show the whole desktop backdrop (the playfield sits in its cutout at the
+    // origin); the reels are overlaid on the backdrop's printed windows.
+    for (mut projection, camera) in &mut cameras {
         if let Projection::Orthographic(ortho) = &mut *projection {
             ortho.scaling_mode = bevy::camera::ScalingMode::AutoMin {
-                min_height: table_depth_m,
-                min_width: table_width_m,
+                min_height: layout.size.y,
+                min_width: layout.size.x,
             };
+            // The main camera renders to a fixed-size image target (headless) or a
+            // window; Bevy only recomputes `area` when that target resizes, so a
+            // mid-run `scaling_mode` change is otherwise ignored. Recompute it here
+            // from the target's pixel size so the view matches the backdrop exactly
+            // (the reels rely on this to land on their windows).
+            if let Some(size) = camera.physical_target_size() {
+                ortho.update(size.x as f32, size.y as f32);
+            }
         }
     }
 }

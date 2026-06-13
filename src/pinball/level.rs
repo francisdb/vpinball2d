@@ -61,7 +61,6 @@ pub fn spawn_level(
     lighting: Res<LightingAssets>,
     table_assets: Res<TableAssets>,
     assets_vpx: Res<Assets<VpxAsset>>,
-    camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
     script: Option<Res<crate::scripting::ScriptActive>>,
 ) {
     // A table script owns the ball lifecycle and the lamp states; without one
@@ -71,6 +70,18 @@ pub fn spawn_level(
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
     let vpx_to_bevy_transform = Transform::from_xyz(-table_width_m / 2.0, table_depth_m / 2.0, 0.0);
+
+    // Desktop-mode layout: the "full desktop" backdrop framing the playfield in its
+    // cutout, with the reels/textboxes overlaid on its windows (see `desktop`).
+    let desktop_layout = spawn_desktop_backdrop(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &images,
+        vpx_asset,
+        Vec2::new(table_width_m, table_depth_m),
+    );
+    commands.insert_resource(desktop_layout);
 
     // The overhead lamps all shadows are cast from: vpinball's scene lights, at the
     // height this table defines.
@@ -144,7 +155,6 @@ pub fn spawn_level(
                 &mut images,
                 light_map.clone(),
                 &assets_vpx,
-                camera_q,
             )],
         ))
         .with_children(|parent| {
@@ -313,11 +323,53 @@ pub fn spawn_level(
                             parent,
                             &mut atlas_layouts,
                             vpx_asset,
-                            vpx_to_bevy_transform,
+                            &desktop_layout,
                             reel,
                         );
                     }
                     _ => (),
                 });
         });
+}
+
+/// Spawn the desktop backdrop quad (the table's "full desktop" image) sized so
+/// its cutout frames the playfield, and return the computed [`DesktopLayout`].
+/// Falls back to no backdrop (a layout matching the bare playfield) when the
+/// table defines no desktop image.
+fn spawn_desktop_backdrop(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    images: &Assets<Image>,
+    vpx_asset: &VpxAsset,
+    table_size: Vec2,
+) -> crate::pinball::desktop::DesktopLayout {
+    let name = vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str();
+    // No desktop backdrop: fall back to the bare playfield filling the view.
+    let Some(handle) = vpx_asset.image(name) else {
+        return crate::pinball::desktop::DesktopLayout {
+            center: Vec2::ZERO,
+            size: table_size,
+        };
+    };
+    let img_size = vpx_asset
+        .raw
+        .images
+        .iter()
+        .find(|i| i.name.eq_ignore_ascii_case(name))
+        .map(|i| Vec2::new(i.width as f32, i.height as f32))
+        .unwrap_or(table_size);
+    let layout = crate::pinball::desktop::layout(table_size, img_size, images.get(handle));
+
+    commands.spawn((
+        Name::from("Desktop Backdrop"),
+        Mesh2d(meshes.add(Rectangle::new(layout.size.x, layout.size.y))),
+        MeshMaterial2d(materials.add(ColorMaterial {
+            texture: Some(handle.clone()),
+            ..default()
+        })),
+        Transform::from_xyz(layout.center.x, layout.center.y, -20.0),
+        DespawnOnExit(Screen::Gameplay),
+    ));
+    layout
 }
