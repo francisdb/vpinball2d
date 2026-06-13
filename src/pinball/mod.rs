@@ -23,6 +23,7 @@ pub mod playfield;
 pub(crate) mod plunger;
 mod primitive;
 mod ramp;
+pub(crate) mod reel;
 mod rubber;
 pub(crate) mod scripts;
 pub(crate) mod spinner;
@@ -65,4 +66,5 @@ pub(super) fn plugin(app: &mut App) {
     app.add_plugins(gate::plugin);
     app.add_plugins(ramp::plugin);
     app.add_plugins(primitive::plugin);
+    app.add_plugins(reel::plugin);
 }

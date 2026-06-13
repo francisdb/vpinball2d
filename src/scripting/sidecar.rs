@@ -41,6 +41,21 @@ pub struct TableConfig {
     pub spinners: Option<SoundList>,
     #[serde(default)]
     pub gates: Option<SoundList>,
+    /// A credit reel: render a textbox's credit value as an animated single-
+    /// window reel using a credit strip image, like vpinball's B2S credit
+    /// window. For tables whose credit display is a textbox plus a reel image.
+    #[serde(default)]
+    pub credit_reel: Option<CreditReelConfig>,
+}
+
+#[derive(Deserialize)]
+pub struct CreditReelConfig {
+    /// The textbox whose (numeric) text drives the reel, e.g. `credtxt`.
+    pub textbox: String,
+    /// The credit strip image (cells 0..=digit_range), e.g. `credreel`.
+    pub image: String,
+    /// Highest value the strip shows (credreel tops out at 15).
+    pub digit_range: i32,
 }
 
 #[derive(Deserialize, Default)]
@@ -71,10 +86,14 @@ pub(super) fn plugin(app: &mut App) {
 /// Load `<table>.table.json` next to the vpx and insert the configured
 /// resources. Tables with hand-written Rust modules are unaffected unless they
 /// also ship a sidecar (the sidecar then wins by running later).
+#[allow(clippy::too_many_arguments)]
 fn load_sidecar(
     mut commands: Commands,
     tables_dir: Option<Res<crate::tables::TablesDir>>,
     table_path: Option<Res<TablePath>>,
+    table_assets: Option<Res<crate::pinball::table::TableAssets>>,
+    assets_vpx: Res<Assets<crate::vpx::VpxAsset>>,
+    mut atlas_layouts: ResMut<Assets<bevy::image::TextureAtlasLayout>>,
 ) {
     let (Some(tables_dir), Some(table_path)) = (tables_dir, table_path) else {
         return;
@@ -136,5 +155,58 @@ fn load_sidecar(
     }
     if let Some(gates) = config.gates {
         commands.insert_resource(GateSounds { hit: gates.hit });
+    }
+    if let Some(credit) = config.credit_reel {
+        spawn_credit_reel(
+            &mut commands,
+            &mut atlas_layouts,
+            table_assets.as_deref(),
+            &assets_vpx,
+            &credit,
+        );
+    }
+}
+
+/// Spawn the credit reel from its config: find the source textbox gameitem for
+/// its position, build a single-window reel at it, and tag it so the credit
+/// value drives it (see `super::sync_credit_reel`).
+fn spawn_credit_reel(
+    commands: &mut Commands,
+    atlas_layouts: &mut Assets<bevy::image::TextureAtlasLayout>,
+    table_assets: Option<&crate::pinball::table::TableAssets>,
+    assets_vpx: &Assets<crate::vpx::VpxAsset>,
+    config: &CreditReelConfig,
+) {
+    use vpin::vpx::gameitem::GameItemEnum;
+    use vpin::vpx::units::vpu_to_m;
+    let Some(vpx_asset) = table_assets.and_then(|t| assets_vpx.get(&t.vpx)) else {
+        return;
+    };
+    let Some(textbox) = vpx_asset.raw.gameitems.iter().find_map(|item| match item {
+        GameItemEnum::TextBox(tb) if tb.name.eq_ignore_ascii_case(&config.textbox) => Some(tb),
+        _ => None,
+    }) else {
+        warn!("credit_reel textbox '{}' not found", config.textbox);
+        return;
+    };
+    // Table centred on the origin (matches pinball::level::spawn_level).
+    let gamedata = &vpx_asset.raw.gamedata;
+    let half_w = vpu_to_m(gamedata.right - gamedata.left) * 0.5;
+    let half_d = vpu_to_m(gamedata.bottom - gamedata.top) * 0.5;
+    let vpx_to_bevy = Transform::from_xyz(-half_w, half_d, 0.0);
+
+    if let Some(entity) = crate::pinball::reel::spawn_credit_reel(
+        commands,
+        atlas_layouts,
+        vpx_asset,
+        vpx_to_bevy,
+        textbox,
+        &config.image,
+        config.digit_range,
+    ) {
+        commands.entity(entity).insert(super::CreditReel {
+            textbox: config.textbox.clone(),
+            last_value: i64::MIN,
+        });
     }
 }

@@ -9,5 +9,6 @@
   ],
   "targets": { "hit": ["target"] },
   "spinners": { "hit": ["spinner"] },
-  "gates": { "hit": ["gate4"] }
+  "gates": { "hit": ["gate4"] },
+  "credit_reel": { "textbox": "credtxt", "image": "credreel", "digit_range": 15 }
 }

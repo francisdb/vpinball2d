@@ -55,6 +55,7 @@ pub fn spawn_level(
     mut insert_glow_materials: ResMut<Assets<InsertGlowMaterial>>,
     mut playfield_materials: ResMut<Assets<PlayfieldLightMaterial>>,
     mut plastic_materials: ResMut<Assets<crate::pinball::lightmap::PlasticMaterial>>,
+    mut atlas_layouts: ResMut<Assets<bevy::image::TextureAtlasLayout>>,
     mut images: ResMut<Assets<Image>>,
     ball_assets: Res<BallAssets>,
     lighting: Res<LightingAssets>,
@@ -305,6 +306,15 @@ pub fn spawn_level(
                             vpx_to_bevy_transform,
                             flasher,
                             item_index,
+                        );
+                    }
+                    GameItemEnum::Reel(reel) => {
+                        crate::pinball::reel::spawn_reel(
+                            parent,
+                            &mut atlas_layouts,
+                            vpx_asset,
+                            vpx_to_bevy_transform,
+                            reel,
                         );
                     }
                     _ => (),

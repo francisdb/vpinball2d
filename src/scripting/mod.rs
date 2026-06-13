@@ -81,6 +81,17 @@ struct ScriptSounds(HashMap<String, Handle<AudioSource>>);
 #[derive(Component)]
 struct PlayingSound(String);
 
+/// A credit reel (see `sidecar`): a single-window [`ScoreReel`] driven by the
+/// numeric text of a script textbox, so the credit count rolls like a B2S
+/// credit window. The script only sets the textbox; the rolling is the engine's.
+#[derive(Component)]
+struct CreditReel {
+    /// The textbox whose value drives the reel.
+    textbox: String,
+    /// Last value pushed to the reel, to roll only the delta.
+    last_value: i64,
+}
+
 /// A ball held in a kicker (saucer or drain), frozen at its centre until the
 /// script kicks or destroys it - vpinball's locked-in-kicker state.
 #[derive(Component)]
@@ -149,6 +160,7 @@ pub fn plugin(app: &mut App) {
             forward_spins,
             tick_timers,
             apply_commands,
+            sync_credit_reel,
             save_store,
             scoreboard::update_scoreboard,
         )
@@ -592,6 +604,7 @@ fn apply_commands(
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     ball_assets: Option<Res<BallAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
+    mut reels: Query<&mut crate::pinball::reel::ScoreReel>,
 ) {
     // Retry kicks whose ball had not spawned yet.
     let mut pending = std::mem::take(&mut runtime.pending_kicks);
@@ -746,20 +759,19 @@ fn apply_commands(
                         }
                     }
                     (ItemKind::Reel, "setvalue") => {
-                        set_reel(&runtime, &name, args.first().and_then(|v| v.as_i64()));
+                        if let Some(mut reel) = score_reel(&mut reels, &name) {
+                            reel.set_value(args.first().and_then(|v| v.as_i64()).unwrap_or(0));
+                        }
                     }
                     (ItemKind::Reel, "addvalue") => {
-                        let current = runtime
-                            .host
-                            .borrow()
-                            .get_prop(&name, "value")
-                            .as_i64()
-                            .unwrap_or(0);
-                        let delta = args.first().and_then(|v| v.as_i64()).unwrap_or(0);
-                        set_reel(&runtime, &name, Some(current + delta));
+                        if let Some(mut reel) = score_reel(&mut reels, &name) {
+                            reel.add_value(args.first().and_then(|v| v.as_i64()).unwrap_or(0));
+                        }
                     }
                     (ItemKind::Reel, "resettozero") => {
-                        set_reel(&runtime, &name, Some(0));
+                        if let Some(mut reel) = score_reel(&mut reels, &name) {
+                            reel.reset_to_zero();
+                        }
                     }
                     _ => {
                         debug!("script called unhandled {name}:{method}");
@@ -851,15 +863,45 @@ fn try_kick(
     true
 }
 
-/// Write a reel's value into the shadow state (the scoreboard reads it).
-fn set_reel(runtime: &ScriptRuntime, name: &str, value: Option<i64>) {
-    if let Some(value) = value {
-        let mut host = runtime.host.borrow_mut();
-        let key = name.to_lowercase();
-        if let Some(item) = host.items.get_mut(&key) {
-            item.props.insert("value".into(), ScriptValue::Int(value));
+/// Rolls each credit reel to its source textbox's value: parse the textbox's
+/// numeric text, clamp to the strip's range, and roll the delta. The script
+/// only ever sets the textbox text; the roll is the engine's.
+fn sync_credit_reel(
+    runtime: NonSend<ScriptRuntime>,
+    mut reels: Query<(&mut crate::pinball::reel::ScoreReel, &mut CreditReel)>,
+) {
+    if reels.is_empty() {
+        return;
+    }
+    let host = runtime.host.borrow();
+    for (mut reel, mut credit) in &mut reels {
+        let ScriptValue::Str(text) = host.get_prop(&credit.textbox, "text") else {
+            continue;
+        };
+        let Ok(value) = text.trim().parse::<i64>() else {
+            continue;
+        };
+        // The credit strip tops out at its highest cell.
+        let target = value.clamp(0, reel.max_value());
+        if target != credit.last_value {
+            if credit.last_value == i64::MIN {
+                reel.set_value(target);
+            } else {
+                reel.add_value(target - credit.last_value);
+            }
+            credit.last_value = target;
         }
     }
+}
+
+/// The animated reel entity for a script reel name (case-insensitive).
+fn score_reel<'a>(
+    reels: &'a mut Query<&mut crate::pinball::reel::ScoreReel>,
+    name: &str,
+) -> Option<Mut<'a, crate::pinball::reel::ScoreReel>> {
+    reels
+        .iter_mut()
+        .find(|reel| reel.name.eq_ignore_ascii_case(name))
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]

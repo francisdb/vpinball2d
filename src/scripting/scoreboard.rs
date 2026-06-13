@@ -33,41 +33,34 @@ pub(super) fn spawn_scoreboard(world: &mut World) {
 pub(super) fn update_scoreboard(
     runtime: NonSend<ScriptRuntime>,
     mut scoreboard: Query<&mut Text, With<Scoreboard>>,
+    credit_reels: Query<&super::CreditReel>,
 ) {
     let Ok(mut text) = scoreboard.single_mut() else {
         return;
     };
     let host = runtime.host.borrow();
-    let mut reels: Vec<(&str, i64)> = Vec::new();
+    // Score reels render in place as animated digit wheels (see pinball::reel),
+    // and a credit reel renders its textbox; the panel carries the remaining
+    // textboxes (ball in play, match, game over, high score).
     let mut boxes: Vec<(&str, &str)> = Vec::new();
     for item in host.items.values() {
-        match item.kind {
-            ItemKind::Reel => {
-                let value = item
-                    .props
-                    .get("value")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                reels.push((item.name.as_str(), value));
-            }
-            ItemKind::TextBox => {
-                if let Some(ScriptValue::Str(s)) = item.props.get("text")
-                    && !s.trim().is_empty()
-                {
-                    boxes.push((item.name.as_str(), s.as_str()));
-                }
-            }
-            _ => {}
+        let on_a_reel = credit_reels
+            .iter()
+            .any(|c| c.textbox.eq_ignore_ascii_case(&item.name));
+        if item.kind == ItemKind::TextBox
+            && !on_a_reel
+            && let Some(ScriptValue::Str(s)) = item.props.get("text")
+            && !s.trim().is_empty()
+        {
+            boxes.push((item.name.as_str(), s.as_str()));
         }
     }
-    reels.sort_by_key(|(name, _)| *name);
     boxes.sort_by_key(|(name, _)| *name);
-    let mut lines: Vec<String> = reels
+    let joined = boxes
         .iter()
-        .map(|(name, value)| format!("{name}: {value:06}"))
-        .collect();
-    lines.extend(boxes.iter().map(|(name, text)| format!("{name}: {text}")));
-    let joined = lines.join("\n");
+        .map(|(name, text)| format!("{name}: {text}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     if text.0 != joined {
         text.0 = joined;
     }
