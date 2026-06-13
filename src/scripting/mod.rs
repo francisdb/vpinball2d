@@ -88,10 +88,14 @@ pub struct CapturedBall {
     kicker: Entity,
 }
 
-/// Suppresses re-capture by the kicker a ball was just kicked out of (or
-/// created in), until the ball actually leaves its sensor.
+/// The kicker whose hit-circle a ball is currently *inside*, vpinball's per-ball
+/// volume set (`m_vpVolObjs`) reduced to the single membership a 2D ball can have
+/// at once. Capture only fires on a fresh entry (no membership for that kicker);
+/// a kicked ball keeps its membership until it geometrically leaves the circle,
+/// so it cannot be re-grabbed until it leaves and returns - no collision events,
+/// no timers. (A ball realistically overlaps at most one kicker, so one slot.)
 #[derive(Component)]
-struct KickerEscape {
+struct InKickerVolume {
     kicker: Entity,
 }
 
@@ -139,8 +143,6 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             capture_balls,
-            release_displaced_captures,
-            clear_kicker_escapes,
             forward_keys,
             forward_collisions,
             forward_slingshots,
@@ -371,98 +373,96 @@ fn key_code(key: KeyCode) -> Option<i64> {
     })
 }
 
-/// Captures a ball entering a kicker sensor: frozen kinematic at the kicker
-/// centre until the script kicks or destroys it, vpinball's locked-in-kicker
-/// behaviour. Balls escaping a kicker they were just kicked out of (or created
-/// in) are left alone until they exit its sensor.
+/// vpinball's kicker capture by geometry (`KickerHitCircle::DoCollide`), driven
+/// by distance rather than collision events so the kinematic/dynamic swap on
+/// kick cannot churn it. Each frame, for every free (uncaptured) ball:
+///
+/// - inside a kicker's hit circle for the *first* time (no [`InKickerVolume`]
+///   membership for it) -> capture: freeze kinematic at the centre, record the
+///   membership;
+/// - inside the kicker it is already a member of (e.g. just kicked, still
+///   overlapping) -> leave it; it cannot be re-grabbed until it leaves;
+/// - outside every kicker -> drop any stale membership, so a later return is a
+///   fresh entry.
+///
+/// A captured ball moved off its kicker by something other than a kick (mouse
+/// ball control, the remote teleport) is released, so it cannot stay kinematic
+/// and float through the table.
 fn capture_balls(
     mut commands: Commands,
-    mut started: MessageReader<CollisionStart>,
-    kickers: Query<&Transform, With<Kicker>>,
+    kickers: Query<(Entity, &Kicker, &Transform)>,
     mut balls: Query<
         (
+            Entity,
             &mut Transform,
             &mut LinearVelocity,
-            Option<&KickerEscape>,
+            Option<&InKickerVolume>,
             Option<&CapturedBall>,
         ),
         (With<Ball>, Without<Kicker>),
     >,
 ) {
-    for collision in started.read() {
-        let (ball_entity, kicker_entity) =
-            if balls.contains(collision.collider1) && kickers.contains(collision.collider2) {
-                (collision.collider1, collision.collider2)
-            } else if balls.contains(collision.collider2) && kickers.contains(collision.collider1) {
-                (collision.collider2, collision.collider1)
-            } else {
-                continue;
+    for (ball, mut transform, mut velocity, membership, captured) in &mut balls {
+        let ball_pos = transform.translation.truncate();
+
+        // A held ball stays put until the script kicks it - unless something
+        // dragged it off its kicker, in which case release it (it would float
+        // through everything while kinematic).
+        if let Some(captured) = captured {
+            let off = match kickers.get(captured.kicker) {
+                Ok((_, kicker, kt)) => ball_pos.distance(kt.translation.truncate()) > kicker.radius,
+                Err(_) => true, // kicker gone; nothing will kick it free
             };
-        let Ok((mut transform, mut velocity, escape, captured)) = balls.get_mut(ball_entity) else {
-            continue;
-        };
-        if captured.is_some() || escape.is_some_and(|e| e.kicker == kicker_entity) {
+            if off {
+                commands
+                    .entity(ball)
+                    .remove::<CapturedBall>()
+                    .insert(RigidBody::Dynamic);
+            }
             continue;
         }
-        let kicker_pos = kickers.get(kicker_entity).unwrap().translation.truncate();
-        transform.translation.x = kicker_pos.x;
-        transform.translation.y = kicker_pos.y;
+
+        // Nearest kicker whose hit circle this ball's centre is inside.
+        let inside = kickers
+            .iter()
+            .map(|(e, k, t)| {
+                (
+                    e,
+                    t.translation.truncate(),
+                    ball_pos.distance(t.translation.truncate()),
+                    k.radius,
+                )
+            })
+            .filter(|(_, _, d, radius)| *d <= *radius)
+            .min_by(|a, b| a.2.total_cmp(&b.2));
+
+        let Some((kicker_entity, center, _, _)) = inside else {
+            // Left every kicker: clear stale membership so a return re-captures.
+            if membership.is_some() {
+                commands.entity(ball).remove::<InKickerVolume>();
+            }
+            continue;
+        };
+
+        // Already a member of this kicker's volume (just kicked, or mid-overlap):
+        // vpinball will not re-grab until the ball leaves and returns.
+        if membership.is_some_and(|m| m.kicker == kicker_entity) {
+            continue;
+        }
+
+        // Fresh entry into the hit circle: capture.
+        transform.translation.x = center.x;
+        transform.translation.y = center.y;
         velocity.0 = Vec2::ZERO;
-        commands.entity(ball_entity).insert((
+        commands.entity(ball).insert((
             CapturedBall {
+                kicker: kicker_entity,
+            },
+            InKickerVolume {
                 kicker: kicker_entity,
             },
             RigidBody::Kinematic,
         ));
-    }
-}
-
-/// Drops the escape marker once the kicked ball has actually left the kicker.
-fn clear_kicker_escapes(
-    mut commands: Commands,
-    mut ended: MessageReader<CollisionEnd>,
-    balls: Query<&KickerEscape, With<Ball>>,
-) {
-    for collision in ended.read() {
-        for (ball, other) in [
-            (collision.collider1, collision.collider2),
-            (collision.collider2, collision.collider1),
-        ] {
-            if let Ok(escape) = balls.get(ball)
-                && escape.kicker == other
-            {
-                commands.entity(ball).remove::<KickerEscape>();
-            }
-        }
-    }
-}
-
-/// Releases a captured ball that something else moved away from its kicker
-/// (mouse ball control, the remote-control teleport): it would otherwise stay
-/// kinematic forever and float through every collider.
-fn release_displaced_captures(
-    mut commands: Commands,
-    kickers: Query<&Transform, With<Kicker>>,
-    balls: Query<(Entity, &Transform, &CapturedBall), With<Ball>>,
-) {
-    for (entity, transform, captured) in &balls {
-        let displaced = match kickers.get(captured.kicker) {
-            Ok(kicker_transform) => {
-                transform
-                    .translation
-                    .truncate()
-                    .distance(kicker_transform.translation.truncate())
-                    > 0.02
-            }
-            // Kicker gone: nothing will ever kick this ball free.
-            Err(_) => true,
-        };
-        if displaced {
-            commands
-                .entity(entity)
-                .remove::<CapturedBall>()
-                .insert(RigidBody::Dynamic);
-        }
     }
 }
 
@@ -838,9 +838,13 @@ fn try_kick(
         return false;
     };
     velocity.0 = direction * speed_m;
+    // Release the lock but keep (or set) the volume membership: the kicked ball
+    // is still inside the hit circle, so vpinball does not re-grab it until it
+    // leaves and returns. Setting it also covers a ball just created in the
+    // kicker (createball) and kicked the same frame.
     commands.entity(entity).remove::<CapturedBall>().insert((
         RigidBody::Dynamic,
-        KickerEscape {
+        InKickerVolume {
             kicker: kicker_entity,
         },
     ));

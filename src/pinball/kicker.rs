@@ -17,6 +17,9 @@ use vpin::vpx::units::vpu_to_m;
 pub struct Kicker {
     #[allow(dead_code)]
     pub name: String,
+    /// The hit-circle radius (metres): the ball is "inside" this kicker's volume
+    /// while its centre is within this distance, vpinball's KickerHitCircle.
+    pub radius: f32,
 }
 
 /// The visible saucer: a dark hole in the playfield, drawn just above it and
@@ -58,6 +61,7 @@ pub(super) fn spawn_kicker(
     let mut entity = parent.spawn((
         Kicker {
             name: kicker.name.clone(),
+            radius,
         },
         crate::scripting::ScriptName(kicker.name.clone()),
         Name::from(format!("Kicker {}", kicker.name)),
