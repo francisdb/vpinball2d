@@ -13,6 +13,13 @@
 //! `table_keydown(code)` / `table_keyup(code)`, `<item>_hit` / `<item>_unhit`,
 //! `<item>_slingshot`, `<item>_spin` and `<timer>_timer`.
 
+// On wasm the Lua engine does not build (vendored C sources), so it is gated out
+// and the whole script runtime below becomes unreachable - only the Lua path
+// ever constructs the host state, commands and engine. That is intentional
+// target gating, not stray dead code, so allow it on wasm where `-Dwarnings`
+// would otherwise reject the unbuilt runtime.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 pub mod api;
 #[cfg(not(target_arch = "wasm32"))]
 mod lua;
