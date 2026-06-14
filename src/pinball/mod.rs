@@ -18,7 +18,7 @@ mod layer;
 pub mod level;
 pub(crate) mod light;
 pub(crate) mod lightmap;
-mod nudge;
+pub(crate) mod nudge;
 mod physics;
 pub mod playfield;
 pub(crate) mod plunger;

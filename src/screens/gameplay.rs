@@ -32,8 +32,9 @@ fn leave_gameplay(
 }
 
 fn fit_camera(
+    mut commands: Commands,
     mut cameras: Query<
-        (&mut Projection, &Camera),
+        (Entity, &mut Projection, &mut Transform, &Camera),
         (
             With<Camera2d>,
             Without<crate::pinball::lightmap::LightmapCamera>,
@@ -43,8 +44,10 @@ fn fit_camera(
 ) {
     use bevy::camera::CameraProjection;
     // Show the whole desktop backdrop (the playfield sits in its cutout at the
-    // origin); the reels are overlaid on the backdrop's printed windows.
-    for (mut projection, camera) in &mut cameras {
+    // origin); the reels are overlaid on the backdrop's printed windows. The
+    // backdrop's cutout is not vertically centred in it, so centre the camera on
+    // the backdrop rather than the origin (the nudge shake offsets from this).
+    for (entity, mut projection, mut transform, camera) in &mut cameras {
         if let Projection::Orthographic(ortho) = &mut *projection {
             ortho.scaling_mode = bevy::camera::ScalingMode::AutoMin {
                 min_height: layout.size.y,
@@ -59,5 +62,10 @@ fn fit_camera(
                 ortho.update(size.x as f32, size.y as f32);
             }
         }
+        transform.translation.x = layout.center.x;
+        transform.translation.y = layout.center.y;
+        commands
+            .entity(entity)
+            .insert(crate::pinball::nudge::CameraRest(layout.center));
     }
 }
