@@ -81,7 +81,8 @@ struct ScriptSounds(HashMap<String, Handle<AudioSource>>);
 #[derive(Component)]
 struct PlayingSound(String);
 
-/// A credit reel (see `sidecar`): a single-window [`ScoreReel`] driven by the
+/// A credit reel (see `sidecar`): a single-window
+/// [`ScoreReel`](crate::pinball::reel::ScoreReel) driven by the
 /// numeric text of a script textbox, so the credit count rolls like a B2S
 /// credit window. The script only sets the textbox; the rolling is the engine's.
 #[derive(Component)]

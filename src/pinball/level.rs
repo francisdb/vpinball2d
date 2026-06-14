@@ -339,7 +339,8 @@ pub fn spawn_level(
 }
 
 /// Spawn the desktop backdrop quad (the table's "full desktop" image) sized so
-/// its cutout frames the playfield, and return the computed [`DesktopLayout`].
+/// its cutout frames the playfield, and return the computed
+/// [`DesktopLayout`](crate::pinball::desktop::DesktopLayout).
 /// Falls back to no backdrop (a layout matching the bare playfield) when the
 /// table defines no desktop image.
 fn spawn_desktop_backdrop(

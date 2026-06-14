@@ -4,7 +4,7 @@
 //! window, with the playfield showing through a central cutout and the score
 //! reels / textboxes overlaid on the windows printed into the backdrop. The reel
 //! and textbox gameitems are positioned in a normalized backdrop space
-//! (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`, see `reel`), i.e. as [0,1] fractions
+//! (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`, see `reel`), i.e. as `[0,1]` fractions
 //! of that backdrop.
 //!
 //! We reproduce this in 2D: the backdrop is a single textured quad, sized so its
@@ -18,7 +18,7 @@ use bevy::sprite::Anchor;
 use vpin::vpx::gameitem::textbox;
 
 /// The backdrop coordinate space (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`): reel
-/// and textbox gameitem coordinates are divided by these to get [0,1] fractions.
+/// and textbox gameitem coordinates are divided by these to get `[0,1]` fractions.
 pub(crate) const EDITOR_BG_WIDTH: f32 = 1000.0;
 pub(crate) const EDITOR_BG_HEIGHT: f32 = 750.0;
 
@@ -27,7 +27,7 @@ pub(crate) const OVERLAY_Z: f32 = 0.2;
 /// Glyph atlas size for backdrop text; the entity is scaled down to world size.
 const TEXT_FONT_PX: f32 = 96.0;
 
-/// Where the desktop backdrop sits in world space and how its normalized [0,1]
+/// Where the desktop backdrop sits in world space and how its normalized `[0,1]`
 /// coordinates (origin top-left) map there. Inserted by `level::spawn_level`,
 /// read by `gameplay::fit_camera` and the reel spawners.
 #[derive(Resource, Clone, Copy)]
@@ -175,7 +175,7 @@ pub(crate) fn layout(table_size: Vec2, img_size: Vec2, image: Option<&Image>) ->
     let size = Vec2::new(backdrop_h * img_aspect, backdrop_h);
     // Centre the playfield on the cutout horizontally and on the window
     // vertically (so it fills top to bottom); the reels still map onto the
-    // backdrop's printed windows via their [0,1] fractions.
+    // backdrop's printed windows via their `[0,1]` fractions.
     let cut_cx = (cutout.min.x + cutout.max.x) * 0.5;
     let center = Vec2::new(size.x * (0.5 - cut_cx), 0.0);
     DesktopLayout {
