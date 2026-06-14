@@ -98,6 +98,7 @@ fn load_sidecar(
     table_assets: Option<Res<crate::pinball::table::TableAssets>>,
     assets_vpx: Res<Assets<crate::vpx::VpxAsset>>,
     mut atlas_layouts: ResMut<Assets<bevy::image::TextureAtlasLayout>>,
+    mut images: ResMut<Assets<Image>>,
     desktop_layout: Option<Res<crate::pinball::desktop::DesktopLayout>>,
 ) {
     let (Some(tables_dir), Some(table_path)) = (tables_dir, table_path) else {
@@ -165,6 +166,7 @@ fn load_sidecar(
         spawn_credit_reel(
             &mut commands,
             &mut atlas_layouts,
+            &mut images,
             table_assets.as_deref(),
             &assets_vpx,
             layout,
@@ -176,9 +178,11 @@ fn load_sidecar(
 /// Spawn the credit reel from its config: find the source textbox gameitem for
 /// its position, build a single-window reel at it, and tag it so the credit
 /// value drives it (see `super::sync_credit_reel`).
+#[allow(clippy::too_many_arguments)]
 fn spawn_credit_reel(
     commands: &mut Commands,
     atlas_layouts: &mut Assets<bevy::image::TextureAtlasLayout>,
+    images: &mut Assets<Image>,
     table_assets: Option<&crate::pinball::table::TableAssets>,
     assets_vpx: &Assets<crate::vpx::VpxAsset>,
     layout: &crate::pinball::desktop::DesktopLayout,
@@ -199,6 +203,7 @@ fn spawn_credit_reel(
     if let Some(entity) = crate::pinball::reel::spawn_credit_reel(
         commands,
         atlas_layouts,
+        images,
         vpx_asset,
         layout,
         textbox,

@@ -340,6 +340,7 @@ pub(super) fn spawn_reel(
 pub(crate) fn spawn_credit_reel(
     commands: &mut Commands,
     atlas_layouts: &mut Assets<TextureAtlasLayout>,
+    images: &mut Assets<Image>,
     vpx_asset: &VpxAsset,
     layout: &DesktopLayout,
     textbox: &textbox::TextBox,
@@ -347,16 +348,31 @@ pub(crate) fn spawn_credit_reel(
     digit_range: i32,
 ) -> Option<Entity> {
     let (image_handle, (img_w, img_h)) = reel_image(vpx_asset, image)?;
+    // The backdrop already prints the credit window (white), so the strip's own
+    // white background would overflow it; key it out so only the digit shows.
+    let image_handle = white_keyed(images, &image_handle);
     let columns = (digit_range.max(1) + 1) as u32;
     let cell = UVec2::new((img_w / columns).max(1), img_h.max(1));
 
     // The credit textbox is a backdrop element too, so it lives in the same
-    // normalized space; fill its box over the backdrop window.
+    // normalized space; centre over its box on the backdrop window.
     let fx = (textbox.ver1.x + textbox.ver2.x) * 0.5 / EDITOR_BG_WIDTH;
     let fy = (textbox.ver1.y + textbox.ver2.y) * 0.5 / EDITOR_BG_HEIGHT;
     let box_w = (textbox.ver2.x - textbox.ver1.x).abs() / EDITOR_BG_WIDTH;
     let box_h = (textbox.ver2.y - textbox.ver1.y).abs() / EDITOR_BG_HEIGHT;
     let center = layout.to_world(fx, fy);
+
+    // Unlike a Reel gameitem (which vpinball stretches to its box), the credit is
+    // a textbox standing in for rendered text, so keep the digit cell's aspect
+    // ratio - fit it inside the box instead of stretching the square strip cell
+    // into the box's (wider) shape, which fattens the digit.
+    let box_size = layout.to_world_size(box_w, box_h);
+    let cell_aspect = cell.x as f32 / cell.y as f32;
+    let digit_size = if box_size.x > box_size.y * cell_aspect {
+        Vec2::new(box_size.y * cell_aspect, box_size.y)
+    } else {
+        Vec2::new(box_size.x, box_size.x / cell_aspect)
+    };
 
     Some(build_reel(
         commands,
@@ -368,12 +384,39 @@ pub(crate) fn spawn_credit_reel(
             columns,
             base: columns as i32,
             digit_centers: vec![center],
-            digit_size: layout.to_world_size(box_w, box_h),
+            digit_size,
             motor_steps: 1,
             update_interval_ms: 60.0,
             sound: None,
         },
     ))
+}
+
+/// A copy of `handle` with near-white pixels made transparent, so a strip drawn
+/// over a printed window shows only its digit, not its white background. Returns
+/// the original handle unchanged if the image is unavailable or not 8-bit RGBA.
+fn white_keyed(images: &mut Assets<Image>, handle: &Handle<Image>) -> Handle<Image> {
+    let Some(src) = images.get(handle) else {
+        return handle.clone();
+    };
+    let w = src.texture_descriptor.size.width as usize;
+    let h = src.texture_descriptor.size.height as usize;
+    let Some(data) = src.data.as_ref() else {
+        return handle.clone();
+    };
+    if w == 0 || h == 0 || data.len() != w * h * 4 {
+        return handle.clone();
+    }
+    let mut data = data.clone();
+    for px in data.chunks_exact_mut(4) {
+        // Colour order (BGRA/RGBA) is irrelevant: white is high in all channels.
+        if px[0] > 230 && px[1] > 230 && px[2] > 230 {
+            px[3] = 0;
+        }
+    }
+    let mut img = src.clone();
+    img.data = Some(data);
+    images.add(img)
 }
 
 /// The image handle and its pixel size for a reel/credit strip.
