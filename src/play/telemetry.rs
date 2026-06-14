@@ -17,24 +17,35 @@ use std::fs::OpenOptions;
 use std::io::Write as _;
 use vpin::vpx::units::vpu_to_m;
 
+/// Telemetry file path prefix; override with `VPINBALL_TELEMETRY` so several
+/// instances (e.g. parallel headless tests) write to separate files.
+static PREFIX: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    std::env::var("VPINBALL_TELEMETRY").unwrap_or_else(|_| "/tmp/vpinball2d".to_string())
+});
 /// File overwritten with the latest telemetry frame as one JSON object (machine-readable).
-const STATE_JSON_PATH: &str = "/tmp/vpinball2d_state.json";
+static STATE_JSON_PATH: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{}_state.json", &*PREFIX));
 /// File appended with one JSON object per telemetry frame: a stream a reader can tail to never
 /// miss a frame between overwrite snapshots. Truncated once when gameplay starts.
-const STATE_JSONL_PATH: &str = "/tmp/vpinball2d_state.jsonl";
+static STATE_JSONL_PATH: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{}_state.jsonl", &*PREFIX));
 /// File appended with one line per ball/object contact (a running event log).
-const EVENTS_PATH: &str = "/tmp/vpinball2d_events.log";
+static EVENTS_PATH: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{}_events.log", &*PREFIX));
 
 pub(super) fn plugin(app: &mut App) {
-    info!("Telemetry enabled: state={STATE_JSON_PATH} events={EVENTS_PATH}");
+    info!(
+        "Telemetry enabled: state={} events={}",
+        &*STATE_JSON_PATH, &*EVENTS_PATH
+    );
     app.insert_resource(TelemetryTimer(Timer::from_seconds(
         0.02,
         TimerMode::Repeating,
     )));
     // Start each gameplay session with a fresh event log and telemetry stream.
     app.add_systems(OnEnter(Screen::Gameplay), |_: Commands| {
-        let _ = fs::write(EVENTS_PATH, "");
-        let _ = fs::write(STATE_JSONL_PATH, "");
+        let _ = fs::write(&*EVENTS_PATH, "");
+        let _ = fs::write(&*STATE_JSONL_PATH, "");
     });
     app.add_systems(
         Update,
@@ -98,7 +109,7 @@ fn log_contacts(
         && let Ok(mut f) = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(EVENTS_PATH)
+            .open(&*EVENTS_PATH)
     {
         let _ = f.write_all(buf.as_bytes());
     }
@@ -251,13 +262,13 @@ fn write_telemetry(
         j_slingshots.join(","),
         j_balls.join(",")
     );
-    let _ = fs::write(STATE_JSON_PATH, &json);
+    let _ = fs::write(&*STATE_JSON_PATH, &json);
     // Also append the frame to the stream so a reader tailing it never misses a frame (e.g. the
     // ball crossing the flipper plane) between two snapshot reads. The line already ends in \n.
     if let Ok(mut f) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(STATE_JSONL_PATH)
+        .open(&*STATE_JSONL_PATH)
     {
         let _ = f.write_all(json.as_bytes());
     }

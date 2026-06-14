@@ -12,10 +12,14 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use std::fs;
 
 /// File polled for commands; written by the operator, truncated by us once read.
-const CMD_PATH: &str = "/tmp/vpinball2d_cmd";
+/// Defaults to `/tmp/vpinball2d_cmd`; override with `VPINBALL_CMD` so several
+/// instances (e.g. parallel headless tests) don't fight over one file.
+static CMD_PATH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    std::env::var("VPINBALL_CMD").unwrap_or_else(|_| "/tmp/vpinball2d_cmd".to_string())
+});
 
 pub(super) fn plugin(app: &mut App) {
-    info!("Remote control enabled: cmd={CMD_PATH}");
+    info!("Remote control enabled: cmd={}", &*CMD_PATH);
     app.init_resource::<PendingReleases>();
     app.add_systems(
         Update,
@@ -86,14 +90,14 @@ fn read_commands(
     // In headless mode the main view renders to this image instead of a window.
     headless_image: Option<Res<crate::HeadlessImage>>,
 ) {
-    let Ok(contents) = fs::read_to_string(CMD_PATH) else {
+    let Ok(contents) = fs::read_to_string(&*CMD_PATH) else {
         return;
     };
     if contents.trim().is_empty() {
         return;
     }
     // Consume the file so each command runs once.
-    let _ = fs::write(CMD_PATH, "");
+    let _ = fs::write(&*CMD_PATH, "");
 
     for line in contents.lines() {
         let line = line.trim();
