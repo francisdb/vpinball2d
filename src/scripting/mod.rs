@@ -162,6 +162,7 @@ pub fn plugin(app: &mut App) {
             apply_commands,
             sync_credit_reel,
             save_store,
+            scoreboard::sync_desktop_texts,
             scoreboard::update_scoreboard,
         )
             .chain()

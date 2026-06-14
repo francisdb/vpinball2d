@@ -14,6 +14,18 @@
 
 use bevy::image::Image;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
+use vpin::vpx::gameitem::textbox;
+
+/// The backdrop coordinate space (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`): reel
+/// and textbox gameitem coordinates are divided by these to get [0,1] fractions.
+pub(crate) const EDITOR_BG_WIDTH: f32 = 1000.0;
+pub(crate) const EDITOR_BG_HEIGHT: f32 = 750.0;
+
+/// Z of the backdrop overlays (reels and textbox text), above the backdrop quad.
+pub(crate) const OVERLAY_Z: f32 = 0.2;
+/// Glyph atlas size for backdrop text; the entity is scaled down to world size.
+const TEXT_FONT_PX: f32 = 96.0;
 
 /// Where the desktop backdrop sits in world space and how its normalized [0,1]
 /// coordinates (origin top-left) map there. Inserted by `level::spawn_level`,
@@ -24,6 +36,55 @@ pub(crate) struct DesktopLayout {
     pub(crate) center: Vec2,
     /// World-space size of the backdrop quad.
     pub(crate) size: Vec2,
+    /// Whether the table actually has a desktop backdrop image (else the layout
+    /// is just the bare playfield and the textbox overlays are not drawn).
+    pub(crate) has_backdrop: bool,
+}
+
+/// A textbox rendered as text over the backdrop (high score, match, game over,
+/// ball in play, ...). Its string is kept in sync with the script's shadow state.
+#[derive(Component)]
+pub(crate) struct DesktopText {
+    /// The textbox name, matched against the script's shadow item.
+    pub(crate) name: String,
+    /// The textbox box in world space, for fitting the text.
+    pub(crate) box_world: Vec2,
+}
+
+/// The transform scale that fits `text` inside `box_world` (both dimensions),
+/// given glyphs rendered at [`TEXT_FONT_PX`]. Approximate sans-serif metrics.
+pub(crate) fn text_scale(text: &str, box_world: Vec2) -> f32 {
+    let len = text.chars().count().max(1) as f32;
+    let by_width = box_world.x / (len * TEXT_FONT_PX * 0.6);
+    let by_height = box_world.y / (TEXT_FONT_PX * 0.95);
+    by_width.min(by_height).max(1e-6)
+}
+
+/// A textbox rendered as backdrop text, centred on its box. Pair with
+/// [`DesktopText`]; the value updates from the script (see `scripting`).
+pub(crate) fn desktop_text(layout: &DesktopLayout, tb: &textbox::TextBox) -> impl Bundle {
+    let fx = (tb.ver1.x + tb.ver2.x) * 0.5 / EDITOR_BG_WIDTH;
+    let fy = (tb.ver1.y + tb.ver2.y) * 0.5 / EDITOR_BG_HEIGHT;
+    let bw = (tb.ver2.x - tb.ver1.x).abs() / EDITOR_BG_WIDTH;
+    let bh = (tb.ver2.y - tb.ver1.y).abs() / EDITOR_BG_HEIGHT;
+    let center = layout.to_world(fx, fy);
+    let box_world = layout.to_world_size(bw, bh);
+    let color = Color::srgb_u8(tb.font_color.r, tb.font_color.g, tb.font_color.b);
+    let scale = text_scale(&tb.text, box_world);
+    (
+        Name::from(format!("Text {}", tb.name)),
+        DesktopText {
+            name: tb.name.clone(),
+            box_world,
+        },
+        Text2d::new(tb.text.clone()),
+        TextFont::from_font_size(TEXT_FONT_PX),
+        TextColor(color),
+        TextLayout::new_with_justify(Justify::Center),
+        Anchor::CENTER,
+        Transform::from_xyz(center.x, center.y, OVERLAY_Z).with_scale(Vec3::splat(scale)),
+        DespawnOnExit(crate::screens::Screen::Gameplay),
+    )
 }
 
 impl DesktopLayout {
@@ -117,5 +178,9 @@ pub(crate) fn layout(table_size: Vec2, img_size: Vec2, image: Option<&Image>) ->
     // backdrop's printed windows via their [0,1] fractions.
     let cut_cx = (cutout.min.x + cutout.max.x) * 0.5;
     let center = Vec2::new(size.x * (0.5 - cut_cx), 0.0);
-    DesktopLayout { center, size }
+    DesktopLayout {
+        center,
+        size,
+        has_backdrop: true,
+    }
 }

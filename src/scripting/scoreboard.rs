@@ -6,6 +6,7 @@
 //! game state (scores, credits, ball in play, match) is visible.
 
 use super::{ScriptRuntime, api::ItemKind, api::ScriptValue};
+use crate::pinball::desktop::{DesktopLayout, DesktopText, text_scale};
 use crate::screens::Screen;
 use bevy::prelude::*;
 
@@ -30,14 +31,54 @@ pub(super) fn spawn_scoreboard(world: &mut World) {
     ));
 }
 
+/// Keep the backdrop textbox text in sync with the script's shadow state, fitting
+/// each value to its box. A textbox shown by a credit reel is left blank (the reel
+/// renders it instead).
+pub(super) fn sync_desktop_texts(
+    runtime: NonSend<ScriptRuntime>,
+    credit_reels: Query<&super::CreditReel>,
+    mut texts: Query<(&DesktopText, &mut Text2d, &mut Transform)>,
+) {
+    let host = runtime.host.borrow();
+    for (dt, mut text, mut transform) in &mut texts {
+        let value = if credit_reels
+            .iter()
+            .any(|c| c.textbox.eq_ignore_ascii_case(&dt.name))
+        {
+            String::new()
+        } else {
+            match host
+                .items
+                .get(&dt.name.to_lowercase())
+                .and_then(|item| item.props.get("text"))
+            {
+                Some(ScriptValue::Str(s)) => s.clone(),
+                _ => continue,
+            }
+        };
+        if text.0 != value {
+            transform.scale = Vec3::splat(text_scale(&value, dt.box_world));
+            text.0 = value;
+        }
+    }
+}
+
 pub(super) fn update_scoreboard(
     runtime: NonSend<ScriptRuntime>,
+    layout: Option<Res<DesktopLayout>>,
     mut scoreboard: Query<&mut Text, With<Scoreboard>>,
     credit_reels: Query<&super::CreditReel>,
 ) {
     let Ok(mut text) = scoreboard.single_mut() else {
         return;
     };
+    // With a desktop backdrop, the textboxes render there; keep the dev panel empty.
+    if layout.is_some_and(|l| l.has_backdrop) {
+        if !text.0.is_empty() {
+            text.0.clear();
+        }
+        return;
+    }
     let host = runtime.host.borrow();
     // Score reels render in place as animated digit wheels (see pinball::reel),
     // and a credit reel renders its textbox; the panel carries the remaining

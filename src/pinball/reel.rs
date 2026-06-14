@@ -265,13 +265,7 @@ fn build_reel(
     reel_entity
 }
 
-/// vpinball lays score reels out in a normalized "desktop backdrop" space
-/// (`EDITOR_BG_WIDTH` x `EDITOR_BG_HEIGHT`): every coordinate is divided by these
-/// to get a [0,1] fraction of the backdrop. We map that fraction onto the desktop
-/// backdrop quad (see [`DesktopLayout`]), so a reel lands over the window printed
-/// for it in the backdrop image.
-const EDITOR_BG_WIDTH: f32 = 1000.0;
-const EDITOR_BG_HEIGHT: f32 = 750.0;
+use crate::pinball::desktop::{EDITOR_BG_HEIGHT, EDITOR_BG_WIDTH};
 
 /// Spawn an animated reel from its Reel gameitem, laid out exactly as vpinball's
 /// desktop renderer does (`DispReel::Render`): digits stride across the backdrop
@@ -365,14 +359,17 @@ pub(crate) fn spawn_credit_reel(
     // Unlike a Reel gameitem (which vpinball stretches to its box), the credit is
     // a textbox standing in for rendered text, so keep the digit cell's aspect
     // ratio - fit it inside the box instead of stretching the square strip cell
-    // into the box's (wider) shape, which fattens the digit.
+    // into the box's (wider) shape, which fattens the digit. vpinball renders the
+    // digit smaller than the box (like text), so inset it.
+    const CREDIT_FILL: f32 = 0.62;
     let box_size = layout.to_world_size(box_w, box_h);
     let cell_aspect = cell.x as f32 / cell.y as f32;
-    let digit_size = if box_size.x > box_size.y * cell_aspect {
+    let fit = if box_size.x > box_size.y * cell_aspect {
         Vec2::new(box_size.y * cell_aspect, box_size.y)
     } else {
         Vec2::new(box_size.x, box_size.x / cell_aspect)
     };
+    let digit_size = fit * CREDIT_FILL;
 
     Some(build_reel(
         commands,

@@ -327,6 +327,12 @@ pub fn spawn_level(
                             reel,
                         );
                     }
+                    // Backglass textboxes (high score, match, game over, ...) render
+                    // as text over the backdrop; the credit textbox is replaced by
+                    // its reel (see scripting::sync_desktop_texts).
+                    GameItemEnum::TextBox(tb) if desktop_layout.has_backdrop => {
+                        parent.spawn(crate::pinball::desktop::desktop_text(&desktop_layout, tb));
+                    }
                     _ => (),
                 });
         });
@@ -350,6 +356,7 @@ fn spawn_desktop_backdrop(
         return crate::pinball::desktop::DesktopLayout {
             center: Vec2::ZERO,
             size: table_size,
+            has_backdrop: false,
         };
     };
     let img_size = vpx_asset
