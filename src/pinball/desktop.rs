@@ -102,20 +102,20 @@ fn detect_cutout(image: Option<&Image>) -> Rect {
 pub(crate) fn layout(table_size: Vec2, img_size: Vec2, image: Option<&Image>) -> DesktopLayout {
     let cutout = detect_cutout(image);
     let cut_w = (cutout.max.x - cutout.min.x).max(0.05);
-    let cut_h = (cutout.max.y - cutout.min.y).max(0.05);
     let img_aspect = if img_size.y > 0.0 {
         img_size.x / img_size.y
     } else {
         16.0 / 9.0
     };
-    // Size the backdrop (kept at its native aspect) so the playfield fits the
-    // cutout in both dimensions; the tall playfield usually binds on height.
-    let backdrop_h = (table_size.y / cut_h).max(table_size.x / (cut_w * img_aspect));
+    // Size the backdrop (kept at its native aspect) so the playfield fills the
+    // full window height - reaching top and bottom - rather than only the
+    // (shorter) cutout. A very wide table instead binds on the cutout width.
+    let backdrop_h = table_size.y.max(table_size.x / (cut_w * img_aspect));
     let size = Vec2::new(backdrop_h * img_aspect, backdrop_h);
-    // Offset the backdrop so the cutout centre lands on the origin (the playfield
-    // centre), keeping reels aligned with the printed windows.
+    // Centre the playfield on the cutout horizontally and on the window
+    // vertically (so it fills top to bottom); the reels still map onto the
+    // backdrop's printed windows via their [0,1] fractions.
     let cut_cx = (cutout.min.x + cutout.max.x) * 0.5;
-    let cut_cy = (cutout.min.y + cutout.max.y) * 0.5;
-    let center = Vec2::new(size.x * (0.5 - cut_cx), size.y * (cut_cy - 0.5));
+    let center = Vec2::new(size.x * (0.5 - cut_cx), 0.0);
     DesktopLayout { center, size }
 }
