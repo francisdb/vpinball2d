@@ -28,7 +28,6 @@ pub(crate) fn table(
     images: &mut ResMut<Assets<Image>>,
     light_map: Handle<Image>,
     assets_vpx: &Res<Assets<VpxAsset>>,
-    camera_q: Query<(&Camera, &Projection), With<Camera2d>>,
 ) -> impl Bundle {
     let vpx_asset = assets_vpx.get(&table_assets.vpx).unwrap();
     let default_wall_material = materials.add(ColorMaterial {
@@ -38,67 +37,17 @@ pub(crate) fn table(
         ..default()
     });
 
-    // add a backdrop
-    let backglass_material = match vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str() {
-        "" => materials.add(ColorMaterial {
-            color: css::WHITE.with_alpha(0.0).into(),
-            alpha_mode: AlphaMode2d::Blend,
-            texture: None,
-            ..default()
-        }),
-        _ => {
-            match vpx_asset.image(vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str()) {
-                None => {
-                    warn!(
-                        "Backglass image '{}' not found in table '{}'",
-                        vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str(),
-                        table_assets.file_name
-                    );
-                    materials.add(ColorMaterial {
-                        color: css::WHITE.with_alpha(0.0).into(),
-                        alpha_mode: AlphaMode2d::Blend,
-                        texture: None,
-                        ..default()
-                    })
-                }
-                Some(backglass_image) => {
-                    materials.add(ColorMaterial {
-                        //color: css::WHITE.into(),
-                        alpha_mode: AlphaMode2d::Opaque,
-                        texture: Some(backglass_image.clone()),
-                        ..default()
-                    })
-                }
-            }
-        }
-    };
-
     let table_width_m = vpu_to_m(vpx_asset.raw.gamedata.right - vpx_asset.raw.gamedata.left);
     let table_depth_m = vpu_to_m(vpx_asset.raw.gamedata.bottom - vpx_asset.raw.gamedata.top);
 
-    let (_camera, proj) = camera_q.single().unwrap();
-    let ortho = match proj {
-        Projection::Orthographic(ortho) => ortho,
-        _ => panic!("Expected orthographic camera"),
-    };
-
-    // Backglass fills the entire window
-    let backglass_width = ortho.area.max.x - ortho.area.min.x;
-    let backglass_height = table_depth_m;
-    let backglass_mesh = Mesh::from(Rectangle::new(backglass_width, backglass_height));
-
+    // The desktop backdrop (the full-window image with the score windows and
+    // playfield cutout) is spawned by `level::spawn_desktop_backdrop`.
     (
         Table,
         Name::from("Table"),
         Transform::default(),
         Visibility::default(),
         children![
-            (
-                Name::from("Backglass"),
-                Mesh2d(meshes.add(backglass_mesh)),
-                MeshMaterial2d(backglass_material),
-                Transform::from_xyz(0.0, 0.0, -20.0)
-            ),
             playfield(vpx_asset, meshes, playfield_materials, images, light_map),
             (
                 Name::from("Bottom Wall"),

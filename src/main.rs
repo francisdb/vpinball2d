@@ -232,9 +232,11 @@ fn spawn_camera(
     if headless.0 {
         // No window to present to, so render the main view to an offscreen image that
         // the `screenshot` command captures.
+        // Landscape, matching a desktop backdrop (16:9); the playfield renders in
+        // the backdrop's central cutout (see pinball::desktop).
         let image = images.add(Image::new_target_texture(
-            900,
-            2044,
+            1920,
+            1080,
             TextureFormat::Rgba8UnormSrgb,
             None,
         ));

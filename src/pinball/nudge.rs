@@ -22,6 +22,12 @@ use bevy::camera::Camera2d;
 use bevy::prelude::*;
 use core::f32::consts::TAU;
 
+/// The camera's resting translation, set by `gameplay::fit_camera` so the view is
+/// centred on the desktop backdrop. The nudge shake offsets from this instead of
+/// snapping the camera back to the origin; defaults to the origin.
+#[derive(Component, Default)]
+pub(crate) struct CameraRest(pub(crate) Vec2);
+
 // How fast the "table on springs" rings back to centre.
 const NUDGE_FREQUENCY_HZ: f32 = 8.0;
 // < 1.0 wobbles then settles; ~0.5 gives a visible shake.
@@ -91,7 +97,10 @@ fn apply_nudge(
     time: Res<Time>,
     mut nudge: ResMut<Nudge>,
     mut gravity: ResMut<Gravity>,
-    mut cameras: Query<&mut Transform, (With<Camera2d>, Without<super::lightmap::LightmapCamera>)>,
+    mut cameras: Query<
+        (&mut Transform, Option<&CameraRest>),
+        (With<Camera2d>, Without<super::lightmap::LightmapCamera>),
+    >,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
@@ -114,9 +123,11 @@ fn apply_nudge(
     // Fictitious acceleration felt by every body in the table's frame.
     gravity.0 = nudge.base_gravity - table_accel;
 
-    // Fake the table jolting by offsetting the camera (visual only).
-    for mut camera in &mut cameras {
-        camera.translation.x = -nudge.pos.x;
-        camera.translation.y = -nudge.pos.y;
+    // Fake the table jolting by offsetting the camera from its rest position
+    // (visual only); the rest position keeps the view centred on the backdrop.
+    for (mut camera, rest) in &mut cameras {
+        let rest = rest.map_or(Vec2::ZERO, |r| r.0);
+        camera.translation.x = rest.x - nudge.pos.x;
+        camera.translation.y = rest.y - nudge.pos.y;
     }
 }

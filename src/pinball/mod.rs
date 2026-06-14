@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 pub(crate) mod ball;
 mod ballcontrol;
 pub(crate) mod bumper;
+pub(crate) mod desktop;
 mod flasher;
 pub(crate) mod flipper;
 pub(crate) mod gate;
@@ -17,12 +18,13 @@ mod layer;
 pub mod level;
 pub(crate) mod light;
 pub(crate) mod lightmap;
-mod nudge;
+pub(crate) mod nudge;
 mod physics;
 pub mod playfield;
 pub(crate) mod plunger;
 mod primitive;
 mod ramp;
+pub(crate) mod reel;
 mod rubber;
 pub(crate) mod scripts;
 pub(crate) mod spinner;
@@ -65,4 +67,5 @@ pub(super) fn plugin(app: &mut App) {
     app.add_plugins(gate::plugin);
     app.add_plugins(ramp::plugin);
     app.add_plugins(primitive::plugin);
+    app.add_plugins(reel::plugin);
 }
