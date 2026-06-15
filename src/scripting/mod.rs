@@ -608,6 +608,7 @@ fn apply_commands(
     assets_vpx: Res<Assets<VpxAsset>>,
     mut reels: Query<&mut crate::pinball::reel::ScoreReel>,
     droppable_walls: Query<(Entity, &ScriptName), With<crate::pinball::wall::Droppable>>,
+    mut flipper_query: Query<(Entity, &mut crate::pinball::flipper::Flipper)>,
 ) {
     // Retry kicks whose ball had not spawned yet.
     let mut pending = std::mem::take(&mut runtime.pending_kicks);
@@ -697,6 +698,27 @@ fn apply_commands(
                                     .entity(entity)
                                     .remove::<ColliderDisabled>()
                                     .insert(Visibility::Inherited);
+                            }
+                        }
+                    }
+                    // A flipper enable/disable (sliding "gap" tables swap the two
+                    // flippers per side): toggle the live flag, collider and visual.
+                    (ItemKind::Flipper, "enabled") => {
+                        let on = value.as_bool().unwrap_or(true);
+                        for (entity, mut flipper) in &mut flipper_query {
+                            if !flipper.name.eq_ignore_ascii_case(&name) {
+                                continue;
+                            }
+                            flipper.enabled = on;
+                            if on {
+                                commands
+                                    .entity(entity)
+                                    .remove::<ColliderDisabled>()
+                                    .insert(Visibility::Inherited);
+                            } else {
+                                commands
+                                    .entity(entity)
+                                    .insert((ColliderDisabled, Visibility::Hidden));
                             }
                         }
                     }

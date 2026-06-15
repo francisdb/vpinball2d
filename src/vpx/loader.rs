@@ -261,8 +261,18 @@ impl VpxLoader {
                     }
                 } else if let GameItemEnum::Primitive(primitive) = item {
                     // Visible primitives are projected to their top-down silhouette (only the
-                    // upward-facing faces). Invisible primitives are skipped.
-                    if primitive.is_visible
+                    // upward-facing faces). Invisible ones are skipped, except a flipper bat
+                    // sitting on a flipper pivot: sliding "gap" tables author the alternate
+                    // bat hidden and reveal it at runtime, so the swapped-in flipper needs
+                    // its mesh. (10 vpu mirrors flipper::FLIPPER_BAT_MAX_DIST_VPU.)
+                    let on_flipper_pivot = !primitive.is_visible
+                        && vpx.gameitems.iter().any(|other| {
+                            matches!(other, GameItemEnum::Flipper(f)
+                                if (f.center.x - primitive.position.x).powi(2)
+                                    + (f.center.y - primitive.position.y).powi(2)
+                                    < 10.0_f32.powi(2))
+                        });
+                    if (primitive.is_visible || on_flipper_pivot)
                         && let Some((mesh, center_z)) =
                             primitive_mesh::build_primitive_mesh_2d(primitive)
                     {
