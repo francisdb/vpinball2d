@@ -322,6 +322,7 @@ pub fn spawn_level(
                         crate::pinball::reel::spawn_reel(
                             parent,
                             &mut atlas_layouts,
+                            &mut images,
                             vpx_asset,
                             &desktop_layout,
                             reel,
@@ -352,8 +353,37 @@ fn spawn_desktop_backdrop(
     table_size: Vec2,
 ) -> crate::pinball::desktop::DesktopLayout {
     let name = vpx_asset.raw.gamedata.backglass_image_full_desktop.as_str();
-    // No desktop backdrop: fall back to the bare playfield filling the view.
     let Some(handle) = vpx_asset.image(name) else {
+        // No desktop backdrop image. vpinball still draws the reels/textboxes as
+        // a backglass overlay in its own coordinate space (EDITOR_BG, 4:3); if
+        // this table has such reels (e.g. a reel-based DMD), give them that space
+        // - the same layout as the backdrop-image path but at the canonical
+        // backglass aspect, behind a flat backdrop-colour quad - so they land in
+        // the margins instead of on the playfield. Otherwise keep the bare playfield.
+        let has_reels = vpx_asset
+            .raw
+            .gameitems
+            .iter()
+            .any(|gi| matches!(gi, GameItemEnum::Reel(r) if r.is_visible));
+        if has_reels {
+            use crate::pinball::desktop::{EDITOR_BG_HEIGHT, EDITOR_BG_WIDTH};
+            let layout = crate::pinball::desktop::layout(
+                table_size,
+                Vec2::new(EDITOR_BG_WIDTH, EDITOR_BG_HEIGHT),
+                None,
+            );
+            let bc = vpx_asset.raw.gamedata.backdrop_color;
+            commands.spawn((
+                Name::from("Desktop Backbox"),
+                Mesh2d(meshes.add(Rectangle::new(layout.size.x, layout.size.y))),
+                MeshMaterial2d(
+                    materials.add(ColorMaterial::from_color(Color::srgb_u8(bc.r, bc.g, bc.b))),
+                ),
+                Transform::from_xyz(layout.center.x, layout.center.y, -20.0),
+                DespawnOnExit(Screen::Gameplay),
+            ));
+            return layout;
+        }
         return crate::pinball::desktop::DesktopLayout {
             center: Vec2::ZERO,
             size: table_size,

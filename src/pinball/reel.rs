@@ -189,8 +189,11 @@ struct ReelSpec {
     image: Handle<Image>,
     /// Atlas cell size in pixels, one per digit value.
     cell: UVec2,
-    /// Number of atlas cells (`digit_range + 1`).
+    /// Atlas grid columns: `images_per_grid_row` for a grid image, otherwise the
+    /// digit count (a single horizontal strip).
     columns: u32,
+    /// Atlas grid rows: `ceil((digit_range + 1) / columns)`, 1 for a strip.
+    rows: u32,
     /// Digit base, `digit_range + 1`.
     base: i32,
     /// World-space centre of each digit wheel, leftmost first.
@@ -212,7 +215,7 @@ fn build_reel(
     let layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
         spec.cell,
         spec.columns,
-        1,
+        spec.rows,
         None,
         None,
     ));
@@ -273,6 +276,7 @@ use crate::pinball::desktop::{EDITOR_BG_HEIGHT, EDITOR_BG_WIDTH};
 pub(super) fn spawn_reel(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     atlas_layouts: &mut Assets<TextureAtlasLayout>,
+    images: &mut Assets<Image>,
     vpx_asset: &VpxAsset,
     layout: &DesktopLayout,
     reel: &reel::Reel,
@@ -284,12 +288,30 @@ pub(super) fn spawn_reel(
         warn!("Reel {} image '{}' not found", reel.name, reel.image);
         return;
     };
+    // Digit strips store transparent pixels as transparent *white*; with linear
+    // filtering that white bleeds into every cell edge (white grid lines). Sample
+    // nearest so transparent texels never blend in, like vpinball's alpha-tested
+    // (non-blended) DMD reels.
+    if let Some(img) = images.get_mut(&image) {
+        img.sampler = bevy::image::ImageSampler::nearest();
+    }
 
     let count = reel.reel_count.max(1.0) as u32;
     let digit_range = reel.digit_range.max(1.0) as i32;
     let base = digit_range + 1;
-    let columns = base as u32;
-    let cell = UVec2::new((image_data.0 / columns).max(1), image_data.1.max(1));
+    // The digit strip is either a single row or, like vpinball's grid images, an
+    // `images_per_grid_row`-wide grid (dispreel.cpp `RenderSetup`). Index it as a
+    // grid so each cell is one glyph, not a thin slice spanning the stacked rows.
+    let (columns, rows) = if reel.use_image_grid && reel.images_per_grid_row != 0 {
+        let columns = reel.images_per_grid_row;
+        (columns, (base as u32).div_ceil(columns))
+    } else {
+        (base as u32, 1)
+    };
+    let cell = UVec2::new(
+        (image_data.0 / columns).max(1),
+        (image_data.1 / rows).max(1),
+    );
 
     // Fractions of the backdrop, matching dispreel.cpp.
     let render_w = reel.width / EDITOR_BG_WIDTH;
@@ -318,6 +340,7 @@ pub(super) fn spawn_reel(
             image,
             cell,
             columns,
+            rows,
             base,
             digit_centers,
             digit_size: layout.to_world_size(render_w, render_h),
@@ -379,6 +402,7 @@ pub(crate) fn spawn_credit_reel(
             image: image_handle,
             cell,
             columns,
+            rows: 1,
             base: columns as i32,
             digit_centers: vec![center],
             digit_size,
