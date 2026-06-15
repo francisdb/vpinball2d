@@ -66,7 +66,10 @@ fn flipper_bat_primitive<'a>(
         .gameitems
         .iter()
         .filter_map(|it| match it {
-            GameItemEnum::Primitive(p) if p.is_visible && !p.image.is_empty() => Some(p),
+            // Invisible primitives count too: sliding "gap" tables author the
+            // closed-position bat (e.g. LFlip1) hidden and swap visibility at
+            // runtime, so the alternate flipper must still find its own bat.
+            GameItemEnum::Primitive(p) if !p.image.is_empty() => Some(p),
             _ => None,
         })
         // Baked shadow primitives on the pivot are discarded (we generate flipper
@@ -84,15 +87,23 @@ fn flipper_bat_primitive<'a>(
                 .unwrap_or(0.0);
             Some((p, mesh.clone(), center_z))
         })
-        .max_by(|a, b| a.2.total_cmp(&b.2))
+        // Prefer a visible candidate (the live bat), then the highest one.
+        .max_by(|a, b| {
+            a.0.is_visible
+                .cmp(&b.0.is_visible)
+                .then(a.2.total_cmp(&b.2))
+        })
         .map(|(p, mesh, _)| (p, mesh))
 }
 
 /// Whether a primitive is a flipper bat, so the general primitive renderer can skip it
 /// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat
 /// is skipped, so other decor co-located on the pivot still renders statically.
+/// Invisible bats count: a sliding-gap flipper's closed-position bat is authored hidden
+/// (its mesh loaded only because it sits on a pivot), and the flipper shows it on swap -
+/// so it must never also be drawn statically here.
 pub(crate) fn is_flipper_bat(vpx_asset: &VpxAsset, primitive: &Primitive) -> bool {
-    if !primitive.is_visible || primitive.image.is_empty() {
+    if primitive.image.is_empty() {
         return false;
     }
     vpx_asset.raw.gameitems.iter().any(|it| {
@@ -116,7 +127,6 @@ const FLIPPER_ARC_SEGMENTS: usize = 16;
 
 #[derive(Component)]
 pub(crate) struct Flipper {
-    #[allow(dead_code)]
     pub name: String,
     /// Body angle (rad) the flipper rests at when released (Visual Pinball start angle).
     pub(crate) rest_angle: f32,
@@ -124,6 +134,10 @@ pub(crate) struct Flipper {
     pub(crate) active_angle: f32,
     /// Whether the flipper button was held last frame, for sound edge detection.
     pub(crate) pressed: bool,
+    /// Whether this flipper is the live one. Sliding "gap" tables keep two flippers
+    /// per side and swap which is enabled; a disabled flipper neither flips nor
+    /// collides nor draws. Toggled from the script (see `scripting::apply_commands`).
+    pub(crate) enabled: bool,
 }
 
 /// Sounds a table plays when a flipper energises (`up`) or returns (`down`). A random
@@ -279,6 +293,14 @@ pub(super) fn spawn_flipper(
     // The flipper's moving drop shadows are spawned and tracked by `pinball::light`
     // (`spawn_flipper_shadows`): dark copies of this body's outline mesh that follow
     // its pose each frame, with the light offsets kept in world space.
+    // Sliding "gap" flippers keep two flippers per side and swap which is enabled;
+    // a disabled flipper neither collides nor draws until the script enables it.
+    let enabled = flipper.is_enabled;
+    let visibility = if enabled {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
     let flipper_entity = parent
         .spawn((
             Flipper {
@@ -286,11 +308,13 @@ pub(super) fn spawn_flipper(
                 rest_angle,
                 active_angle,
                 pressed: false,
+                enabled,
             },
             Name::from(format!("Flipper {}", flipper.name)),
             // the rubber band is the outer shape and the ball contact surface
             Mesh2d(rubber_mesh),
             MeshMaterial2d(rubber_material),
+            visibility,
             RigidBody::Dynamic,
             rubber_collider,
             //SleepingDisabled,
@@ -303,6 +327,17 @@ pub(super) fn spawn_flipper(
         ))
         .with_child(bat_child)
         .id();
+    if !enabled {
+        parent
+            .commands()
+            .entity(flipper_entity)
+            .insert(ColliderDisabled);
+    }
+    // Make the flipper addressable so the script can enable/disable it.
+    parent
+        .commands()
+        .entity(flipper_entity)
+        .insert(crate::scripting::ScriptName(flipper.name.clone()));
 
     parent.spawn((
         Name::from(format!("Flipper {} Joint", flipper.name)),
@@ -456,6 +491,16 @@ fn flipper_movement(
     // A tilted table cuts flipper power (the script drives this gate).
     let enabled = flippers_enabled.map(|e| e.0).unwrap_or(true);
     for (entity, mut flipper) in &mut flippers {
+        // A disabled (swapped-out) flipper neither flips nor reacts to the button; hold
+        // it at rest with the return torque.
+        if !flipper.enabled {
+            let towards_active = (flipper.active_angle - flipper.rest_angle).signum();
+            commands
+                .entity(entity)
+                .insert(ConstantTorque(-towards_active * FLIPPER_RETURN_TORQUE));
+            flipper.pressed = false;
+            continue;
+        }
         // The solenoid drives towards the active angle, so the sign of the swing tells us
         // which way the flipper turns: a counter-clockwise (positive) swing is a left-hand
         // flipper, a clockwise (negative) one is right-hand. Visual Pinball has no left/right
