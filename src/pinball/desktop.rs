@@ -106,10 +106,7 @@ impl DesktopLayout {
 /// the central dark hole the playfield shows through. Falls back to a sensible
 /// centred rectangle when the backdrop has no detectable hole.
 fn detect_cutout(image: Option<&Image>) -> Rect {
-    let fallback = Rect {
-        min: Vec2::new(0.30, 0.13),
-        max: Vec2::new(0.70, 0.88),
-    };
+    let fallback = DEFAULT_CUTOUT;
     let Some(image) = image else {
         return fallback;
     };
@@ -156,6 +153,13 @@ fn detect_cutout(image: Option<&Image>) -> Rect {
         max: Vec2::new(x1 as f32 / w as f32, y1 as f32 / h as f32),
     }
 }
+
+/// The default playfield cutout (also [`detect_cutout`]'s fallback): the central
+/// window the playfield fills, leaving margins around it for backdrop overlays.
+const DEFAULT_CUTOUT: Rect = Rect {
+    min: Vec2::new(0.30, 0.13),
+    max: Vec2::new(0.70, 0.88),
+};
 
 /// Compute the backdrop layout so its cutout frames the `table_size` playfield
 /// (centred at the origin). `img_size` is the backdrop image pixel size (for its
