@@ -34,20 +34,15 @@ pub(crate) struct TableEntry {
     /// Display name: the table's metadata name once indexed, otherwise the
     /// containing folder name as a fallback.
     pub(crate) title: String,
-    /// Whether this table has a hand-written Rust script.
+    /// Whether this table ships a script sidecar (`.lua` and/or `.table.json`).
     pub(crate) has_script: bool,
 }
 
 impl TableEntry {
     /// Build an entry from its relative path and an optional metadata title.
     fn build(rel_path: &str, title: Option<String>, tables_dir: &Path) -> Self {
-        let file_name = Path::new(rel_path)
-            .file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_else(|| rel_path.to_string());
-        // Scripted: a hand-written Rust module or a `.lua` sidecar next to the vpx.
-        let has_script = crate::pinball::scripts::has_script(&file_name)
-            || crate::scripting::has_script_sidecar(tables_dir, rel_path);
+        // Scripted: a `.lua` and/or `.table.json` sidecar next to the vpx.
+        let has_script = crate::scripting::has_script_sidecar(tables_dir, rel_path);
         let title = title.unwrap_or_else(|| fallback_title(rel_path));
         Self {
             rel_path: rel_path.to_string(),

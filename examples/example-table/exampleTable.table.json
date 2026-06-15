@@ -1,0 +1,56 @@
+{
+  "drain": {
+    "down": [
+      "drain"
+    ],
+    "up": [
+      "ballrelease"
+    ]
+  },
+  "flippers": {
+    "up": [
+      "fx_Flipperup"
+    ],
+    "down": [
+      "fx_Flipperdown"
+    ]
+  },
+  "bumpers": {
+    "hit": [
+      "fx_bumper4"
+    ]
+  },
+  "slingshots": {
+    "hit": [
+      "left_slingshot",
+      "right_slingshot"
+    ]
+  },
+  "slingshot_animations": [
+    {
+      "slingshot": "LeftSlingShot",
+      "rest": "LSling",
+      "flexed": "LSling1"
+    },
+    {
+      "slingshot": "RightSlingShot",
+      "rest": "RSling",
+      "flexed": "RSling1"
+    }
+  ],
+  "targets": {
+    "hit": [
+      "target"
+    ]
+  },
+  "spinners": {
+    "hit": [
+      "fx_spinner"
+    ]
+  },
+  "gates": {
+    "hit": [
+      "gate"
+    ]
+  }
+}

@@ -88,8 +88,8 @@ pub(super) fn plugin(app: &mut App) {
 }
 
 /// Load `<table>.table.json` next to the vpx and insert the configured
-/// resources. Tables with hand-written Rust modules are unaffected unless they
-/// also ship a sidecar (the sidecar then wins by running later).
+/// resources. Runs after `spawn_level`, so the sidecar's config is the last
+/// word on a table's sounds and slingshot animations.
 #[allow(clippy::too_many_arguments)]
 fn load_sidecar(
     mut commands: Commands,

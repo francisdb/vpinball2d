@@ -1,0 +1,104 @@
+{
+  "drain": {
+    "down": [
+      "SY_TNA_REV02_Trough_Drain_1",
+      "SY_TNA_REV02_Trough_Drain_2",
+      "SY_TNA_REV02_Trough_Drain_3",
+      "SY_TNA_REV02_Trough_Drain_4",
+      "SY_TNA_REV02_Trough_Drain_5",
+      "SY_TNA_REV02_Trough_Drain_6"
+    ],
+    "up": [
+      "SY_TNA_REV02_Shooter_Lane_Metal_BallDrop_1",
+      "SY_TNA_REV02_Shooter_Lane_Metal_BallDrop_2",
+      "SY_TNA_REV02_Shooter_Lane_Metal_BallDrop_3"
+    ]
+  },
+  "flippers": {
+    "up": [
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_1",
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_2",
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_3",
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_4",
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_5",
+      "SY_TNA_REV02_Flipper_Lower_Left_Up_Full_Stroke_6",
+      "SY_TNA_REV02_Flipper_Lower_Right_Up_Full_Stroke_1",
+      "SY_TNA_REV02_Flipper_Lower_Right_Up_Full_Stroke_2",
+      "SY_TNA_REV02_Flipper_Lower_Right_Up_Full_Stroke_3",
+      "SY_TNA_REV02_Flipper_Lower_Right_Up_Full_Stroke_4",
+      "SY_TNA_REV02_Flipper_Lower_Right_Up_Full_Stroke_5"
+    ],
+    "down": [
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_1",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_2",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_3",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_4",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_5",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_6",
+      "SY_TNA_REV02_Flipper_Lower_Left_Down_7",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_1",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_2",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_3",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_4",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_5",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_6",
+      "SY_TNA_REV02_Flipper_Lower_Right_Down_7"
+    ]
+  },
+  "bumpers": {
+    "hit": [
+      "SY_TNA_REV03_Pop_Bumper_1",
+      "SY_TNA_REV03_Pop_Bumper_2",
+      "SY_TNA_REV03_Pop_Bumper_3",
+      "SY_TNA_REV03_Pop_Bumper_4",
+      "SY_TNA_REV03_Pop_Bumper_5",
+      "SY_TNA_REV03_Pop_Bumper_6",
+      "SY_TNA_REV03_Pop_Bumper_7"
+    ]
+  },
+  "slingshots": {
+    "hit": [
+      "SY_TNA_REV03_Slingshot_Main_Left_1",
+      "SY_TNA_REV03_Slingshot_Main_Left_2",
+      "SY_TNA_REV03_Slingshot_Main_Left_3",
+      "SY_TNA_REV03_Slingshot_Main_Left_4",
+      "SY_TNA_REV03_Slingshot_Main_Left_5",
+      "SY_TNA_REV03_Slingshot_Main_Left_6",
+      "SY_TNA_REV03_Slingshot_Main_Left_7",
+      "SY_TNA_REV03_Slingshot_Main_Right_1",
+      "SY_TNA_REV03_Slingshot_Main_Right_2",
+      "SY_TNA_REV03_Slingshot_Main_Right_3",
+      "SY_TNA_REV03_Slingshot_Main_Right_4",
+      "SY_TNA_REV03_Slingshot_Main_Right_5",
+      "SY_TNA_REV03_Slingshot_Main_Right_6",
+      "SY_TNA_REV03_Slingshot_Main_Right_7"
+    ]
+  },
+  "slingshot_animations": [
+    {
+      "slingshot": "Leftslingshot",
+      "rest": "LeftSling1",
+      "flexed": "LeftSling4"
+    },
+    {
+      "slingshot": "Rightslingshot",
+      "rest": "RightSling1",
+      "flexed": "RightSling4"
+    },
+    {
+      "slingshot": "SlingShot1",
+      "rest": "LeftUpSling1",
+      "flexed": "LeftUpSling4"
+    },
+    {
+      "slingshot": "SlingShot2",
+      "rest": "RightUpSling1",
+      "flexed": "RightUpSling4"
+    },
+    {
+      "slingshot": "SlingShot3",
+      "rest": "LeftLeftSling1",
+      "flexed": "LeftLeftSling4"
+    }
+  ]
+}
