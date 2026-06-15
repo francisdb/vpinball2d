@@ -34,7 +34,7 @@ use crate::pinball::table::TableAssets;
 use crate::screens::Screen;
 use crate::vpx::VpxAsset;
 use api::{HostState, ItemKind, ItemState, ScriptCommand, ScriptEngine, ScriptValue, SharedHost};
-use avian2d::prelude::{CollisionEnd, CollisionStart, LinearVelocity, RigidBody};
+use avian2d::prelude::{ColliderDisabled, CollisionEnd, CollisionStart, LinearVelocity, RigidBody};
 use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -607,6 +607,7 @@ fn apply_commands(
     ball_assets: Option<Res<BallAssets>>,
     assets_vpx: Res<Assets<VpxAsset>>,
     mut reels: Query<&mut crate::pinball::reel::ScoreReel>,
+    droppable_walls: Query<(Entity, &ScriptName), With<crate::pinball::wall::Droppable>>,
 ) {
     // Retry kicks whose ball had not spawned yet.
     let mut pending = std::mem::take(&mut runtime.pending_kicks);
@@ -676,6 +677,26 @@ fn apply_commands(
                         for timer in &mut runtime.timers {
                             if timer.lower == lower {
                                 timer.interval_ms = interval;
+                            }
+                        }
+                    }
+                    // A droppable wall (drop target / flipper-gap post): dropped
+                    // disables its collider and hides it; raised restores both.
+                    (ItemKind::Wall, "isdropped") => {
+                        let dropped = value.as_bool().unwrap_or(false);
+                        for (entity, sname) in &droppable_walls {
+                            if !sname.0.eq_ignore_ascii_case(&name) {
+                                continue;
+                            }
+                            if dropped {
+                                commands
+                                    .entity(entity)
+                                    .insert((ColliderDisabled, Visibility::Hidden));
+                            } else {
+                                commands
+                                    .entity(entity)
+                                    .remove::<ColliderDisabled>()
+                                    .insert(Visibility::Inherited);
                             }
                         }
                     }

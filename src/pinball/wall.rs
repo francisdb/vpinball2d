@@ -94,6 +94,13 @@ pub struct Wall {
     pub name: String,
 }
 
+/// A droppable wall (vpinball drop target / flipper-gap post): a table script
+/// raises and drops it with `isdropped`. Dropped means the collider is disabled
+/// and the wall is hidden; raised means it blocks and shows. Driven from the
+/// script through `scripting::apply_commands`.
+#[derive(Component)]
+pub(crate) struct Droppable;
+
 /// A slingshot wall: when a ball hits it fast enough, it kicks the ball back out. Modelled
 /// after vpinball's `LineSegSlingshot`, where a wall segment flagged `is_slingshot` reflects
 /// the ball and, above `slingshot_threshold`, adds an outward `slingshot_force` impulse.
@@ -336,6 +343,12 @@ pub(super) fn spawn_wall(
                 crate::scripting::ScriptName(wall.name.clone()),
                 CollisionEventsEnabled,
             ));
+        }
+        // Droppable walls (drop targets, flipper-gap posts) are addressable by name
+        // so the script can raise/drop them; they start raised (vpx has no initial
+        // dropped flag), and the script drops them through `isdropped`.
+        if wall.is_droppable {
+            entity.insert((crate::scripting::ScriptName(wall.name.clone()), Droppable));
         }
         // A wall is a slingshot when it has a threshold and a drag point flagged as such
         // (vpinball builds slingshot segments from `is_slingshot` drag points).
