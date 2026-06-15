@@ -151,6 +151,13 @@ pub(super) fn spawn_flipper(
     flipper: &vpx::gameitem::flipper::Flipper,
     vpx_asset: &VpxAsset,
 ) {
+    // Sliding "gap" flippers (e.g. Student Prince) keep a second, disabled flipper per
+    // side at the alternate gap position; the script swaps which is active. We do not
+    // model that swap, so the disabled one would just render as a duplicate (material
+    // bat + rubber) over the real one. Skip it - the enabled flipper is the live one.
+    if !flipper.is_enabled {
+        return;
+    }
     let vpx_materials = vpx_asset.raw.gamedata.materials.as_deref().unwrap_or(&[]);
     // Visual Pinball rests the flipper at `start_angle` and the solenoid rotates it to
     // `end_angle`. In vpinball an angle is 0 when the flipper points up and positive
