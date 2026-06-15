@@ -1,0 +1,40 @@
+{
+  "drain": {
+    "down": [
+      "fx_drain"
+    ],
+    "up": [
+      "fx_ballrel"
+    ]
+  },
+  "flippers": {
+    "up": [
+      "fx_flipperup"
+    ],
+    "down": [
+      "fx_flipperdown"
+    ]
+  },
+  "bumpers": {
+    "hit": [
+      "fx_Bumper"
+    ]
+  },
+  "slingshots": {
+    "hit": [
+      "fx_slingshot"
+    ]
+  },
+  "slingshot_animations": [
+    {
+      "slingshot": "LeftSlingshot",
+      "rest": "LeftSling1",
+      "flexed": "LeftSling4"
+    },
+    {
+      "slingshot": "RightSlingshot",
+      "rest": "RightSling1",
+      "flexed": "RightSling4"
+    }
+  ]
+}

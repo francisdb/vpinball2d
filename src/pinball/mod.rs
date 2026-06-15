@@ -26,7 +26,6 @@ mod primitive;
 mod ramp;
 pub(crate) mod reel;
 mod rubber;
-pub(crate) mod scripts;
 pub(crate) mod spinner;
 pub mod table;
 pub(crate) mod targets;
@@ -55,7 +54,6 @@ pub(super) fn plugin(app: &mut App) {
         bumper::plugin,
         light::plugin,
         lightmap::plugin,
-        scripts::plugin,
         plunger::plugin,
         nudge::plugin,
         flipper::plugin,

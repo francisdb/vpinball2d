@@ -180,9 +180,12 @@ fn script_path(tables_dir: &crate::tables::TablesDir, table_path: &TablePath) ->
 }
 
 /// Whether the table at `rel_path` (relative to the tables dir) ships a script
-/// sidecar; used by the table picker.
+/// sidecar; used by the table picker. A table counts as scripted if it has a
+/// `.lua` (game logic) and/or a `.table.json` (static sound/animation config)
+/// next to the vpx.
 pub fn has_script_sidecar(tables_dir: &std::path::Path, rel_path: &str) -> bool {
-    tables_dir.join(rel_path).with_extension("lua").is_file()
+    let base = tables_dir.join(rel_path);
+    base.with_extension("lua").is_file() || base.with_extension("table.json").is_file()
 }
 
 /// Web builds have no script engine (the vendored Lua C sources do not build

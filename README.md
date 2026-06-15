@@ -10,10 +10,11 @@ Pinball layout - each table in its own sub-folder alongside its media - is scann
 recursively for `.vpx` files. A good starting point is
 the [Visual Pinball example table](https://github.com/vpinball/vpinball/raw/refs/heads/master/src/assets/exampleTable.vpx).
 
-At startup the picker shows only the tables that ship with a hand-written script
-(the curated set that renders best); use **Show all tables** to browse every table
-found on disk in a scrollable list (`*` marks the ones with a script). Table names
-come from each `.vpx`'s own metadata, read in the background.
+At startup the picker shows only the tables that ship with a script sidecar
+(a `.lua` and/or `.table.json` next to the vpx - the curated set that renders
+best; see [`examples/`](examples)); use **Show all tables** to browse every
+table found on disk in a scrollable list (`*` marks the ones with a sidecar).
+Table names come from each `.vpx`'s own metadata, read in the background.
 
 ## Build & Run
 
