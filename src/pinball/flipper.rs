@@ -99,8 +99,11 @@ fn flipper_bat_primitive<'a>(
 /// Whether a primitive is a flipper bat, so the general primitive renderer can skip it
 /// (the flipper renders it rotating instead). Only the exact primitive chosen as a bat
 /// is skipped, so other decor co-located on the pivot still renders statically.
+/// Invisible bats count: a sliding-gap flipper's closed-position bat is authored hidden
+/// (its mesh loaded only because it sits on a pivot), and the flipper shows it on swap -
+/// so it must never also be drawn statically here.
 pub(crate) fn is_flipper_bat(vpx_asset: &VpxAsset, primitive: &Primitive) -> bool {
-    if !primitive.is_visible || primitive.image.is_empty() {
+    if primitive.image.is_empty() {
         return false;
     }
     vpx_asset.raw.gameitems.iter().any(|it| {
