@@ -346,6 +346,15 @@ fn build_host(vpx_asset: &VpxAsset) -> SharedHost {
                 state.kind = ItemKind::Reel;
                 state.props.insert("value".into(), ScriptValue::Int(0));
             }
+            GameItemEnum::Flasher(flasher) => {
+                state.kind = ItemKind::Flasher;
+                state
+                    .props
+                    .insert("imagea".into(), ScriptValue::Str(flasher.image_a.clone()));
+                state
+                    .props
+                    .insert("visible".into(), ScriptValue::Bool(flasher.is_visible));
+            }
             _ => {}
         }
         host.items.insert(name.to_lowercase(), state);
@@ -592,6 +601,36 @@ fn tick_timers(time: Res<Time>, mut runtime: NonSendMut<ScriptRuntime>) {
     }
 }
 
+/// The table's vpx data (bundled to keep `apply_commands` under Bevy's system
+/// parameter limit).
+#[derive(bevy::ecs::system::SystemParam)]
+struct VpxAssets<'w> {
+    table: Option<Res<'w, TableAssets>>,
+    vpx: Res<'w, Assets<VpxAsset>>,
+}
+
+impl VpxAssets<'_> {
+    fn asset(&self) -> Option<&VpxAsset> {
+        self.table.as_ref().and_then(|t| self.vpx.get(&t.vpx))
+    }
+}
+
+/// Runtime flasher canvases plus their materials, for `flasher.ImageA = ...`.
+#[derive(bevy::ecs::system::SystemParam)]
+struct FlasherIo<'w, 's> {
+    materials: ResMut<'w, Assets<ColorMaterial>>,
+    query: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static ScriptName,
+            &'static MeshMaterial2d<ColorMaterial>,
+            &'static crate::pinball::flasher::FlasherCanvas,
+        ),
+    >,
+}
+
 /// Applies the side effects the script queued: light states, timer switches,
 /// sounds, kicker ball operations and the flipper gate. Reel and textbox
 /// writes only update the shadow state, which the scoreboard displays.
@@ -612,14 +651,14 @@ fn apply_commands(
     sounds: Res<ScriptSounds>,
     playing: Query<(Entity, &PlayingSound)>,
     mut flippers_enabled: ResMut<FlippersEnabled>,
-    table_assets: Option<Res<TableAssets>>,
+    vpx: VpxAssets,
     mut meshes: ResMut<Assets<Mesh>>,
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     ball_assets: Option<Res<BallAssets>>,
-    assets_vpx: Res<Assets<VpxAsset>>,
     mut reels: Query<&mut crate::pinball::reel::ScoreReel>,
     droppable_walls: Query<(Entity, &ScriptName), With<crate::pinball::wall::Droppable>>,
     mut flipper_query: Query<(Entity, &mut crate::pinball::flipper::Flipper)>,
+    mut flasher_io: FlasherIo,
 ) {
     // Retry kicks whose ball had not spawned yet.
     let mut pending = std::mem::take(&mut runtime.pending_kicks);
@@ -733,6 +772,45 @@ fn apply_commands(
                             }
                         }
                     }
+                    // A flasher used as a runtime canvas (e.g. a reel/grid DMD's
+                    // digit cells): swap its texture to the named vpx image.
+                    (ItemKind::Flasher, "imagea") => {
+                        let img_name = match &value {
+                            ScriptValue::Str(s) => s.clone(),
+                            _ => String::new(),
+                        };
+                        let handle = vpx.asset().and_then(|v| v.image(&img_name).cloned());
+                        for (entity, sname, mat, canvas) in &flasher_io.query {
+                            if !sname.0.eq_ignore_ascii_case(&name) {
+                                continue;
+                            }
+                            if let Some(material) = flasher_io.materials.get_mut(&mat.0) {
+                                material.texture = handle.clone();
+                                material.color.set_alpha(if handle.is_some() {
+                                    canvas.alpha
+                                } else {
+                                    0.0
+                                });
+                            }
+                            commands.entity(entity).insert(if handle.is_some() {
+                                Visibility::Inherited
+                            } else {
+                                Visibility::Hidden
+                            });
+                        }
+                    }
+                    (ItemKind::Flasher, "visible") => {
+                        let vis = value.as_bool().unwrap_or(true);
+                        for (entity, sname, _, _) in &flasher_io.query {
+                            if sname.0.eq_ignore_ascii_case(&name) {
+                                commands.entity(entity).insert(if vis {
+                                    Visibility::Inherited
+                                } else {
+                                    Visibility::Hidden
+                                });
+                            }
+                        }
+                    }
                     // Textbox/reel text lives in the shadow state only; the
                     // scoreboard renders it.
                     (ItemKind::TextBox, _) | (ItemKind::Reel, _) => {}
@@ -757,7 +835,7 @@ fn apply_commands(
                             continue;
                         };
                         let (Some(table_assets), Some(ball_assets)) =
-                            (table_assets.as_ref(), ball_assets.as_ref())
+                            (vpx.table.as_ref(), ball_assets.as_ref())
                         else {
                             continue;
                         };
@@ -768,7 +846,7 @@ fn apply_commands(
                                 &mut meshes,
                                 &mut ball_materials,
                                 ball_assets,
-                                &assets_vpx,
+                                &vpx.vpx,
                                 transform.translation.truncate(),
                             ),
                             DespawnOnExit(Screen::Gameplay),
