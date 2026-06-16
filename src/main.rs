@@ -97,6 +97,11 @@ impl Plugin for AppPlugin {
                 default_plugins.set(WindowPlugin {
                     primary_window: Window {
                         title: "VPinball2D".to_string(),
+                        // The application id (Wayland) / WM_CLASS (X11). Without it the
+                        // compositor has no app to associate the window with: COSMIC/GNOME
+                        // show an empty name in the top bar and cannot restore the window
+                        // after it is minimized (you have to alt-tab back to it).
+                        name: Some("vpinball2d".to_string()),
                         fit_canvas_to_parent: true,
                         ..default()
                     }
