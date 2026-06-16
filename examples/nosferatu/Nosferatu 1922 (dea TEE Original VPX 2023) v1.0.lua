@@ -771,6 +771,51 @@ function leftslingshot_slingshot() AddScore(100); PlaySound("left_slingshot") en
 function rightslingshot_slingshot() AddScore(100); PlaySound("right_slingshot") end
 
 -- ===========================================================================
+-- BLOODISLIFE letters: pegs/targets light the 11 letters fl1b..fl11e; all 11
+-- arm BloodisLife (CheckBil), collected at the top kicker for a multiball.
+-- ===========================================================================
+local function bloodLetter(fl, peglight, snd, src)
+  if snd and src then PlaySoundAt(snd, src) end
+  peglight.state = 2
+  fl.state = 1
+  CheckBil()
+  if not BloodisLife then BILl001.state = 0; BILl002.state = 0 end
+end
+
+-- peg name -> { letter lamp, PegLight lamp, rubber sound }
+local BLOOD_PEGS = {
+  PegB001 = { fl1b, PegLight, "rubber_hit_1" }, PegB002 = { fl1b, PegLight, "rubber_hit_2" },
+  PegB003 = { fl1b, PegLight, "rubber_hit_2" }, PegB004 = { fl1b, PegLight, "rubber_hit_3" },
+  PegL001 = { fl2l, PegLight001, "rubber_hit_2" }, PegL002 = { fl2l, PegLight001, "rubber_hit_3" },
+  PegL003 = { fl2l, PegLight001, "rubber_hit_1" }, PegL004 = { fl2l, PegLight001, "rubber_hit_3" },
+  Pego1002 = { fl3o, PegLight002, "rubber_hit_2" }, Pego1003 = { fl3o, PegLight002, "rubber_hit_2" },
+  Pego1004 = { fl3o, PegLight002, "rubber_hit_3" }, Pego1005 = { fl3o, PegLight002, "rubber_hit_1" },
+  Pego2001 = { fl4o, PegLight003, "rubber_hit_1" }, Pego2002 = { fl4o, PegLight003, "rubber_hit_3" },
+  Pego2003 = { fl4o, PegLight003, "rubber_hit_3" }, Pego2004 = { fl4o, PegLight003, "rubber_hit_2" },
+  Pego2005001 = { fl4o, PegLight003, "rubber_hit_2" }, Pego2006 = { fl4o, PegLight003, "rubber_hit_2" },
+  Pego2007 = { fl4o, PegLight003, "rubber_hit_2" }, Pego2008 = { fl4o, PegLight003, "rubber_hit_1" },
+  PegD001 = { fl11e, PegLight004, "rubber_hit_3" }, PegD002 = { fl11e, PegLight004, "rubber_hit_2" },
+  PegD003 = { fl11e, PegLight004, "rubber_hit_2" }, PegD004 = { fl11e, PegLight004, "rubber_hit_3" },
+}
+for name, def in pairs(BLOOD_PEGS) do
+  _G[name:lower() .. "_hit"] = function() bloodLetter(def[1], def[2], def[3], _G[name]) end
+end
+
+-- D and I are the two mini-sling walls (they also fire <name>_slingshot above).
+function wall003_hit() bloodLetter(fl5d, PegLight005, nil, nil) end
+function wall004_hit() bloodLetter(fl6i, PegLight006, nil, nil) end
+
+-- S, L, I, F are the under-the-playfield targets (2000 each).
+local function bloodTarget(fl, peglight)
+  CheckMultiplier(); AddScore(2000); PlaySound("target2")
+  bloodLetter(fl, peglight, nil, nil)
+end
+function undertarg1_hit() bloodTarget(fl7s, PegLight007) end
+function undertarg001_hit() bloodTarget(fl8l, PegLight008) end
+function undertarg002_hit() bloodTarget(fl9i, PegLight009) end
+function undertarg003_hit() bloodTarget(fl10f, PegLight010) end
+
+-- ===========================================================================
 -- Init / input
 -- ===========================================================================
 function table_init()
