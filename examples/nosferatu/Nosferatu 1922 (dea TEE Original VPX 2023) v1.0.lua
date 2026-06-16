@@ -842,6 +842,89 @@ function kicker003_hit()
   after(1000, function() kicker003:kick(49, 50); PlaySoundAt("fx_kicker", kicker003) end)
 end
 
+-- NOSFERATU jackpot: during the mode (KickerJacks), hit the rising Nos target
+-- 7 times; each hit drops it (raised again 500ms later via CheckNOST), the 7th
+-- destroys Nosferatu for 200000 and ends the mode.
+function CheckNOST()
+  if KickerJacks then
+    RiseNosferatu()
+    Nosul001.state = 2
+    PlaySoundAt("nosunhit", NosTargetP1)
+  end
+end
+
+function nostarget001_hit()
+  if not KickerJacks then return end
+  NosHitCount = NosHitCount + 1
+  PlaySoundAt("noshit", NosTargetP1)
+  Light005:duration(2, 90, 0)
+  for _, l in ipairs({ Nnos, Onos, Snos, Fnos, Rnos, Anos, Tnos, Unos }) do l:duration(2, 875, 0) end
+  DropNosferatu(); Nosul001.state = 0
+  CheckMultiplier()
+  if NosHitCount < 7 then
+    AddScore(15000)
+    DMDFlush()
+    DMD(CL("GREAT SHOT"), CL((7 - NosHitCount) .. " MORE TO GO..."), "_", eBlink, eBlinkFast, eNone, 1500, true, "")
+    after(500, CheckNOST)
+  else
+    AddScore(200000)
+    DMDFlush()
+    DMD(CL("GREAT SHOT"), CL("NOSEFRATU DESTROYED"), "_", eBlink, eBlinkFast, eNone, 1500, true, "")
+    projectorFlash(); PlayMovie(movsun)
+    sqL7.state = 2; PlaySound("cbell"); PlaySound("MotorLeer")
+    StopNOS()
+  end
+end
+
+-- PLAGUE orbit: the orbit trigger raises the plague target; hit it 3 times
+-- (each raised again by the trigger), the 3rd opens the final target for 75000.
+PlaHitCount = 0
+function plaguetrigger001_hit()
+  if not PlagueModeActive then return end
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("PLAGUE PLAGUE PLAGUE"), CL("SHOOT THE TARGET"), "_", eBlink, eBlinkFast, eNone, 1500, true, "")
+  PLagueT1.IsDropped = false
+  PlaySoundAt("DropTarget_Up", PLagueT1); PlaySoundAt("plagtrigshov", PLagueT1)
+  plag1.state = 1; plag2.state = 0; plul1.state = 2
+end
+
+function plaguet1_hit()
+  if not PlagueModeActive then return end
+  PlaHitCount = PlaHitCount + 1
+  CheckMultiplier(); AddScore(15000)
+  PLagueT1.IsDropped = true
+  PlaySoundAt("fx_droptarget", PLagueT1); PlaySoundAt("plaguecophit", PLagueT1)
+  plag2.state = 2; plag1.state = 0; plul1.state = 0
+  if PlaHitCount < 3 then
+    DMDFlush()
+    DMD(CL("GREAT SHOT"), CL("SHOOT THE ORBIT"), "_", eBlink, eBlinkFast, eNone, 1500, true, "")
+    PLx1.state = 1
+    if PlaHitCount == 2 then PLx2.state = 1 end
+  else
+    DMDFlush()
+    DMD(CL("GREAT SHOT"), CL("KILL THE VAMPYRE"), "_", eBlink, eNone, eNone, 2000, true, "")
+    PLx1.state = 1; PLx2.state = 1; PLx3.state = 1
+    PLagueStatic.IsDropped = true; PlaySound("plaguevoice")
+    for _, p in ipairs({ prise001, prise002, prise003, prise004, prise005, prise006,
+      prise007, prise008, prise009, prise010 }) do p.IsDropped = true end
+    PlaySoundAt("fx_droptarget", prise001); PlaySoundAt("Drop_Target_Down_2", prise004)
+    PlaySoundAt("Drop_Target_Down_2", prise008)
+    PlagueCenterLight.state = 0; PlagueModeActive = false
+    FinalPLTarget001.IsDropped = false; FPTul001.state = 2
+  end
+end
+
+function finalpltarget001_hit()
+  CheckMultiplier(); AddScore(75000)
+  DMDFlush()
+  DMD(CL("PLAGUE BONUS"), CL("MODE COMPLETED"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+  FinalPLTarget001.IsDropped = false; FPTul001.state = 0
+  plag2.state = 0; PLx1.state = 0; PLx2.state = 0; PLx3.state = 0
+  PlaHitCount = 0; sqL6.state = 1
+  PlaySoundAt("Drop_Target_Down_2", FinalPLTarget001); PlaySound("MotorLeer"); PlaySound("plagwin")
+end
+
 -- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
