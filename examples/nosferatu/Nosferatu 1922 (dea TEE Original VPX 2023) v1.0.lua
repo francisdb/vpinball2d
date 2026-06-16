@@ -446,13 +446,40 @@ function CreateNewBall()
   if BloodisLife or KickerJacks then bMultiBallMode = true; bAutoPlunger = true end
 end
 
+-- Tilt end-of-ball cleanup. This table has no tilt-warning mechanism (the nudge
+-- keys only nudge), so Tilted never becomes true; kept as a no-op for parity.
+function StopEndOfBallMode() end
+
 function drain_hit()
   Drain:destroyball()
   SetPlayfieldMultiplier(1)
   for _, l in ipairs({ butl1, butl2, butl3, butl4, butl5, butl6 }) do l.state = 0 end
+  for _, l in ipairs({ spbl1, spbl2, spbl3, spbl4, spbl5, spbl6 }) do l.state = 0 end
+  if bbilMB then
+    PlaySound("mbended"); bbilMB = false
+    DMDFlush()
+    DMD(CL("BLOOD IS LIFE"), CL("MULTIBALL ENDED"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+    bAutoPlunger = false
+  end
+  if bNOSFER then
+    PlaySound("nosmballloss")
+    DMDFlush()
+    DMD(CL("MULTIBALL LOST"), CL("BUT KEEP SHOOTING"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  end
   if BallsOnPlayfield > 0 then BallsOnPlayfield = BallsOnPlayfield - 1 end
   PlaySoundAt("drain", Drain)
   if not bGameInPlay then return end
+  if Tilted then StopEndOfBallMode() end
+  if Tilted then return end
+  if bBallSaverActive then
+    -- ball saver: re-serve into the shooter lane and auto-plunge
+    AddMultiball(1); bAutoPlunger = true
+    return
+  end
+  if BallsOnPlayfield - LockedBalls == 1 and bMultiBallMode then
+    -- last ball back: leave multiball
+    bMultiBallMode = false; ChangeSong(); StopMBmodes = true
+  end
   if BallsOnPlayfield - LockedBalls == 0 then
     StopSong()
     UpdateBallInPlay()
