@@ -1,4 +1,4 @@
-//! Rasterises a [`FlexDmd`](super::FlexDmd) scene graph into a backbox DMD image.
+//! Rasterises a [`FlexDmd`] scene graph into a backbox DMD image.
 //!
 //! A CPU compositor (FlexDMD's `SurfaceGraphics`: nearest-neighbour scaled
 //! alpha blits, integer translate, rect fill) walks the actor tree each frame

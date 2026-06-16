@@ -13,14 +13,20 @@
 //! renderer leak into it. Rendering and script wiring live in [`render`] and
 //! `scripting::flexdmd` respectively.
 
+// On wasm the Lua bridge (which drives the scene graph) is gated out, so the
+// model's mutators go unused there; allow it like `scripting` does.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 pub mod render;
 
 /// Index of an [`Actor`] in [`FlexDmd::actors`]; the script's opaque handle.
 pub type ActorId = usize;
 
 /// How an [`ActorKind::Image`] (or animated actor) fits its bounds. Mirrors
-/// FlexDMD's `Scaling` (actors/Layout.h).
+/// FlexDMD's `Scaling` (actors/Layout.h). The full set is ported; only `Stretch`
+/// is set so far (until the script-side `Scaling` property is wired).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[allow(dead_code)]
 pub enum Scaling {
     #[default]
     Stretch,
@@ -31,8 +37,9 @@ pub enum Scaling {
 }
 
 /// Anchor for positioning/aligning content within bounds. Mirrors FlexDMD's
-/// `Alignment` (actors/Layout.h).
+/// `Alignment` (actors/Layout.h). Full set ported; only `Center` is set so far.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[allow(dead_code)]
 pub enum Alignment {
     TopLeft,
     Top,
@@ -84,11 +91,7 @@ pub enum ActorKind {
         fill_color: u32,
     },
     /// Bitmap-font text (rendered by [`render`] once fonts are supported).
-    Label {
-        font: String,
-        text: String,
-        alignment: Alignment,
-    },
+    Label { font: String, text: String },
 }
 
 /// One node of the scene graph.
@@ -151,14 +154,13 @@ pub struct FlexDmd {
 
 impl Default for FlexDmd {
     fn default() -> Self {
-        let mut actors = Vec::new();
-        actors.push(Actor::new(
+        let actors = vec![Actor::new(
             "Stage".to_string(),
             ActorKind::Group {
                 children: Vec::new(),
                 clip: false,
             },
-        ));
+        )];
         Self {
             width: 128,
             height: 32,
@@ -238,7 +240,6 @@ impl FlexDmd {
             ActorKind::Label {
                 font: font.to_string(),
                 text: text.to_string(),
-                alignment: Alignment::Center,
             },
         ))
     }
@@ -271,10 +272,10 @@ impl FlexDmd {
         {
             children.retain(|&c| c != child);
         }
-        if let Some(actor) = self.actors.get_mut(child) {
-            if actor.parent == Some(group) {
-                actor.parent = None;
-            }
+        if let Some(actor) = self.actors.get_mut(child)
+            && actor.parent == Some(group)
+        {
+            actor.parent = None;
         }
         self.touch();
     }

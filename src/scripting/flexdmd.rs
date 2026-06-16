@@ -2,7 +2,7 @@
 //!
 //! The Lua/JS prelude turns `FlexDMD = CreateObject("FlexDMD.FlexDMD")`,
 //! `g:AddActor(img)`, `img.Bitmap = ...` into flat `__host("fd_*"/"actor_*", ...)`
-//! calls; this routes them to typed [`FlexDmd`] mutators, returning actor
+//! calls; this routes them to typed [`crate::flexdmd::FlexDmd`] mutators, returning actor
 //! handles (integers) so the prelude can wrap them as proxy objects. Keeping the
 //! translation here keeps `lua.rs` engine-specific and `flexdmd` script-agnostic.
 
