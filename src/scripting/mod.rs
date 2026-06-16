@@ -22,6 +22,8 @@
 
 pub mod api;
 #[cfg(not(target_arch = "wasm32"))]
+mod flexdmd;
+#[cfg(not(target_arch = "wasm32"))]
 mod lua;
 mod scoreboard;
 pub mod sidecar;
@@ -145,6 +147,12 @@ impl ScriptRuntime {
         if let Err(e) = self.engine.dispatch(event, args) {
             warn!("script error in {event}: {e}");
         }
+    }
+
+    /// The shared host state, for systems that read script-owned state (e.g. the
+    /// FlexDMD renderer reads the scene graph the script built).
+    pub(crate) fn host(&self) -> SharedHost {
+        self.host.clone()
     }
 }
 
