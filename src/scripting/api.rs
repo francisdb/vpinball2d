@@ -68,6 +68,7 @@ pub enum ItemKind {
     Trigger,
     Bumper,
     Spinner,
+    Target,
     TextBox,
     Reel,
     Flasher,
