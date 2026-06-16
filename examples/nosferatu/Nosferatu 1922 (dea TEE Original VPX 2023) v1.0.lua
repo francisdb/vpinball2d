@@ -1113,6 +1113,71 @@ function cmtarget001_hit()
 end
 
 -- ===========================================================================
+-- Plague letters L, A, G, U (P -> RATS and E -> Sailors are above). Each lights
+-- its plague lamp and arms CheckPlagueReady; L/U also re-raise the Carriage Man
+-- / Werewolf targets for a timed re-hit.
+-- ===========================================================================
+local function reRaiseCM()
+  CMTarget001.IsDropped = false
+  PlaySoundAt("DropTarget_Up", CMTarget001); PlaySound("horsup")
+  cul001.state = 2
+  projectorFlash(); PlayMovie(movcar)
+  after(15000, function() CMTarget001.IsDropped = true; cul001.state = 0 end)
+end
+local function reRaiseWW()
+  WWTarget001.IsDropped = false
+  PlaySoundAt("DropTarget_Up", WWTarget001)
+  wul001.state = 2
+  after(6000, function() WWTarget001.IsDropped = true; wul001.state = 0 end)
+end
+
+function flatltarget_hit()
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("L    PLAGUE TARGET"), CL("YOUR CARRIAGE AWAITS"), "_", eNone, eBlinkFast, eNone, 1500, true, "")
+  CheckPlagueReady()
+  FlatLL001.state = 2
+  PlaySoundAt("target", FlatLTarget); PlaySoundAt("Target_Hit_1", FlatLTarget)
+  if CMTarget001.IsDropped then reRaiseCM() end
+  if KickerJacks then
+    PlaySoundAt("flip_hit_3", FlatLTarget)
+  else
+    DoorLeft.IsDropped = false; PlaySoundAt("fx_droptargetreset", DoorLeft); LCRL.state = 2; LskL.state = 0
+    DoorRight.IsDropped = false; PlaySoundAt("fx_droptargetreset", DoorRight); RCRL.state = 2; RskL.state = 0
+  end
+end
+
+function flatatarget_hit()
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("A    PLAGUE TARGET"), CL("DEAD FLOWERS 4 ELLEN"), "_", eNone, eBlinkFast, eNone, 1000, true, "")
+  CheckPlagueReady()
+  PlaySoundAt("target", FlatATarget); PlaySoundAt("Target_Hit_1", FlatATarget)
+  FlatAL.state = 2; ILBLight1.state = 1
+end
+
+function flatgtarget_hit()
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("G    PLAGUE TARGET"), CL("LAND OF SPECTRES"), "_", eNone, eBlinkFast, eNone, 1000, true, "")
+  CheckPlagueReady()
+  PlaySoundAt("target", FlatGTarget); PlaySoundAt("Target_Hit_1", FlatGTarget)
+  FlatGL.state = 2; ILBLight2.state = 1
+end
+
+function flatutarget_hit()
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("U    PLAGUE TARGET"), CL("WEREWOLF BEWARE"), "_", eNone, eBlinkFast, eNone, 1500, true, "")
+  CheckPlagueReady()
+  FlatUL001.state = 2
+  WolfLight004:duration(2, 2300, 0); PlaySound("wgrowl")
+  PlaySoundAt("target", FlatUTarget); PlaySoundAt("Target_Hit_1", FlatUTarget)
+  projectorFlash(); PlayMovie(movwer)
+  if WWTarget001.IsDropped then reRaiseWW() end
+end
+
+-- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
 function leftinlane_hit()
