@@ -29,6 +29,8 @@ bGameInPlay, bOnTheFirstBall, Tilt, Tilted = false, false, 0, false
 BallsOnPlayfield, LockedBalls = 0, 0
 bMultiBallMode, bAutoPlunger, bBallSaverActive = false, false, false
 BloodisLife, KickerJacks, bbilMB, bNOSFER = false, false, false, false
+StopMBmodes = false
+CurrentLightEll, CurrentLightHut, CurrentLightKno, CurrentLightOrl = 0, 0, 0, 0
 TotalGamesPlayed = 0
 HighScore, HighScoreName = {}, {}
 local bFreePlay = true
@@ -444,7 +446,7 @@ function CreateNewBall()
   if BloodisLife or KickerJacks then bMultiBallMode = true; bAutoPlunger = true end
 end
 
-function Drain_Hit()
+function drain_hit()
   Drain:destroyball()
   SetPlayfieldMultiplier(1)
   for _, l in ipairs({ butl1, butl2, butl3, butl4, butl5, butl6 }) do l.state = 0 end
@@ -543,13 +545,111 @@ function spintrigger001_hit()
 end
 
 -- ===========================================================================
--- NOSF-RATU drop targets (light the letters; armed by kicker001 -> Enos later)
+-- Top kicker (kicker001): BLOOD IS LIFE multiball, character bonus, NOSF arm
+-- ===========================================================================
+local function clearBilLamps()
+  for _, l in ipairs({ fl1b, fl2l, fl3o, fl4o, fl5d, fl6i, fl7s, fl8l, fl9i, fl10f, fl11e }) do
+    l.state = 0
+  end
+end
+
+function CheckBil()
+  if fl1b.state == 1 and fl2l.state == 1 and fl3o.state == 1 and fl4o.state == 1
+      and fl5d.state == 1 and fl6i.state == 1 and fl7s.state == 1 and fl8l.state == 1
+      and fl9i.state == 1 and fl10f.state == 1 and fl11e.state == 1 then
+    BILl001.state = 2; BILl002.state = 2; kickL1.state = 2
+    BloodisLife = true
+  else
+    BloodisLife = false
+  end
+end
+
+local function charProjector(movie)
+  PlaySound("charb")
+  PlaySoundAt("projector", Peg5)
+  Light005R:duration(2, 1772, 0); Light005L:duration(2, 1772, 0)
+  progR:duration(2, 1772, 0); progL:duration(2, 1772, 0)
+  PlaySoundAt("projector", Peg)
+  PlayMovie(movie)
+  CheckMultiplier()
+  AddScore(10000)
+  DMDFlush()
+end
+
+function CheckCHARB()
+  if ThrallK1.state == 1 then
+    ThrallK1.state = 0
+    for _, l in ipairs({ kno1, kno2, kno3, kno4, kno5 }) do l.state = 0 end
+    saucl1.state = 0; CurrentLightKno = 1
+    charProjector(movkno)
+    DMD(CL("CHARACTER BONUS"), CL("KNOCK  MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  elseif ThrallH1001.state == 1 then
+    ThrallH1001.state = 0
+    for _, l in ipairs({ hut1, hut2, hut3, hut4, hut5, hut6 }) do l.state = 0 end
+    saucl1.state = 0; CurrentLightHut = 1
+    charProjector(movhut)
+    DMD(CL("CHARACTER BONUS"), CL("HUTTER MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  elseif ThrallE1.state == 1 then
+    ThrallE1.state = 0
+    for _, l in ipairs({ ell1, ell2, ell3, ell4, ell5 }) do l.state = 0 end
+    saucl1.state = 0; CurrentLightEll = 1
+    charProjector(movell)
+    DMD(CL("CHARACTER BONUS"), CL("ELLEN  MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  elseif ThrallO1.state == 1 then
+    ThrallO1.state = 0
+    for _, l in ipairs({ orl1, orl2, orl3, orl4, orl5, orl6 }) do l.state = 0 end
+    saucl1.state = 0; CurrentLightOrl = 1
+    charProjector(movorl)
+    DMD(CL("CHARACTER BONUS"), CL("ORLOCK MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  end
+end
+
+local function ejectKicker001()
+  -- replaces kicker001.TimerEnabled (kicker built-in timers aren't fired here)
+  after(800, function()
+    kicker001:kick(135, 70); PlaySoundAt("fx_kicker", kicker001)
+  end)
+end
+
+function kicker001_hit()
+  CheckBil()
+  if BloodisLife then
+    bbilMB = true; AddMultiball(1); bAutoPlunger = true
+    Light004:duration(2, 2000, 0)
+    CheckMultiplier(); AddScore(100000)
+    DMDFlush()
+    DMD(CL("BLOOD IS LIFE"), CL("MULTIBALL"), "_", eNone, eBlinkFast, eNone, 3000, true, "")
+    sqL5.state = 2
+    PlaySoundAt("UpperKickerEnter", kicker001); PlaySound("mbstarted")
+    Enos.state = 1; EYELightR.state = 1; EYELightL.state = 1
+    kickL1:duration(2, 1000, 0)
+    BloodisLife = false; StopMBmodes = true
+    BILl001.state = 0; BILl002.state = 0
+    clearBilLamps()
+    PlaySoundAt("projector", Peg5)
+    Light005R:duration(2, 1772, 0); Light005L:duration(2, 1772, 0)
+    progR:duration(2, 1772, 0); progL:duration(2, 1772, 0)
+    PlaySoundAt("projector", Peg); PlayMovie(movbil)
+  end
+  CheckCHARB()
+  PlaySoundAt("UpperKickerEnter", kicker001)
+  Enos.state = 1; EYELightR.state = 1; EYELightL.state = 1
+  if not KickerJacks then CheckNosReady() end
+  kickL1:duration(2, 1000, 0)
+  ejectKicker001()
+end
+
+-- ===========================================================================
+-- NOSF-RATU drop targets (light the letters; collected when armed by kicker001)
 -- ===========================================================================
 NosReady = false
 function CheckNosReady()
-  if lb1.state == 2 and lb2.state == 2 and lb3.state == 2 and lb4.state == 2
-      and lb5.state == 2 and lb6.state == 2 and lb7.state == 2 and lb8.state == 2 then
+  if Enos.state == 1
+      and Target1N.IsDropped and Target2O.IsDropped and Target3S.IsDropped and Target4F.IsDropped
+      and Target5R.IsDropped and Target6A.IsDropped and Target7T.IsDropped and Target8U.IsDropped then
     NosReady = true
+    saucl2.state = 2
+    for _, l in ipairs({ Enos, Nnos, Onos, Snos, Fnos, Rnos, Anos, Tnos, Unos }) do l.state = 2 end
   end
 end
 local function nosTarget(target, letter, lb)
