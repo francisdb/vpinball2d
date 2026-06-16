@@ -1008,6 +1008,111 @@ function ratt4_hit() ratHit(ratt4, rul4) end
 function ratt5_hit() ratHit(ratt5, rul5) end
 
 -- ===========================================================================
+-- Dead Sailors (E plague target -> Empusa run), Werewolf, Carriage Man
+-- ===========================================================================
+FlatETargetHitEnabled, LastSwitchHit = true, ""
+
+function flatetarget_hit()
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("E    PLAGUE TARGET"), CL("GALAZ TO WISBORG"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  CheckPlagueReady()
+  PlaySoundAt("target", FlatETarget); PlaySoundAt("Target_Hit_1", FlatETarget)
+  FlatEL.state = 2
+  Light003:duration(2, 750, 0)
+  if FlatETargetHitEnabled then
+    sealite1.state = 2; sealite2.state = 2; sealite3.state = 2
+    after(1350, function() sealite1.state = 0; sealite2.state = 0; sealite3.state = 0 end)
+    deadsl001.state = 1 -- 13s window to start the dead-sailors run (timed light gate)
+    after(13000, function() if deadsl001.state == 1 then deadsl001.state = 0 end end)
+    PlaySound("sailorsready")
+  end
+end
+
+function sailtrigger001_hit()
+  PlaySoundAt("sensor", SailTrigger001); LastSwitchHit = "SailTrigger001"
+end
+
+function sailtrigger003_hit()
+  PlaySoundAt("sensor", SailTrigger003); LastSwitchHit = "SailTrigger003"
+  if KickerJacks then
+    CheckMultiplier(); AddScore(12500)
+    DMDFlush()
+    DMD(CL("EMPUSA JACKPOT"), CL("NOSFERATU"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+    PlaySound("jackpot"); projectorFlash(); PlayMovie(movemp)
+  end
+end
+
+local function SAILORSUP()
+  CheckMultiplier(); AddScore(20000)
+  DMDFlush()
+  DMD(CL("E    PLAGUE TARGET"), CL("5 DEAD SAILORS"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+  local sailors = { { bb1, sul1 }, { bb001, sul2 }, { bb002, sul3 }, { bb003, sul001 }, { bb004, sul5 } }
+  for i, s in ipairs(sailors) do
+    after(i * 100, function()
+      s[1].IsDropped = false; s[2].state = 2; PlaySoundAt("DropTarget_Up", s[1])
+    end)
+  end
+  PlaySound("sailorsupsplash"); projectorFlash(); PlayMovie(movsai)
+  FlatETargetHitEnabled = false
+end
+
+function sailtrigger002_hit()
+  if LastSwitchHit == "SailTrigger003" and deadsl001.state == 1 then
+    SAILORSUP()
+    deadsl001.state = 0
+    DoorLeft001.IsDropped = true; DoorLeft.IsDropped = false
+    PlaySoundAt("fx_droptargetreset", DoorLeft); LCRL.state = 2; LskL.state = 0
+    DoorRight001.IsDropped = true; DoorRight.IsDropped = false
+    PlaySoundAt("fx_droptargetreset", DoorRight); RCRL.state = 2; RskL.state = 0
+  end
+end
+
+function CheckResetSailors()
+  if bb1.IsDropped and bb001.IsDropped and bb002.IsDropped and bb003.IsDropped and bb004.IsDropped then
+    FlatETargetHitEnabled = true
+    CheckMultiplier(); AddScore(50000)
+    DMDFlush()
+    DMD(CL("DEAD SAILOR BONUS"), CL("MULT X 50.000"), "_", eNone, eBlink, eNone, 1500, true, "")
+    sqL3.state = 1; PlaySound("MotorLeer"); PlaySound("sailwin")
+  end
+end
+
+local function sailorHit(target, lamp)
+  target.IsDropped = true
+  PlaySoundAt("fx_droptarget", target); PlaySoundAt("sailorhit", target)
+  lamp.state = 0
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("DEAD SAILOR DOWN"), CL("MULT X 5.000"), "_", eNone, eBlinkFast, eNone, 1000, true, "")
+  CheckResetSailors()
+end
+function bb1_hit() sailorHit(bb1, sul1) end
+function bb001_hit() sailorHit(bb001, sul2) end
+function bb002_hit() sailorHit(bb002, sul3) end
+function bb003_hit() sailorHit(bb003, sul001) end
+function bb004_hit() sailorHit(bb004, sul5) end
+
+-- Werewolf and Carriage Man one-shot bonus targets.
+function wwtarget001_hit()
+  CheckMultiplier(); AddScore(10000)
+  DMDFlush()
+  DMD(CL("WEREWOLF BONUS"), CL("MULT X 10.000"), "_", eNone, eBlink, eNone, 2000, true, "")
+  PlaySoundAt("fx_droptarget", WWTarget001); PlaySoundAt("target2", WWTarget001)
+  PlaySound("MotorLeer"); PlaySound("wolfbon")
+  WWTarget001.IsDropped = true; sqL1.state = 2; wul001.state = 0
+end
+
+function cmtarget001_hit()
+  CheckMultiplier(); AddScore(25000)
+  DMDFlush()
+  DMD(CL("CARRIAGEMAN BONUS"), CL("MULT X 25.000"), "_", eNone, eBlink, eNone, 2000, true, "")
+  PlaySoundAt("fx_droptarget", CMTarget001)
+  PlaySound("MotorLeer"); PlaySound("carrichime")
+  CMTarget001.IsDropped = true; sqL2.state = 2; cul001.state = 0
+end
+
+-- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
 function leftinlane_hit()
