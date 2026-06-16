@@ -399,10 +399,23 @@ function createmultiballtimer_timer()
 end
 
 -- Plunger-lane tracking (used by the multiball eject + autoplunger).
+-- The ball saver is armed for BallSaverTime seconds at ball start, plus a 1.5s
+-- grace period (matching the original BallSaverTimerExpired timer); without the
+-- timed expiry a drained ball would re-serve forever and never advance.
+BallSaverTime = 1
+
+local function EnableBallSaver(seconds)
+  bBallSaverActive = true
+  bBallSaverReady = false
+  after(seconds * 1000 + 1500, function() bBallSaverActive = false end)
+end
+
 function swplungerrest_hit() bBallInPlungerLane = true end
 function swplungerrest_unhit()
   bBallInPlungerLane = false
-  bBallSaverActive = true
+  if bBallSaverReady and BallSaverTime ~= 0 and not bBallSaverActive then
+    EnableBallSaver(BallSaverTime)
+  end
 end
 
 -- ===========================================================================
