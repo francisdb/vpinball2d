@@ -564,6 +564,38 @@ function CheckBil()
   end
 end
 
+-- Character (Thrall) meters: bumpers advance the active character (selected by
+-- the EHKO lamps); a filled meter arms its Thrall lamp for a 15s collect window
+-- at the top kicker (CheckCHARB). Order E,H,K,O matches the original collect.
+local CHARS_ORDER = { "E", "H", "K", "O" }
+local CHARS = {
+  E = { lamps = { ell1, ell2, ell3, ell4, ell5 }, thrall = ThrallE1, movie = movell, label = "ELLEN " },
+  H = { lamps = { hut1, hut2, hut3, hut4, hut5, hut6 }, thrall = ThrallH1001, movie = movhut, label = "HUTTER" },
+  K = { lamps = { kno1, kno2, kno3, kno4, kno5 }, thrall = ThrallK1, movie = movkno, label = "KNOCK " },
+  O = { lamps = { orl1, orl2, orl3, orl4, orl5, orl6 }, thrall = ThrallO1, movie = movorl, label = "ORLOCK" },
+}
+for _, c in pairs(CHARS) do c.cur = 1; c.total = #c.lamps end
+
+local function lightUpChar(key)
+  local c = CHARS[key]
+  for _, l in ipairs(c.lamps) do l.state = 0 end
+  for i = 1, math.min(c.cur, c.total) do c.lamps[i].state = 1 end
+  c.cur = c.cur + 1
+  if c.cur > c.total then
+    for _, l in ipairs(c.lamps) do l.state = 2 end
+    c.thrall.state = 1
+    saucl1:duration(2, 15000, 0)
+    after(15000, function() -- ThrallX1 15s expiry (gameitem timers aren't fired here)
+      if c.thrall.state == 1 then
+        c.thrall.state = 0
+        for _, l in ipairs(c.lamps) do l.state = 0 end
+        PlaySound("chareset")
+        c.cur = 1
+      end
+    end)
+  end
+end
+
 local function charProjector(movie)
   PlaySound("charb")
   PlaySoundAt("projector", Peg5)
@@ -577,30 +609,16 @@ local function charProjector(movie)
 end
 
 function CheckCHARB()
-  if ThrallK1.state == 1 then
-    ThrallK1.state = 0
-    for _, l in ipairs({ kno1, kno2, kno3, kno4, kno5 }) do l.state = 0 end
-    saucl1.state = 0; CurrentLightKno = 1
-    charProjector(movkno)
-    DMD(CL("CHARACTER BONUS"), CL("KNOCK  MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
-  elseif ThrallH1001.state == 1 then
-    ThrallH1001.state = 0
-    for _, l in ipairs({ hut1, hut2, hut3, hut4, hut5, hut6 }) do l.state = 0 end
-    saucl1.state = 0; CurrentLightHut = 1
-    charProjector(movhut)
-    DMD(CL("CHARACTER BONUS"), CL("HUTTER MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
-  elseif ThrallE1.state == 1 then
-    ThrallE1.state = 0
-    for _, l in ipairs({ ell1, ell2, ell3, ell4, ell5 }) do l.state = 0 end
-    saucl1.state = 0; CurrentLightEll = 1
-    charProjector(movell)
-    DMD(CL("CHARACTER BONUS"), CL("ELLEN  MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
-  elseif ThrallO1.state == 1 then
-    ThrallO1.state = 0
-    for _, l in ipairs({ orl1, orl2, orl3, orl4, orl5, orl6 }) do l.state = 0 end
-    saucl1.state = 0; CurrentLightOrl = 1
-    charProjector(movorl)
-    DMD(CL("CHARACTER BONUS"), CL("ORLOCK MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  for _, k in ipairs(CHARS_ORDER) do
+    local c = CHARS[k]
+    if c.thrall.state == 1 then
+      c.thrall.state = 0
+      for _, l in ipairs(c.lamps) do l.state = 0 end
+      saucl1.state = 0; c.cur = 1
+      charProjector(c.movie)
+      DMD(CL("CHARACTER BONUS"), CL(c.label .. " MULT X 10.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+      return
+    end
   end
 end
 
@@ -715,10 +733,40 @@ function rightoutlane_hit() outlane(RightOutlane) end
 -- A few base hit handlers (more features being ported)
 -- ===========================================================================
 -- Bumper / spinner sounds are played by the engine (sidecar); slingshots are not.
-function bumper001_hit() AddScore(1000) end
-function bumper002_hit() AddScore(1000) end
-function bumper003_hit() AddScore(1000) end
-function bumper004_hit() AddScore(1000) end
+
+-- Bumpers: 1000 + advance the active character meter (EHKO selects which one).
+local function bumperHit()
+  CheckMultiplier()
+  AddScore(1000)
+  if EHKO1.state == 1 then
+    lightUpChar("E")
+  elseif EHKO2.state == 1 then
+    lightUpChar("H")
+  elseif EHKO3.state == 1 then
+    lightUpChar("K")
+  elseif EHKO4.state == 1 then
+    lightUpChar("O")
+  end
+end
+function bumper001_hit() bumperHit() end
+function bumper002_hit() bumperHit() end
+function bumper003_hit() bumperHit() end
+function bumper004_hit() bumperHit() end
+
+-- Main slingshots cycle the active character lamp (EHKO1..4); mini slings score only.
+PLightCounter = 1
+local function cycleEHKO()
+  CheckMultiplier(); AddScore(100)
+  EHKO1.state = 0; EHKO2.state = 0; EHKO3.state = 0; EHKO4.state = 0
+  local sel = { EHKO1, EHKO2, EHKO3, EHKO4 }
+  sel[PLightCounter].state = 1
+  PLightCounter = PLightCounter % 4 + 1
+end
+function wall001_slingshot() PlaySound("Chime_Right"); PlaySound("metalhit_medium"); cycleEHKO() end
+function wall002_slingshot() PlaySound("Chime_Right"); PlaySound("metalhit_medium"); cycleEHKO() end
+function wall003_slingshot() PlaySound("minislingL"); CheckMultiplier(); AddScore(100) end
+function wall004_slingshot() PlaySound("minislingR"); CheckMultiplier(); AddScore(100) end
+function wall006_slingshot() PlaySound("minislingR"); CheckMultiplier(); AddScore(100) end
 function leftslingshot_slingshot() AddScore(100); PlaySound("left_slingshot") end
 function rightslingshot_slingshot() AddScore(100); PlaySound("right_slingshot") end
 
