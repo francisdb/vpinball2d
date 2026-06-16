@@ -926,6 +926,88 @@ function finalpltarget001_hit()
 end
 
 -- ===========================================================================
+-- RATS sub-game: the flat P target spells R-A-T-S; the 4th hit raises five rat
+-- drop targets (RATSUP); clearing all five awards the RATS bonus.
+-- ===========================================================================
+RHitCount, DropTargetsUp, FlatPTargetHitEnabled = 0, true, true
+
+function CheckPlagueReady()
+  if FlatPL.state == 2 and FlatLL001.state == 2 and FlatAL.state == 2
+      and FlatGL.state == 2 and FlatUL001.state == 2 and FlatEL.state == 2 then
+    PlagueReady = true; saucl3.state = 2; plag1.state = 1
+  end
+end
+
+local function RATSUP()
+  for _, r in ipairs({ { ratt1, rul1 }, { ratt2, rul2 }, { ratt3, rul3 }, { ratt4, rul4 }, { ratt5, rul5 } }) do
+    r[1].IsDropped = false; r[2].state = 2
+  end
+  DropTargetsUp = false
+  PlaySound("ratsup")
+  projectorFlash(); PlayMovie(movrat)
+  FlatPTargetHitEnabled = false
+end
+
+function CheckResetRats()
+  if ratt1.IsDropped and ratt2.IsDropped and ratt3.IsDropped and ratt4.IsDropped and ratt5.IsDropped then
+    RHitCount = 0
+    rats1.state = 0; rats2.state = 0; rats3.state = 0; rats4.state = 0
+    DropTargetsUp = true; FlatPTargetHitEnabled = true
+    sqL4.state = 1; PlaySound("MotorLeer"); PlaySound("ratwin")
+    CheckMultiplier(); AddScore(50000)
+    DMDFlush()
+    DMD(CL("RATS BONUS"), CL("50.000"), "_", eNone, eBlink, eNone, 1500, true, "")
+  end
+end
+
+function flatptarget_hit()
+  CheckPlagueReady()
+  if not (FlatPTargetHitEnabled and DropTargetsUp) then return end
+  PlaySoundAt("target", FlatPTarget); PlaySoundAt("Target_Hit_1", FlatPTarget)
+  FlatPL.state = 2
+  RHitCount = RHitCount + 1
+  for _, r in ipairs({ rats1, rats2, rats3, rats4 }) do r.state = 0 end
+  for i = 1, math.min(RHitCount, 4) do ({ rats1, rats2, rats3, rats4 })[i].state = 1 end
+  CheckMultiplier()
+  local progress = ({ "R...", "RA..", "RAT.", "RATS" })[RHitCount]
+  if RHitCount < 4 then
+    AddScore(5000)
+    DMDFlush()
+    DMD(CL("P    PLAGUE TARGET"), CL(progress), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  elseif RHitCount == 4 then
+    AddScore(20000)
+    DMDFlush()
+    DMD(CL("P    PLAGUE TARGET"), CL("RATS"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+    -- raise the outlane doors (and reset them during a kicker mode), then RATSUP
+    if KickerJacks then
+      PlaySoundAt("flip_hit_3", FlatPTarget)
+      DoorLeft.IsDropped = false; DoorLeft001.IsDropped = true
+      DoorRight001.IsDropped = true; DoorRight.IsDropped = false
+    else
+      DoorLeft.IsDropped = false; DoorRight.IsDropped = false
+    end
+    PlaySoundAt("fx_droptargetreset", DoorLeft); LCRL.state = 2; LskL.state = 0
+    PlaySoundAt("fx_droptargetreset", DoorRight); RCRL.state = 2; RskL.state = 0
+    RATSUP()
+  end
+end
+
+local function ratHit(target, lamp)
+  target.IsDropped = true
+  PlaySoundAt("fx_droptarget", target); PlaySoundAt("rsquee", ratt1)
+  lamp.state = 0
+  CheckMultiplier(); AddScore(5000)
+  DMDFlush()
+  DMD(CL("RAT DESTROYED"), CL("MULT X 5.000"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  CheckResetRats()
+end
+function ratt1_hit() ratHit(ratt1, rul1) end
+function ratt2_hit() ratHit(ratt2, rul2) end
+function ratt3_hit() ratHit(ratt3, rul3) end
+function ratt4_hit() ratHit(ratt4, rul4) end
+function ratt5_hit() ratHit(ratt5, rul5) end
+
+-- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
 function leftinlane_hit()
