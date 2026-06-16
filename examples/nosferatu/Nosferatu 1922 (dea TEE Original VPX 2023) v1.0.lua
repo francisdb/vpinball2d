@@ -689,6 +689,160 @@ function target7t_hit() nosTarget(Target7T, Tnos, lb7) end
 function target8u_hit() nosTarget(Target8U, Unos, lb8) end
 
 -- ===========================================================================
+-- Side scoops (kicker002 left / kicker003 right): blood-cell bonus, kicker
+-- jackpots, and the NOSFERATU / PLAGUE mode starts.
+-- ===========================================================================
+PlagueReady, PlagueModeActive, NosHitCount, BallSaveDoors = false, false, 0, false
+
+-- The Nosferatu drop-target prop animates a primitive (no-op in 2D); the
+-- IsDropped shadow state is what the rules read.
+local function DropNosferatu()
+  NosTarget001.IsDropped = true; NosTargetW.IsDropped = true
+end
+local function RiseNosferatu()
+  NosTarget001.IsDropped = false; NosTargetW.IsDropped = false
+end
+
+-- Ball-saver doors (timed re-drop) are deferred; for now just clear the flag.
+local function BallSaveCountDown() BallSaveDoors = false end
+
+local function projectorFlash()
+  PlaySoundAt("projector", Peg5)
+  Light005R:duration(2, 1772, 0); Light005L:duration(2, 1772, 0)
+  progR:duration(2, 1772, 0); progL:duration(2, 1772, 0)
+  PlaySoundAt("projector", Peg)
+end
+
+function StopNOS()
+  DropNosferatu()
+  Nosul001.state = 0
+  KickerJacks = false; bNOSFER = false; bMultiBallMode = false; bAutoPlunger = false
+  LCRL.state = 2; LskL.state = 0; RCRL.state = 2; RskL.state = 0
+end
+
+function NOSFERATU()
+  AddScore(35000)
+  DMDFlush()
+  DMD(CL("NOSFERATU"), CL("KICKER JACKPOTS"), "_", eNone, eBlink, eNone, 2000, true, "")
+  Light004:duration(2, 2000, 0)
+  RiseNosferatu()
+  Nosul001.state = 2
+  PlaySoundAt("fx_droptarget", NosTargetP1)
+  Enos.state = 1
+  for _, l in ipairs({ Nnos, Onos, Snos, Fnos, Rnos, Anos, Tnos, Unos }) do l.state = 0 end
+  BallSaveDoors = true; BallSaveCountDown()
+  DoorLeft.IsDropped = true; DoorLeft001.IsDropped = false
+  PlaySoundAt("fx_droptargetreset", DoorLeft001); LCRL.state = 1; LskL.state = 0
+  DoorRight.IsDropped = true; DoorRight001.IsDropped = false
+  PlaySoundAt("fx_droptargetreset", DoorRight001); RCRL.state = 1; RskL.state = 0
+  KickerJacks = true; NosHitCount = 0
+  projectorFlash(); PlayMovie(movnos)
+end
+
+function PlagueMode()
+  PlagueReady = false; PlagueModeActive = true
+  PlaySound("plaguevoice")
+  projectorFlash(); PlayMovie(movpla)
+  CheckMultiplier(); AddScore(35000)
+  DMDFlush()
+  DMD(CL("PLAGUE PLAGUE PLAGUE"), CL("SHOOT THE ORBIT"), "_", eNone, eBlink, eNone, 2000, true, "")
+  saucl3.state = 0
+  for _, l in ipairs({ FlatPL, FlatLL001, FlatAL, FlatGL, FlatUL001, FlatEL }) do l.state = 0 end
+  PLagueStatic.IsDropped = false
+  DoorLeft.IsDropped = false; DoorLeft001.IsDropped = true
+  PlaySoundAt("fx_droptargetreset", DoorLeft); LCRL.state = 2; LskL.state = 0
+  DoorRight.IsDropped = false; DoorRight001.IsDropped = true
+  PlaySoundAt("fx_droptargetreset", DoorRight); RCRL.state = 2; RskL.state = 0
+  for _, t in ipairs({ Target1N, Target2O, Target3S, Target4F }) do t.IsDropped = false end
+  WWTarget001.IsDropped = true; wul001.state = 0
+  for _, l in ipairs({ Nnos, Onos, Snos, Fnos, Enos, EYELightR, EYELightL }) do l.state = 0 end
+  PlaySoundAt("fx_droptarget", Target3S)
+  for _, l in ipairs({ lb1, lb2, lb3, lb4, sealite1, sealite2, sealite3, deadsl001 }) do l.state = 0 end
+  for _, t in ipairs({ Target5R, Target6A, Target7T, Target8U }) do t.IsDropped = false end
+  CMTarget001.IsDropped = true; cul001.state = 0
+  for _, l in ipairs({ Rnos, Anos, Tnos, Unos }) do l.state = 0 end
+  PlaySoundAt("fx_droptarget", Target6A)
+  for _, l in ipairs({ lb5, lb6, lb7, lb8 }) do l.state = 0 end
+  for _, p in ipairs({ prise001, prise002, prise003, prise004, prise005, prise006,
+    prise007, prise008, prise009, prise010 }) do p.IsDropped = false end
+  PlaySoundAt("whooshup", prise001); PlaySoundAt("fx_droptarget", prise004)
+  PlagueCenterLight.state = 1
+end
+
+-- Clear the BLOODISLIFE letters and one side's NOSF letters + blood cells after
+-- a side scoop collects (shared by both scoops, parameterised per side).
+local function scoopBloodCellBonus(side)
+  DMDFlush()
+  DMD(CL("BLOOD CELL BONUS"), CL("COLLECTED"), "_", eNone, eBlinkFast, eNone, 1250, true, "")
+  CheckMultiplier()
+  for _, lb in ipairs(side.cells) do
+    if lb.state == 2 then AddScore(2500) end
+  end
+  PlaySoundAt("BloodKickerEnter", side.kicker)
+  PlaySoundAt("Score500", side.kicker)
+  PlaySoundAt("MotorLeer", side.kicker)
+  side.door.IsDropped = false
+  PlaySoundAt("fx_droptargetreset", side.door)
+  side.crl.state = 2; side.skl.state = 0
+  for _, t in ipairs(side.targets) do t.IsDropped = false end
+  side.wcm.IsDropped = true; side.wcmLamp.state = 0
+  clearBilLamps()
+  for _, pl in ipairs({ PegLight, PegLight001, PegLight002, PegLight003, PegLight004, PegLight005,
+    PegLight006, PegLight007, PegLight008, PegLight009, PegLight010 }) do pl.state = 0 end
+  for _, l in ipairs(side.letters) do l.state = 0 end
+  Enos.state = 0; EYELightR.state = 0; EYELightL.state = 0
+  PlaySoundAt("fx_droptarget", side.dropSound)
+  for _, lb in ipairs(side.cells) do lb.state = 0 end
+  BloodisLife = false; BILl001.state = 0; BILl002.state = 0; kickL1.state = 0
+  saucl2.state = 0; NosReady = false
+end
+
+function kicker002_hit()
+  if NosReady then
+    bNOSFER = true; ChangeSong(); NOSFERATU(); AddMultiball(1); bAutoPlunger = true
+    kickL2:duration(2, 2250, 0); PlaySoundAt("fx_kicker", kicker002)
+    saucl2.state = 0; NosReady = false
+  end
+  if KickerJacks then
+    CheckMultiplier(); AddScore(30000)
+    DMDFlush()
+    DMD(CL("NOSFERATU"), CL("KICKER JACKPOTS"), "_", eNone, eBlink, eNone, 1250, true, "")
+    kickL2:duration(2, 1000, 0); PlaySoundAt("fx_kicker", kicker002)
+  else
+    -- left side: WW (werewolf) sub-target, NOSF letters Nnos..Fnos, cells lb1..4
+    scoopBloodCellBonus({
+      cells = { lb1, lb2, lb3, lb4 }, kicker = kicker002, door = DoorLeft,
+      crl = LCRL, skl = LskL, targets = { Target1N, Target2O, Target3S, Target4F },
+      wcm = WWTarget001, wcmLamp = wul001, letters = { Nnos, Onos, Snos, Fnos },
+      dropSound = Target3S,
+    })
+    sealite1.state = 0; sealite2.state = 0; sealite3.state = 0; deadsl001.state = 0
+  end
+  after(1000, function() kicker002:kick(184, 10); PlaySoundAt("popper_ball", kicker002) end)
+end
+
+function kicker003_hit()
+  if PlagueReady then PlagueMode(); kickL3:duration(2, 850, 0) end
+  if KickerJacks then
+    CheckMultiplier(); AddScore(30000)
+    DMDFlush()
+    DMD(CL("NOSFERATU"), CL("KICKER JACKPOTS"), "_", eNone, eBlink, eNone, 1250, true, "")
+    kickL3:duration(2, 1000, 0); PlaySoundAt("fx_kicker", kicker003); PlaySound("jackpot")
+    projectorFlash(); PlayMovie(movsuk)
+  else
+    -- right side: CM (carriage man) sub-target, NOSF letters Rnos..Unos, cells lb5..8
+    scoopBloodCellBonus({
+      cells = { lb5, lb6, lb7, lb8 }, kicker = kicker003, door = DoorRight,
+      crl = RCRL, skl = RskL, targets = { Target5R, Target6A, Target7T, Target8U },
+      wcm = CMTarget001, wcmLamp = cul001, letters = { Rnos, Anos, Tnos, Unos },
+      dropSound = Target6A,
+    })
+    WWTarget001.IsDropped = true; wul001.state = 0
+  end
+  after(1000, function() kicker003:kick(49, 50); PlaySoundAt("fx_kicker", kicker003) end)
+end
+
+-- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
 function leftinlane_hit()
