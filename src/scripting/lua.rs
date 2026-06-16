@@ -84,6 +84,11 @@ impl LuaEngine {
             let host_fn = lua
                 .create_function(move |lua, (what, args): (String, Variadic<Value>)| {
                     let mut host = h.borrow_mut();
+                    if let Some(r) =
+                        super::flexdmd::host_op(lua, &mut host, what.as_str(), args.as_slice())
+                    {
+                        return r;
+                    }
                     match what.as_str() {
                         "play_sound" => {
                             if let Some(Value::String(s)) = args.first() {

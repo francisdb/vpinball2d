@@ -7,6 +7,7 @@ mod asset_tracking;
 mod audio;
 #[cfg(feature = "dev")]
 mod dev_tools;
+mod flexdmd;
 mod pinball;
 #[cfg(any(feature = "remote_control", feature = "telemetry"))]
 mod play;
@@ -133,6 +134,7 @@ impl Plugin for AppPlugin {
             audio::plugin,
             pinball::plugin,
             scripting::plugin,
+            flexdmd::render::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,
             #[cfg(any(feature = "remote_control", feature = "telemetry"))]

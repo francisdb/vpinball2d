@@ -73,6 +73,91 @@ for cname, members in pairs(__collections) do
     rawset(_G, cname, list)
 end
 
+-- FlexDMD scene-graph proxies. The Rust `flexdmd` module owns the scene graph;
+-- these wrap actor handles so a translated script reads like the VBScript
+-- original: `g = FlexDMD:NewGroup("Scene")`, `g:AddActor(img)`, `img.Bitmap = x`.
+
+local ACTOR_METHODS = {
+    addactor = true, removeactor = true, removeall = true, haschild = true,
+    getimage = true, getgroup = true, getlabel = true, getframe = true,
+    getvideo = true, getactor = true, setbounds = true, setposition = true,
+    setsize = true, setalignedposition = true, pack = true, remove = true,
+    addaction = true, clearactions = true, actionfactory = true,
+}
+local ACTOR_STR = { bitmap = true, text = true, name = true, font = true, src = true }
+local ACTOR_BOOL = { visible = true, fillparent = true, clearbackground = true }
+
+local fd_actor -- forward declaration
+
+local function fd_actor_method(id, m, a, b, c, d)
+    if m == "addactor" then __host("group_add", id, a.__fdid)
+    elseif m == "removeactor" then __host("group_remove", id, a.__fdid)
+    elseif m == "getimage" or m == "getgroup" or m == "getlabel"
+        or m == "getframe" or m == "getvideo" or m == "getactor" then
+        return fd_actor(__host("group_find", id, a))
+    elseif m == "setbounds" then __host("actor_set_bounds", id, a, b, c, d)
+    elseif m == "setposition" or m == "setalignedposition" then __host("actor_set_position", id, a, b)
+    elseif m == "setsize" then __host("actor_set_size", id, a, b)
+    end
+    -- pack / actions / removeall are no-ops until those features land.
+end
+
+fd_actor = function(id)
+    if not id then return nil end
+    return setmetatable({ __fdid = id }, {
+        __index = function(t, key)
+            local lk = string.lower(key)
+            if ACTOR_METHODS[lk] then
+                return function(_, ...) return fd_actor_method(t.__fdid, lk, ...) end
+            elseif ACTOR_STR[lk] then return __host("actor_get_str", t.__fdid, lk)
+            elseif ACTOR_BOOL[lk] then return __host("actor_get_bool", t.__fdid, lk)
+            else return __host("actor_get_num", t.__fdid, lk) end
+        end,
+        __newindex = function(t, key, value)
+            local lk = string.lower(key)
+            local vt = type(value)
+            if vt == "boolean" then __host("actor_set_bool", t.__fdid, lk, value)
+            elseif vt == "string" then __host("actor_set_str", t.__fdid, lk, value)
+            else __host("actor_set_num", t.__fdid, lk, value) end
+        end,
+    })
+end
+
+local FD_METHODS = {
+    newgroup = true, newimage = true, newframe = true, newlabel = true,
+    lockrenderthread = true, unlockrenderthread = true,
+}
+
+local function flexdmd_proxy()
+    return setmetatable({}, {
+        __index = function(_, key)
+            local lk = string.lower(key)
+            if lk == "stage" then return fd_actor(__host("fd_get", "stage")) end
+            if FD_METHODS[lk] then
+                return function(_, a, b, c)
+                    if lk == "newgroup" then return fd_actor(__host("fd_new_group", a))
+                    elseif lk == "newimage" then return fd_actor(__host("fd_new_image", a, b))
+                    elseif lk == "newframe" then return fd_actor(__host("fd_new_frame", a))
+                    elseif lk == "newlabel" then return fd_actor(__host("fd_new_label", a, b, c))
+                    elseif lk == "lockrenderthread" then __host("fd_lock")
+                    elseif lk == "unlockrenderthread" then __host("fd_unlock") end
+                end
+            end
+            return __host("fd_get", lk)
+        end,
+        __newindex = function(_, key, value)
+            __host("fd_set", string.lower(key), value)
+        end,
+    })
+end
+
+-- vpinball-style object construction; only FlexDMD is supported.
+function CreateObject(name)
+    if name == "FlexDMD.FlexDMD" then return flexdmd_proxy() end
+    log("CreateObject: unsupported '" .. tostring(name) .. "'")
+    return nil
+end
+
 -- Host helpers.
 function playsound(name) __host("play_sound", name) end
 function stopsound(name) __host("stop_sound", name) end

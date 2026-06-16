@@ -122,6 +122,9 @@ pub struct HostState {
     pub store: HashMap<String, String>,
     /// Whether the store changed and should be written back to disk.
     pub store_dirty: bool,
+    /// The table's FlexDMD scene graph, built and mutated by the script and
+    /// rasterised by `crate::flexdmd::render`.
+    pub flexdmd: crate::flexdmd::FlexDmd,
 }
 
 impl HostState {
