@@ -1,0 +1,31 @@
+{
+  "drain": {
+    "down": [
+      "drain"
+    ],
+    "up": [
+      "ballrelease"
+    ]
+  },
+  "flippers": {
+    "up": [
+      "fx_Flipperup"
+    ],
+    "down": [
+      "fx_Flipperdown"
+    ]
+  },
+  "bumpers": {
+    "hit": [
+      "bumper_1",
+      "bumper_2",
+      "bumper_3",
+      "bumper_4"
+    ]
+  },
+  "spinners": {
+    "hit": [
+      "fx_spinner"
+    ]
+  }
+}

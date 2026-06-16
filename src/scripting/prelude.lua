@@ -21,7 +21,10 @@ KeyTiltLeft = 6
 KeyTiltRight = 7
 KeyTiltCenter = 8
 
--- Methods callable on item proxies; everything else is a property.
+-- Methods callable on item proxies; everything else is a property. Methods the
+-- engine does not (yet) implement are still listed here so a script can call
+-- them as harmless no-ops (the queued command is ignored) - e.g. a light's
+-- timed `duration` flash, which currently falls back to its plain on/off state.
 local METHODS = {
     createball = true,
     kick = true,
@@ -29,6 +32,8 @@ local METHODS = {
     setvalue = true,
     addvalue = true,
     resettozero = true,
+    duration = true,
+    fade = true,
 }
 
 local proxies = {}

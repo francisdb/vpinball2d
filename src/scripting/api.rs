@@ -70,6 +70,7 @@ pub enum ItemKind {
     Spinner,
     TextBox,
     Reel,
+    Flasher,
     #[default]
     Other,
 }

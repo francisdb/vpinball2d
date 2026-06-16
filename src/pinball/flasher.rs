@@ -34,13 +34,13 @@ pub(super) fn spawn_flasher(
     if !flasher.is_visible || flasher.add_blend {
         return;
     }
-    // An image-less flasher is a runtime canvas (e.g. a DMD); nothing to show.
-    let Some(texture) = vpx_asset.image(flasher.image_a.as_str()).cloned() else {
-        return;
-    };
     if flasher.drag_points.len() < 3 {
         return;
     }
+    // An image-less flasher is a runtime canvas (e.g. a DMD digit cell): spawn it
+    // transparent so a script can drive it (`flasher.ImageA = ...`) later. Image
+    // flashers render as before.
+    let texture = vpx_asset.image(flasher.image_a.as_str()).cloned();
     let smoothed = vpin::vpx::mesh::smooth_drag_points_2d(&flasher.drag_points, 4.0, true);
     let positions: Vec<[f32; 3]> = smoothed
         .iter()
@@ -83,8 +83,10 @@ pub(super) fn spawn_flasher(
     mesh.insert_indices(Indices::U32(indices));
     // The texture tinted by the flasher colour, faded by the alpha percentage,
     // alpha blended over whatever is below (vpinball's non-additive flasher path).
+    // An image-less canvas starts fully transparent until a script sets its image.
+    let target_alpha = (flasher.alpha.max(0) as f32 / 100.0).min(1.0);
     let color = Srgba {
-        alpha: (flasher.alpha.max(0) as f32 / 100.0).min(1.0),
+        alpha: if texture.is_some() { target_alpha } else { 0.0 },
         ..Srgba::rgb_u8(flasher.color.r, flasher.color.g, flasher.color.b)
     };
     parent.spawn((
@@ -93,7 +95,7 @@ pub(super) fn spawn_flasher(
         MeshMaterial2d(materials.add(ColorMaterial {
             color: color.into(),
             alpha_mode: AlphaMode2d::Blend,
-            texture: Some(texture),
+            texture,
             ..default()
         })),
         Transform::from_xyz(
@@ -101,5 +103,17 @@ pub(super) fn spawn_flasher(
             vpx_to_bevy_transform.translation.y,
             crate::pinball::layer::render_z(flasher.height, flasher.depth_bias, item_index),
         ),
+        crate::scripting::ScriptName(flasher.name.clone()),
+        FlasherCanvas {
+            alpha: target_alpha,
+        },
     ));
+}
+
+/// A flasher a script can re-image at runtime (`flasher.ImageA = "d_0"`), e.g. a
+/// reel/grid DMD's digit cells. Carries the visible alpha to restore when first
+/// given an image (image-less canvases spawn transparent).
+#[derive(Component)]
+pub struct FlasherCanvas {
+    pub alpha: f32,
 }
