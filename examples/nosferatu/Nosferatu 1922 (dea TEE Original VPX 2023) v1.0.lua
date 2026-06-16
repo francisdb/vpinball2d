@@ -1177,6 +1177,41 @@ function flatutarget_hit()
   if WWTarget001.IsDropped then reRaiseWW() end
 end
 
+-- Outlane protection doors: hitting a raised door drops it (the ball can then
+-- drain); the 001 variants re-protect during NOSFERATU mode.
+function doorleft_hit()
+  CheckMultiplier(); AddScore(100)
+  DMDFlush()
+  DMD(CL("CAREFUL YOU ARE"), CL("NO LONGER PROTECTED"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+  DoorLeft.IsDropped = true
+  PlaySoundAt("Drop_Target_Down_2", DoorLeft); PlaySoundAt("creek", DoorLeft)
+  LCRL.state = 0; LskL.state = 2
+end
+function doorright_hit()
+  CheckMultiplier(); AddScore(100)
+  DMDFlush()
+  DMD(CL("CAREFUL YOU ARE"), CL("NO LONGER PROTECTED"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+  DoorRight.IsDropped = true
+  PlaySoundAt("Drop_Target_Down_2", DoorRight); PlaySoundAt("creek", DoorRight)
+  RCRL.state = 0; RskL.state = 2
+end
+function doorleft001_hit()
+  if bNOSFER then
+    DoorLeft.IsDropped = false
+    DMDFlush()
+    DMD(CL("NOSFERATU MODE"), CL("YOU ARE PROTECTED"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+    PlaySoundAt("Target_Hit_1", DoorLeft)
+  end
+end
+function doorright001_hit()
+  if bNOSFER then
+    DoorRight001.IsDropped = false
+    DMDFlush()
+    DMD(CL("NOSFERATU MODE"), CL("YOU ARE PROTECTED"), "_", eNone, eBlinkFast, eNone, 2000, true, "")
+    PlaySoundAt("Target_Hit_1", DoorLeft)
+  end
+end
+
 -- ===========================================================================
 -- Inlanes / outlanes
 -- ===========================================================================
