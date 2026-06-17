@@ -336,6 +336,12 @@ fn build_host(vpx_asset: &VpxAsset) -> SharedHost {
             GameItemEnum::Trigger(_) => state.kind = ItemKind::Trigger,
             GameItemEnum::Bumper(_) => state.kind = ItemKind::Bumper,
             GameItemEnum::Spinner(_) => state.kind = ItemKind::Spinner,
+            GameItemEnum::HitTarget(target) => {
+                state.kind = ItemKind::Target;
+                state
+                    .props
+                    .insert("isdropped".into(), ScriptValue::Bool(target.is_dropped));
+            }
             GameItemEnum::TextBox(textbox) => {
                 state.kind = ItemKind::TextBox;
                 state
@@ -615,6 +621,21 @@ impl VpxAssets<'_> {
     }
 }
 
+/// Droppables addressed by `<name>.IsDropped`: drop-target gameitems and droppable walls
+/// (drop targets / flipper-gap posts). Bundled so `apply_commands` stays under Bevy's param limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct DroppableIo<'w, 's> {
+    walls: Query<'w, 's, (Entity, &'static ScriptName), With<crate::pinball::wall::Droppable>>,
+    targets: Query<
+        'w,
+        's,
+        (
+            &'static ScriptName,
+            &'static mut crate::pinball::targets::DropTarget,
+        ),
+    >,
+}
+
 /// Runtime flasher canvases plus their materials, for `flasher.ImageA = ...`.
 #[derive(bevy::ecs::system::SystemParam)]
 struct FlasherIo<'w, 's> {
@@ -656,7 +677,7 @@ fn apply_commands(
     mut ball_materials: ResMut<Assets<BallMaterial>>,
     ball_assets: Option<Res<BallAssets>>,
     mut reels: Query<&mut crate::pinball::reel::ScoreReel>,
-    droppable_walls: Query<(Entity, &ScriptName), With<crate::pinball::wall::Droppable>>,
+    mut droppables: DroppableIo,
     mut flipper_query: Query<(Entity, &mut crate::pinball::flipper::Flipper)>,
     mut flasher_io: FlasherIo,
 ) {
@@ -735,7 +756,7 @@ fn apply_commands(
                     // disables its collider and hides it; raised restores both.
                     (ItemKind::Wall, "isdropped") => {
                         let dropped = value.as_bool().unwrap_or(false);
-                        for (entity, sname) in &droppable_walls {
+                        for (entity, sname) in &droppables.walls {
                             if !sname.0.eq_ignore_ascii_case(&name) {
                                 continue;
                             }
@@ -748,6 +769,16 @@ fn apply_commands(
                                     .entity(entity)
                                     .remove::<ColliderDisabled>()
                                     .insert(Visibility::Inherited);
+                            }
+                        }
+                    }
+                    // A drop target: the rules drive it via `IsDropped`. Flip the flag; the
+                    // pinball::targets system fades it and toggles its collider.
+                    (ItemKind::Target, "isdropped") => {
+                        let dropped = value.as_bool().unwrap_or(false);
+                        for (sname, mut drop_target) in &mut droppables.targets {
+                            if sname.0.eq_ignore_ascii_case(&name) {
+                                drop_target.dropped = dropped;
                             }
                         }
                     }

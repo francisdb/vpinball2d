@@ -1,8 +1,11 @@
 //! Drop targets and standup (hit) targets, ported from vpinball's `HitTarget` gameitem.
 //!
 //! A standup target is a static panel the ball bounces off (elasticity/friction from the vpx
-//! item); a drop target is the same until it is hit hard enough, then it "drops" - in this 2D
-//! top-down view that means it hides and stops colliding - and is raised again after its delay.
+//! item); a drop target is the same until it is hit hard enough, then it "drops" and stops
+//! colliding. Like vpinball, a dropped target stays down until the table script raises it
+//! (`target.IsDropped = False`); there is no automatic raise (vpinball's `RaiseDelay` only
+//! staggers the raise animation, it does not trigger one). In this 2D top-down view a dropped
+//! target is drawn faded rather than removed, so its up/down state is readable from above.
 //!
 //! The target's flat panel is rendered as a simple rotated rectangle sized from vpin's target
 //! mesh footprint (so each `TargetType` and `size`/`rot_z` comes out right) rather than the full
@@ -17,7 +20,7 @@ use crate::vpx::VpxAsset;
 use avian2d::prelude::*;
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
-use core::time::Duration;
+use bevy::sprite_render::AlphaMode2d;
 use vpin::vpx::gameitem::hittarget::{HitTarget, TargetType};
 use vpin::vpx::units::vpu_to_m;
 
@@ -28,11 +31,15 @@ const DROP_THRESHOLD_SCALE: f32 = 0.1;
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (handle_target_hits, raise_dropped_targets)
+        (handle_target_hits, apply_drop_state)
+            .chain()
             .in_set(PausableSystems)
             .run_if(in_state(Screen::Gameplay)),
     );
 }
+
+/// Alpha a dropped target is drawn at (vs 1.0 raised), so down/up is readable from the top.
+const DROPPED_ALPHA: f32 = 0.4;
 
 /// Marks any target (drop or standup), so a ball hitting one plays the hit sound.
 #[derive(Component)]
@@ -45,19 +52,15 @@ pub struct TargetSounds {
     pub hit: Vec<String>,
 }
 
-/// A drop target: drops out of play when hit above `threshold`, raised again after `raise_after`.
+/// A drop target: drops out of play when hit above `threshold`, and stays down until the script
+/// raises it (`target.IsDropped = False`). The script may also drop/raise it directly via
+/// `IsDropped`; either way `dropped` is the single source of truth, applied by [`apply_drop_state`].
 #[derive(Component)]
-struct DropTarget {
+pub(crate) struct DropTarget {
     /// Minimum inbound speed (m/s) for the target to drop.
     threshold: f32,
-    /// Delay before the dropped target raises again (vpx `raise_delay`); never if `None`.
-    raise_after: Option<Duration>,
-    dropped: bool,
+    pub(crate) dropped: bool,
 }
-
-/// Counts down to raising a dropped target.
-#[derive(Component)]
-struct RaiseTimer(Timer);
 
 pub(super) fn spawn_target(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
@@ -112,12 +115,11 @@ pub(super) fn spawn_target(
             CollisionEventsEnabled,
         ));
         if is_drop {
+            // Honour the vpx initial drop state (e.g. Nosferatu's rat/sailor banks start
+            // dropped); `apply_drop_state` fades it and disables its collider on the first frame.
             entity.insert(DropTarget {
                 threshold: target.threshold * DROP_THRESHOLD_SCALE,
-                raise_after: target
-                    .raise_delay
-                    .map(|ms| Duration::from_millis(ms as u64)),
-                dropped: false,
+                dropped: target.is_dropped,
             });
         }
     }
@@ -231,29 +233,38 @@ fn handle_target_hits(
         if inbound < drop_target.threshold {
             continue;
         }
+        // Just flag it dropped; `apply_drop_state` disables the collider and fades it. It stays
+        // down until the script raises it (no automatic raise, matching vpinball).
         drop_target.dropped = true;
-        let mut e = commands.entity(target_entity);
-        e.insert((ColliderDisabled, Visibility::Hidden));
-        if let Some(delay) = drop_target.raise_after {
-            e.insert(RaiseTimer(Timer::new(delay, TimerMode::Once)));
-        }
     }
 }
 
-/// Raise a dropped target once its `RaiseTimer` elapses: re-enable its collider and show it.
-fn raise_dropped_targets(
-    time: Res<Time>,
+/// Apply a drop target's `dropped` flag whenever it changes (from a hard hit above, or the
+/// script setting `IsDropped`): a dropped target loses its collider and is drawn faded; a raised
+/// one is solid and collidable again. Runs on the first frame too, so vpx initial-drop and
+/// script-driven changes share one path.
+fn apply_drop_state(
     mut commands: Commands,
-    mut targets: Query<(Entity, &mut DropTarget, &mut RaiseTimer)>,
+    targets: Query<(Entity, &DropTarget, &MeshMaterial2d<ColorMaterial>), Changed<DropTarget>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    for (entity, mut drop_target, mut timer) in &mut targets {
-        if timer.0.tick(time.delta()).just_finished() {
-            drop_target.dropped = false;
-            commands
-                .entity(entity)
-                .remove::<ColliderDisabled>()
-                .remove::<RaiseTimer>()
-                .insert(Visibility::Inherited);
+    for (entity, drop_target, material) in &targets {
+        if let Some(mat) = materials.get_mut(&material.0) {
+            mat.color.set_alpha(if drop_target.dropped {
+                DROPPED_ALPHA
+            } else {
+                1.0
+            });
+            mat.alpha_mode = if drop_target.dropped {
+                AlphaMode2d::Blend
+            } else {
+                AlphaMode2d::Opaque
+            };
+        }
+        if drop_target.dropped {
+            commands.entity(entity).insert(ColliderDisabled);
+        } else {
+            commands.entity(entity).remove::<ColliderDisabled>();
         }
     }
 }
