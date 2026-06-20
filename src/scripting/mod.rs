@@ -294,7 +294,7 @@ pub fn init_script(world: &mut World) {
     world.insert_resource(ScriptActive);
     world.insert_resource(FlippersEnabled(true));
     world.insert_resource(ScriptSounds(sounds));
-    world.insert_non_send_resource(runtime);
+    world.insert_non_send(runtime);
     scoreboard::spawn_scoreboard(world);
 }
 
@@ -370,7 +370,7 @@ fn build_host(vpx_asset: &VpxAsset) -> SharedHost {
 
 /// Save the persistent store and drop the runtime when leaving the table.
 fn teardown_script(world: &mut World) {
-    if let Some(runtime) = world.remove_non_send_resource::<ScriptRuntime>() {
+    if let Some(runtime) = world.remove_non_send::<ScriptRuntime>() {
         write_store(&runtime);
     }
     world.remove_resource::<ScriptActive>();

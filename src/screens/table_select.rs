@@ -58,7 +58,7 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         exit_on_escape
-            .run_if(in_state(Screen::TableSelect).and(input_just_pressed(KeyCode::Escape))),
+            .run_if(in_state(Screen::TableSelect).and_then(input_just_pressed(KeyCode::Escape))),
     );
 }
 

@@ -25,7 +25,7 @@ pub(super) fn plugin(app: &mut App) {
         Update,
         // Also during Loading, so e.g. `screenshot` can capture the loading screen.
         (read_commands, apply_pending_releases)
-            .run_if(in_state(Screen::Gameplay).or(in_state(Screen::Loading))),
+            .run_if(in_state(Screen::Gameplay).or_else(in_state(Screen::Loading))),
     );
 }
 
