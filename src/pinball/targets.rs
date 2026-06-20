@@ -249,7 +249,7 @@ fn apply_drop_state(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     for (entity, drop_target, material) in &targets {
-        if let Some(mat) = materials.get_mut(&material.0) {
+        if let Some(mut mat) = materials.get_mut(&material.0) {
             mat.color.set_alpha(if drop_target.dropped {
                 DROPPED_ALPHA
             } else {

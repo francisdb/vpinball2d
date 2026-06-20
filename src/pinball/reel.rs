@@ -292,7 +292,7 @@ pub(super) fn spawn_reel(
     // filtering that white bleeds into every cell edge (white grid lines). Sample
     // nearest so transparent texels never blend in, like vpinball's alpha-tested
     // (non-blended) DMD reels.
-    if let Some(img) = images.get_mut(&image) {
+    if let Some(mut img) = images.get_mut(&image) {
         img.sampler = bevy::image::ImageSampler::nearest();
     }
 

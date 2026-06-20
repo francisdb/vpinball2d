@@ -815,7 +815,7 @@ fn apply_commands(
                             if !sname.0.eq_ignore_ascii_case(&name) {
                                 continue;
                             }
-                            if let Some(material) = flasher_io.materials.get_mut(&mat.0) {
+                            if let Some(mut material) = flasher_io.materials.get_mut(&mat.0) {
                                 material.texture = handle.clone();
                                 material.color.set_alpha(if handle.is_some() {
                                     canvas.alpha

@@ -59,7 +59,7 @@ enum ColliderView {
     WireframeOnly,
 }
 
-fn toggle_debug_ui(mut options: ResMut<UiDebugOptions>) {
+fn toggle_debug_ui(mut options: ResMut<GlobalUiDebugOptions>) {
     options.toggle();
 }
 

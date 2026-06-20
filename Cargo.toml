@@ -7,7 +7,7 @@ edition = "2024"
 [dependencies]
 # `default_font` (also a Bevy default feature) embeds the font used for the
 # backdrop textbox text (high score, match, ...); keep it explicit.
-bevy = { version = "0.18.1", features = [
+bevy = { version = "0.19.0", features = [
     "webp",
     "wav",
     "jpeg",
@@ -15,7 +15,7 @@ bevy = { version = "0.18.1", features = [
     "default_font",
 ] }
 #bevy-inspector-egui = "0.34.0"
-avian2d = { version = "0.6.1", features = ["diagnostic_ui"] }
+avian2d = { version = "0.7.0", features = ["diagnostic_ui"] }
 vpin = "0.26.9"
 thiserror = "2.0.18"
 

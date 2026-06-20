@@ -47,7 +47,7 @@ fn dim_objects(
         if !dimmed.0.insert(material.0.id()) {
             continue;
         }
-        if let Some(color_material) = materials.get_mut(&material.0) {
+        if let Some(mut color_material) = materials.get_mut(&material.0) {
             let srgba = color_material.color.to_srgba();
             color_material.color = Srgba::new(
                 srgba.red * OBJECT_BRIGHTNESS,

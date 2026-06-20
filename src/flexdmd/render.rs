@@ -137,7 +137,7 @@ fn render_flexdmd(
     draw_actor(dmd, dmd.stage(), &display.cache, &mut gfx);
 
     if let Some(handle) = &display.image
-        && let Some(img) = images.get_mut(handle)
+        && let Some(mut img) = images.get_mut(handle)
     {
         img.data = Some(buf);
     }
