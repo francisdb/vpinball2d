@@ -16,3 +16,8 @@ pub const BUTTON_HOVERED_BACKGROUND: Color = Color::srgb(0.384, 0.600, 0.820);
 pub const BUTTON_PRESSED_BACKGROUND: Color = Color::srgb(0.239, 0.286, 0.600);
 /// #80692b - resting background for a selected/highlighted button
 pub const BUTTON_SELECTED_BACKGROUND: Color = Color::srgb(0.502, 0.412, 0.169);
+
+/// Scrollbar track: a dark, subtle gutter behind the thumb.
+pub const SCROLLBAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.25);
+/// Scrollbar thumb: the draggable handle, in the button accent blue.
+pub const SCROLLBAR_THUMB: Color = BUTTON_BACKGROUND;
