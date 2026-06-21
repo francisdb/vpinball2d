@@ -45,9 +45,10 @@ const INSERT_LIGHT_Z: f32 = 0.001;
 /// model: the added light is `falloff * intensity` saturated by the framebuffer
 /// (ClassicLightShader's `saturate(atten * intensity)`), which is what lights the
 /// whole insert at its colour rather than a dim spot in the middle.
-const INTENSITY_TO_ALPHA: f32 = 0.1;
-/// Cap so no single GI lamp dominates.
-const MAX_GLOW_ALPHA: f32 = 0.9;
+const INTENSITY_TO_ALPHA: f32 = 0.13;
+/// Cap so no single GI lamp dominates. Allowed slightly above 1.0 so the brightest
+/// lamps push into the camera's HDR headroom and bloom instead of capping at white.
+const MAX_GLOW_ALPHA: f32 = 1.1;
 
 // --- Shadows: tune every shadow here, in one place ---
 // Ball and static-object shadows both render plain dark shapes into the light map
