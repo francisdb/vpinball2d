@@ -11,13 +11,14 @@ use crate::tables::{TableEntry, TableIndex, TablesDir};
 use crate::theme::interaction::InteractionPalette;
 use crate::theme::palette::{
     BUTTON_BACKGROUND, BUTTON_HOVERED_BACKGROUND, BUTTON_PRESSED_BACKGROUND,
-    BUTTON_SELECTED_BACKGROUND,
+    BUTTON_SELECTED_BACKGROUND, SCROLLBAR_THUMB, SCROLLBAR_TRACK,
 };
 use crate::theme::widget;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, ScrollPosition, UiGlobalTransform};
+use bevy::ui_widgets::{ControlOrientation, Scrollbar, ScrollbarThumb};
 use bevy::window::CursorOptions;
 
 /// Which input device is currently driving the picker. The keyboard and mouse take turns:
@@ -193,35 +194,44 @@ fn rebuild_content(
         };
         parent.spawn(widget::label(status));
 
+        // The scrollable list sits in a row next to a draggable scrollbar.
         parent
-            .spawn((
-                TableList,
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: px(8),
-                    width: px(680),
-                    max_height: px(560),
-                    overflow: Overflow::scroll_y(),
-                    ..default()
-                },
-                // Restore the previous scroll offset; layout clamps it to range.
-                ScrollPosition(Vec2::new(0.0, memory.scroll_y)),
-            ))
-            .with_children(|list| {
-                let mut shown = 0;
-                for entry in index.entries.iter().filter(|e| show_all || e.has_script) {
-                    shown += 1;
-                    let label = if show_all && entry.has_script {
-                        format!("* {}", entry.title)
-                    } else {
-                        entry.title.clone()
-                    };
-                    // Each button picks its own table, then starts loading it. The
-                    // keyboard selection is shown with an outline (apply_row_highlight),
-                    // not the resting background, so it survives mouse hover.
-                    let rel_path = entry.rel_path.clone();
-                    list.spawn((
+            .spawn(Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                column_gap: px(6),
+                ..default()
+            })
+            .with_children(|row| {
+                let list = row
+                    .spawn((
+                        TableList,
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            row_gap: px(8),
+                            width: px(680),
+                            max_height: px(560),
+                            overflow: Overflow::scroll_y(),
+                            ..default()
+                        },
+                        // Restore the previous scroll offset; layout clamps it to range.
+                        ScrollPosition(Vec2::new(0.0, memory.scroll_y)),
+                    ))
+                    .with_children(|list| {
+                        let mut shown = 0;
+                        for entry in index.entries.iter().filter(|e| show_all || e.has_script) {
+                            shown += 1;
+                            let label = if show_all && entry.has_script {
+                                format!("* {}", entry.title)
+                            } else {
+                                entry.title.clone()
+                            };
+                            // Each button picks its own table, then starts loading it. The
+                            // keyboard selection is shown with an outline (apply_row_highlight),
+                            // not the resting background, so it survives mouse hover.
+                            let rel_path = entry.rel_path.clone();
+                            list.spawn((
                         widget::table_button(
                             label,
                             false,
@@ -238,13 +248,35 @@ fn rebuild_content(
                             rel_path: entry.rel_path.clone(),
                         },
                     ));
-                }
-                if shown == 0 {
-                    list.spawn(widget::label(format!(
-                        "No .vpx tables found in {}",
-                        tables_dir.0.display()
-                    )));
-                }
+                        }
+                        if shown == 0 {
+                            list.spawn(widget::label(format!(
+                                "No .vpx tables found in {}",
+                                tables_dir.0.display()
+                            )));
+                        }
+                    })
+                    .id();
+
+                // Draggable scrollbar (bevy_ui_widgets headless widget): it writes
+                // the list's ScrollPosition directly when the thumb is dragged. We
+                // own the visuals - a subtle track gutter plus a palette-blue thumb.
+                row.spawn((
+                    Node {
+                        width: px(10),
+                        border_radius: BorderRadius::all(px(5)),
+                        ..default()
+                    },
+                    BackgroundColor(SCROLLBAR_TRACK),
+                    Scrollbar::new(list, ControlOrientation::Vertical, 32.0),
+                    children![(
+                        ScrollbarThumb {
+                            border_radius: BorderRadius::all(px(5)),
+                            ..default()
+                        },
+                        BackgroundColor(SCROLLBAR_THUMB),
+                    )],
+                ));
             });
     });
 }
