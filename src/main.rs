@@ -111,6 +111,13 @@ impl Plugin for AppPlugin {
             );
         }
 
+        // Physics diagnostics must be enabled *before* the physics plugins build so
+        // their broad/narrow-phase and solver timers register in the DiagnosticsStore
+        // (avian skips registration when this plugin is absent). The dev diagnostics
+        // overlay (see dev_tools) reads these; dev builds only.
+        #[cfg(feature = "dev")]
+        app.add_plugins(avian2d::prelude::PhysicsDiagnosticsPlugin);
+
         // One unit in bevy is one meter
         // Interpolate rigid-body Transforms between fixed physics steps so rendering stays
         // smooth when the step rate is low relative to the framerate (e.g. in slow motion).
