@@ -217,13 +217,24 @@ fn spawn_camera(
     // The vpinball demo table is 2162 vpu units deep and 952 vpu units wide.
     let table_width_m = vpu_to_m(952.0);
     let table_depth_m = vpu_to_m(2162.0);
-    // TODO: switch this camera to HDR and add a `Bloom` component (+ tonemapping) so
-    // the additive light glows bloom and roll off instead of hard-clipping to white
-    // on the LDR pipeline. See `pinball::light::GlowMaterial`.
+    // HDR + Bloom so the additive light glows (`pinball::light::GlowMaterial`,
+    // blended `src=One, dst=One`) accumulate past 1.0 in a float buffer and bloom
+    // into soft halos instead of hard-clipping to white on the LDR pipeline.
+    // Camera2d keeps its default `Tonemapping::None`, so only the over-bright glows
+    // bloom; the rest of the vpinball-matched playfield (all <= 1.0) is untouched.
     let camera = commands
         .spawn((
             Name::new("Camera"),
             Camera2d,
+            bevy::camera::Hdr,
+            // Subtle bloom: just a soft halo on the over-bright lights. Higher
+            // intensities make NATURAL's energy-conserving spread wash the whole
+            // image ("dirty window"); brightness comes from the lights themselves
+            // (HDR headroom, see pinball::light) rather than from heavy bloom.
+            bevy::post_process::bloom::Bloom {
+                intensity: 0.08,
+                ..bevy::post_process::bloom::Bloom::NATURAL
+            },
             // Explicit UI camera so the menus render to this camera (and its target)
             // even when there is no primary window (headless capture).
             IsDefaultUiCamera,
