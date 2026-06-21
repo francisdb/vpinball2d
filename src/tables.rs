@@ -22,7 +22,13 @@ pub(crate) struct TablesDir(pub(crate) PathBuf);
 pub(crate) fn plugin(app: &mut App) {
     app.init_resource::<TableIndex>();
     app.add_systems(OnEnter(Screen::TableSelect), start_indexing);
-    app.add_systems(Update, poll_indexing.run_if(resource_exists::<IndexTask>));
+    app.add_systems(
+        Update,
+        (
+            poll_scanning.run_if(resource_exists::<ScanTask>),
+            poll_indexing.run_if(resource_exists::<IndexTask>),
+        ),
+    );
 }
 
 /// A single table found in the tables folder.
@@ -56,44 +62,87 @@ impl TableEntry {
 #[derive(Resource, Default)]
 pub(crate) struct TableIndex {
     pub(crate) entries: Vec<TableEntry>,
+    /// True once the directory scan has finished, so `entries` is the full list
+    /// (with fallback titles). Until then the picker shows a "scanning" state.
+    pub(crate) scanned: bool,
     /// True once the background metadata read has finished and titles are final.
     pub(crate) indexed: bool,
 }
+
+/// The in-flight background directory scan (the slow part on a network share).
+#[derive(Resource)]
+struct ScanTask(Task<Vec<TableEntry>>);
 
 /// The in-flight background metadata read.
 #[derive(Resource)]
 struct IndexTask(Task<Vec<TableEntry>>);
 
-/// On entering the picker, list the tables (fast) so it can render immediately,
-/// then read their metadata names in the background.
-fn start_indexing(mut commands: Commands, tables_dir: Res<TablesDir>, index: Res<TableIndex>) {
-    // Index only once per session; re-entering the picker keeps the result.
-    if index.indexed {
+/// On entering the picker, kick off the directory scan in the background so the
+/// UI renders immediately (the scan can be slow on a network share). The scan
+/// builds entries with fallback titles; metadata names are read in a second
+/// background pass (see [`poll_scanning`] / [`poll_indexing`]).
+fn start_indexing(
+    mut commands: Commands,
+    tables_dir: Res<TablesDir>,
+    index: Res<TableIndex>,
+    scanning: Option<Res<ScanTask>>,
+    reading: Option<Res<IndexTask>>,
+) {
+    // Already done, or already in flight from a previous entry; keep the result.
+    if index.scanned || scanning.is_some() || reading.is_some() {
         return;
     }
 
     let root = tables_dir.0.clone();
-    let rel_paths = scan_vpx(&root);
-
-    // Render immediately with fallback titles; metadata fills in below.
-    commands.insert_resource(TableIndex {
-        entries: rel_paths
-            .iter()
-            .map(|rel| TableEntry::build(rel, None, &root))
-            .collect(),
-        indexed: false,
-    });
-
     let task = IoTaskPool::get().spawn(async move {
-        rel_paths
+        scan_vpx(&root)
             .into_iter()
-            .map(|rel| {
-                let title = read_title(&root.join(&rel));
-                TableEntry::build(&rel, title, &root)
-            })
+            .map(|rel| TableEntry::build(&rel, None, &root))
             .collect::<Vec<_>>()
     });
-    commands.insert_resource(IndexTask(task));
+    commands.insert_resource(ScanTask(task));
+}
+
+/// When the scan finishes, show the entries (fallback titles) immediately and
+/// start the background metadata read for their real names.
+fn poll_scanning(
+    mut commands: Commands,
+    mut task: ResMut<ScanTask>,
+    mut index: ResMut<TableIndex>,
+    tables_dir: Res<TablesDir>,
+) {
+    if let Some(entries) = block_on(poll_once(&mut task.0)) {
+        let root = tables_dir.0.clone();
+        let rel_paths: Vec<String> = entries.iter().map(|e| e.rel_path.clone()).collect();
+
+        index.entries = entries;
+        index.scanned = true;
+        commands.remove_resource::<ScanTask>();
+
+        let task = IoTaskPool::get().spawn(async move {
+            // Read each table's metadata concurrently: opening 1000+ vpx files one
+            // by one is slow (especially on a network share). Spawn all the reads
+            // up front so they run in parallel on the pool, then collect them back
+            // in order.
+            let pool = IoTaskPool::get();
+            let reads: Vec<_> = rel_paths
+                .into_iter()
+                .map(|rel| {
+                    let root = root.clone();
+                    pool.spawn(async move {
+                        let title = read_title(&root.join(&rel));
+                        TableEntry::build(&rel, title, &root)
+                    })
+                })
+                .collect();
+            let mut entries = Vec::with_capacity(reads.len());
+            for read in reads {
+                entries.push(read.await);
+            }
+            entries
+        });
+        commands.insert_resource(IndexTask(task));
+    }
 }
 
 /// Swap in the indexed entries (with metadata titles) once ready.
@@ -175,6 +224,15 @@ fn scan_vpx(root: &Path) -> Vec<String> {
 /// resolved against the tables directory, while an absolute path can point at a
 /// `.vpx` file anywhere on disk. The selected file's parent folder becomes the
 /// tables directory (the asset-source root) for that run.
+// TODO (next PR): make the tables directory a persisted, runtime-changeable
+// setting. App Settings alone can't drive it: the `tables` asset source is
+// registered before `AssetPlugin` (see main.rs), so the dir is consumed before
+// any settings resource loads. Plan: register the `tables` source with a custom
+// `AssetReader` whose root is a runtime-mutable value, persist the dir via the
+// bevy 0.19 App Settings framework (`#[derive(SettingsGroup)]`) or a config
+// file, and re-scan the index when it changes - no restart. The background
+// scan/metadata above is the enabler so a re-scan never blocks the UI. App
+// Settings also fits display/window prefs and persisting `PickerMemory`.
 pub(crate) fn resolve_tables() -> (PathBuf, Option<String>) {
     let default_dir = match std::env::var_os("VPINBALL_TABLES") {
         Some(dir) => PathBuf::from(dir),
