@@ -183,6 +183,21 @@ fn rebuild_content(
             },
         ));
 
+        // Pick a different tables folder via the native folder dialog (native only).
+        #[cfg(not(target_arch = "wasm32"))]
+        parent.spawn(widget::table_button(
+            "Change tables folder...",
+            false,
+            |_: On<Pointer<Click>>,
+             mut commands: Commands,
+             tables_dir: Res<TablesDir>,
+             open: Option<Res<crate::tables::folder_picker::FolderDialogTask>>| {
+                if open.is_none() {
+                    crate::tables::folder_picker::open_folder_dialog(&mut commands, &tables_dir.0);
+                }
+            },
+        ));
+
         let status = if !index.scanned {
             format!("Scanning {}...", tables_dir.0.display())
         } else if show_all {
