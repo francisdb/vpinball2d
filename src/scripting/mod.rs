@@ -122,6 +122,11 @@ struct PendingKick {
     tries: u32,
 }
 
+// TODO: consider bevy 0.19's Delayed Commands (and the `bevy_time`
+// `once_after_delay` / `repeating_after_delay` run conditions) for one-shot
+// timed effects - e.g. the script `after()`-gated light flashes - instead of
+// hand-rolled elapsed-ms bookkeeping. Repeating vpx Timers below may still want
+// their own tick; the win is for fire-once-after-delay scheduling.
 /// One scripting timer, from a vpx Timer gameitem. Fires `<name>_timer`.
 struct ScriptTimer {
     /// Lowercase name, the event prefix.
