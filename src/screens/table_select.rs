@@ -183,7 +183,9 @@ fn rebuild_content(
             },
         ));
 
-        let status = if show_all {
+        let status = if !index.scanned {
+            format!("Scanning {}...", tables_dir.0.display())
+        } else if show_all {
             if index.indexed {
                 format!("All {total} tables ( * = has a script )")
             } else {
@@ -249,7 +251,7 @@ fn rebuild_content(
                         },
                     ));
                         }
-                        if shown == 0 {
+                        if index.scanned && shown == 0 {
                             list.spawn(widget::label(format!(
                                 "No .vpx tables found in {}",
                                 tables_dir.0.display()
