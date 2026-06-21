@@ -15,11 +15,11 @@ permissions:
   contents: read
 
 env:
-  # Reduce compile time and cache size.
-  RUSTFLAGS: -Dwarnings -Zshare-generics=y -Zthreads=0
-  RUSTDOCFLAGS: -Dwarnings -Zshare-generics=y -Zthreads=0
+  # Treat warnings as errors.
+  RUSTFLAGS: -Dwarnings
+  RUSTDOCFLAGS: -Dwarnings
   # Use the same Rust toolchain across jobs so they can share a cache.
-  toolchain: nightly-2025-06-26
+  toolchain: stable
 
 jobs:
   # Check formatting.
@@ -97,31 +97,35 @@ jobs:
       - name: Run Clippy lints
         run: cargo clippy --locked --workspace --all-targets --profile ci --all-features
 
-  # Run Bevy lints.
-  bevy-lints:
-    name: Bevy lints
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Install Rust toolchain (plus bevy_lint)
-        uses: TheBevyFlock/bevy_cli/bevy_lint@lint-v0.6.0
-        with:
-          cache: true
-          save-cache-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # No `shared-key: ci` restore here: bevy_lint pins its own nightly and runs as a custom rustc
-      # driver, so its artifacts are fingerprinted separately from the main build. Restoring the
-      # `ci` cache would overwrite bevy_lint's own (correct-toolchain) cache with artifacts it cannot
-      # use, forcing a cold rebuild every run. The action's `cache: true` handles caching instead.
-
-      - name: Install build dependencies
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev
-
-      - name: Run Bevy lints
-        run: bevy_lint --locked --workspace --all-targets --profile ci --all-features
+  # Bevy lints are disabled: no bevy_lint release supports bevy 0.19 yet (latest
+  # is lint-v0.6.0, which targets bevy 0.18 and pins an older nightly that lacks
+  # `cfg_select!`, used by bevy_app 0.19; see TheBevyFlock/bevy_cli#832). The
+  # linter also looks largely unmaintained. Re-enable and bump the `lint-v*` tag
+  # if a 0.19-compatible release lands.
+  # bevy-lints:
+  #   name: Bevy lints
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 20
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v6
+  #
+  #     - name: Install Rust toolchain (plus bevy_lint)
+  #       uses: TheBevyFlock/bevy_cli/bevy_lint@lint-v0.6.0
+  #       with:
+  #         cache: true
+  #         save-cache-if: ${{ github.ref == 'refs/heads/main' }}
+  #
+  #     # No `shared-key: ci` restore here: bevy_lint pins its own nightly and runs as a custom rustc
+  #     # driver, so its artifacts are fingerprinted separately from the main build. Restoring the
+  #     # `ci` cache would overwrite bevy_lint's own (correct-toolchain) cache with artifacts it cannot
+  #     # use, forcing a cold rebuild every run. The action's `cache: true` handles caching instead.
+  #
+  #     - name: Install build dependencies
+  #       run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev
+  #
+  #     - name: Run Bevy lints
+  #       run: bevy_lint --locked --workspace --all-targets --profile ci --all-features
 
   # Run tests.
   tests:
@@ -132,14 +136,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up environment
-        run: echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }-Zcodegen-backend=cranelift" >> "${GITHUB_ENV}"
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.toolchain }}
-          components: rustc-codegen-cranelift-preview
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2

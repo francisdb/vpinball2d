@@ -720,7 +720,7 @@ fn animate_lights(
                 }
             }
         };
-        if let Some(glow) = glow_materials.get_mut(&material.0) {
+        if let Some(mut glow) = glow_materials.get_mut(&material.0) {
             // The raw intensity goes to the shader (inserts author 10-90);
             // vpinball's saturate(atten * intensity) there lights the whole
             // insert at full colour with only the falloff rim dimming.

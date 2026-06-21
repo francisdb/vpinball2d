@@ -80,7 +80,7 @@ pub(crate) fn desktop_text(layout: &DesktopLayout, tb: &textbox::TextBox) -> imp
         Text2d::new(tb.text.clone()),
         TextFont::from_font_size(TEXT_FONT_PX),
         TextColor(color),
-        TextLayout::new_with_justify(Justify::Center),
+        TextLayout::justify(Justify::Center),
         Anchor::CENTER,
         Transform::from_xyz(center.x, center.y, OVERLAY_Z).with_scale(Vec3::splat(scale)),
         DespawnOnExit(crate::screens::Screen::Gameplay),

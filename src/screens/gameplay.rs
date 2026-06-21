@@ -13,7 +13,8 @@ pub(super) fn plugin(app: &mut App) {
     );
     app.add_systems(
         Update,
-        leave_gameplay.run_if(in_state(Screen::Gameplay).and(input_just_pressed(KeyCode::Escape))),
+        leave_gameplay
+            .run_if(in_state(Screen::Gameplay).and_then(input_just_pressed(KeyCode::Escape))),
     );
 }
 
