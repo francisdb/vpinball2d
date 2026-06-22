@@ -40,7 +40,7 @@ mlua = { version = "0.11.6", features = ["lua54", "vendored"] }
 rfd = "0.17.2"
 
 [target.wasm32-unknown-unknown.dependencies]
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [features]
 # Default to a native dev build.
