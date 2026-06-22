@@ -123,14 +123,20 @@ impl Plugin for AppPlugin {
         app.add_plugins(bevy::settings::SettingsPlugin::new(
             "com.francisdb.vpinball2d",
         ));
-        if cli_table.is_none() && std::env::var_os("VPINBALL_TABLES").is_none() {
-            let persisted = app
-                .world()
-                .resource::<crate::tables::TablesSettings>()
-                .dir
-                .clone();
+        let persisted = app
+            .world()
+            .resource::<crate::tables::TablesSettings>()
+            .dir
+            .clone();
+        let env_override = std::env::var_os("VPINBALL_TABLES").is_some();
+        info!(
+            "tables: read persisted folder setting = {persisted:?} (cli table: {}, VPINBALL_TABLES set: {env_override})",
+            cli_table.is_some()
+        );
+        if cli_table.is_none() && !env_override {
             if let Some(dir) = persisted.filter(|d| !d.is_empty()) {
                 let dir = std::path::PathBuf::from(dir);
+                info!("tables: applying persisted folder {}", dir.display());
                 if let Ok(mut root) = app
                     .world()
                     .resource::<crate::tables::TablesRoot>()
@@ -141,6 +147,8 @@ impl Plugin for AppPlugin {
                 }
                 app.insert_resource(TablesDir(dir));
             }
+        } else {
+            info!("tables: not applying persisted folder (overridden by env/CLI)");
         }
 
         // Physics diagnostics must be enabled *before* the physics plugins build so

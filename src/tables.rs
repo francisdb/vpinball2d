@@ -34,8 +34,10 @@ pub(crate) struct TablesRoot(pub(crate) Arc<RwLock<PathBuf>>);
 /// Persisted tables-folder setting (bevy 0.19 App Settings). `dir = None` means
 /// "use the default / `VPINBALL_TABLES` / CLI". Written to `settings.toml` under
 /// the app config dir; the folder picker updates it. See [`crate::tables`].
+// `Default` in the `reflect` list is required: bevy-settings' build_settings_registry
+// skips any type without `ReflectDefault`, so omitting it silently disables save/load.
 #[derive(Resource, Reflect, Default, SettingsGroup)]
-#[reflect(Resource, SettingsGroup)]
+#[reflect(Resource, SettingsGroup, Default)]
 #[settings_group(group = "tables")]
 pub(crate) struct TablesSettings {
     /// Absolute path to the tables folder, or `None` for the default.
@@ -295,12 +297,16 @@ pub(crate) mod folder_picker {
         };
 
         let dir = handle.path().to_path_buf();
+        info!("tables: folder changed to {}", dir.display());
         if let Ok(mut root) = root.0.write() {
             *root = dir.clone();
         }
         tables_dir.0 = dir.clone();
         settings.dir = Some(dir.to_string_lossy().into_owned());
-        commands.queue(bevy::settings::SaveSettingsDeferred::default());
+        // Save now (synchronously, unconditionally): a folder change is a discrete
+        // action, so don't rely on the debounced deferred save.
+        info!("tables: saving folder setting -> {}", dir.display());
+        commands.queue(bevy::settings::SaveSettingsSync::Always);
 
         // Reset and re-scan from the new folder (re-uses the background scan, so
         // even a slow network share never blocks the UI).
