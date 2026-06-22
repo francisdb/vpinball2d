@@ -8,9 +8,15 @@
 //! in a background task to build a [`TableIndex`] for the picker.
 
 use crate::screens::Screen;
+use bevy::asset::io::{
+    AssetReader, AssetReaderError, AssetSourceBuilder, ErasedAssetReader, PathStream, Reader,
+    VecReader,
+};
 use bevy::prelude::*;
+use bevy::settings::{ReflectSettingsGroup, SettingsGroup};
 use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 /// Name of the Bevy asset source that reads `.vpx` tables from [`TablesDir`].
 pub(crate) const TABLES_SOURCE: &str = "tables";
@@ -18,6 +24,85 @@ pub(crate) const TABLES_SOURCE: &str = "tables";
 /// The directory `.vpx` tables are scanned and loaded from.
 #[derive(Resource, Clone)]
 pub(crate) struct TablesDir(pub(crate) PathBuf);
+
+/// Shared, runtime-mutable root for the `tables` asset source. Swapping the inner
+/// path re-points table loading without re-registering the source (Bevy asset
+/// sources are fixed once registered), so the tables folder can change at runtime.
+#[derive(Resource, Clone)]
+pub(crate) struct TablesRoot(pub(crate) Arc<RwLock<PathBuf>>);
+
+/// Persisted tables-folder setting (bevy 0.19 App Settings). `dir = None` means
+/// "use the default / `VPINBALL_TABLES` / CLI". Written to `settings.toml` under
+/// the app config dir; the folder picker updates it. See [`crate::tables`].
+// `Default` in the `reflect` list is required: bevy-settings' build_settings_registry
+// skips any type without `ReflectDefault`, so omitting it silently disables save/load.
+#[derive(Resource, Reflect, Default, SettingsGroup)]
+#[reflect(Resource, SettingsGroup, Default)]
+#[settings_group(group = "tables")]
+pub(crate) struct TablesSettings {
+    /// Absolute path to the tables folder, or `None` for the default.
+    pub(crate) dir: Option<String>,
+}
+
+/// Build the `tables` asset-source reader factory over a shared, mutable `root`.
+/// Registered before `AssetPlugin`; see [`TablesRoot`].
+pub(crate) fn tables_source_builder(root: Arc<RwLock<PathBuf>>) -> AssetSourceBuilder {
+    AssetSourceBuilder::new(move || {
+        Box::new(MutableRootReader { root: root.clone() }) as Box<dyn ErasedAssetReader>
+    })
+}
+
+/// A read-only [`AssetReader`] that resolves every path against a runtime-mutable
+/// root, returning the file's bytes. The picker lists tables with `std::fs` (see
+/// [`scan_vpx`]); this reader is only used to load a selected table's `.vpx`.
+struct MutableRootReader {
+    root: Arc<RwLock<PathBuf>>,
+}
+
+impl MutableRootReader {
+    fn full_path(&self, path: &Path) -> PathBuf {
+        self.root.read().unwrap().join(path)
+    }
+}
+
+impl AssetReader for MutableRootReader {
+    async fn read<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+        let full = self.full_path(path);
+        match std::fs::read(&full) {
+            Ok(bytes) => Ok(VecReader::new(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err(AssetReaderError::NotFound(full))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+        // vpx tables ship no `.meta` sidecars; report missing so the loader is
+        // chosen by file extension (matching the default file source's behaviour).
+        let mut full = self.full_path(path).into_os_string();
+        full.push(".meta");
+        let full = PathBuf::from(full);
+        match std::fs::read(&full) {
+            Ok(bytes) => Ok(VecReader::new(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err(AssetReaderError::NotFound(full))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn read_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> Result<Box<PathStream>, AssetReaderError> {
+        Err(AssetReaderError::NotFound(self.full_path(path)))
+    }
+
+    async fn is_directory<'a>(&'a self, path: &'a Path) -> Result<bool, AssetReaderError> {
+        Ok(self.full_path(path).is_dir())
+    }
+}
 
 pub(crate) fn plugin(app: &mut App) {
     app.init_resource::<TableIndex>();
@@ -28,6 +113,12 @@ pub(crate) fn plugin(app: &mut App) {
             poll_scanning.run_if(resource_exists::<ScanTask>),
             poll_indexing.run_if(resource_exists::<IndexTask>),
         ),
+    );
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_systems(
+        Update,
+        folder_picker::poll_folder_dialog
+            .run_if(resource_exists::<folder_picker::FolderDialogTask>),
     );
 }
 
@@ -93,7 +184,12 @@ fn start_indexing(
         return;
     }
 
-    let root = tables_dir.0.clone();
+    spawn_scan(&mut commands, tables_dir.0.clone());
+}
+
+/// Spawn the background directory scan for `root`, building entries with fallback
+/// titles. Used on first display and when the folder changes.
+fn spawn_scan(commands: &mut Commands, root: PathBuf) {
     let task = IoTaskPool::get().spawn(async move {
         scan_vpx(&root)
             .into_iter()
@@ -155,6 +251,69 @@ fn poll_indexing(
         index.entries = entries;
         index.indexed = true;
         commands.remove_resource::<IndexTask>();
+    }
+}
+
+/// Native folder picker for choosing the tables directory. Web has no equivalent,
+/// so the whole module is compiled out there (the persisted setting still loads).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod folder_picker {
+    use super::*;
+
+    /// In-flight native folder-picker dialog.
+    #[derive(Resource)]
+    pub(crate) struct FolderDialogTask(Task<Option<rfd::FileHandle>>);
+
+    /// Open the OS folder picker, starting at `current`. Inserts [`FolderDialogTask`]
+    /// which [`poll_folder_dialog`] consumes. Callers should skip if one is open.
+    pub(crate) fn open_folder_dialog(commands: &mut Commands, current: &Path) {
+        let start = current.to_path_buf();
+        let task = IoTaskPool::get().spawn(async move {
+            rfd::AsyncFileDialog::new()
+                .set_title("Select the tables folder")
+                .set_directory(start)
+                .pick_folder()
+                .await
+        });
+        commands.insert_resource(FolderDialogTask(task));
+    }
+
+    /// When the picker returns, switch to the chosen folder: re-point the asset
+    /// source root, persist the choice, and re-scan. Cancelled picks are ignored.
+    pub(crate) fn poll_folder_dialog(
+        mut commands: Commands,
+        mut task: ResMut<FolderDialogTask>,
+        root: Res<TablesRoot>,
+        mut tables_dir: ResMut<TablesDir>,
+        mut settings: ResMut<TablesSettings>,
+        mut index: ResMut<TableIndex>,
+    ) {
+        let Some(result) = block_on(poll_once(&mut task.0)) else {
+            return;
+        };
+        commands.remove_resource::<FolderDialogTask>();
+        let Some(handle) = result else {
+            return; // user cancelled
+        };
+
+        let dir = handle.path().to_path_buf();
+        info!("tables: folder changed to {}", dir.display());
+        if let Ok(mut root) = root.0.write() {
+            *root = dir.clone();
+        }
+        tables_dir.0 = dir.clone();
+        settings.dir = Some(dir.to_string_lossy().into_owned());
+        // Save now (synchronously, unconditionally): a folder change is a discrete
+        // action, so don't rely on the debounced deferred save.
+        info!("tables: saving folder setting -> {}", dir.display());
+        commands.queue(bevy::settings::SaveSettingsSync::Always);
+
+        // Reset and re-scan from the new folder (re-uses the background scan, so
+        // even a slow network share never blocks the UI).
+        commands.remove_resource::<ScanTask>();
+        commands.remove_resource::<IndexTask>();
+        *index = TableIndex::default();
+        spawn_scan(&mut commands, dir);
     }
 }
 

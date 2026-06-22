@@ -24,7 +24,6 @@ use crate::vpx::VpxPlugin;
 use avian2d::PhysicsPlugins;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
-use bevy::asset::io::{AssetSource, AssetSourceBuilder};
 use bevy::audio::{AudioPlugin, SpatialScale};
 use bevy::render::render_resource::TextureFormat;
 use bevy::{asset::AssetMetaCheck, prelude::*};
@@ -58,12 +57,14 @@ impl Plugin for AppPlugin {
         // `DefaultPlugins`). No file watcher: `.vpx` files are not hot-edited, and
         // recursively watching a large tables library can exhaust inotify watches.
         let (tables_dir, cli_table) = resolve_tables();
+        // A shared, mutable root so the tables folder can be re-pointed at runtime
+        // (the folder picker) without re-registering the source. See `tables`.
+        let tables_root = std::sync::Arc::new(std::sync::RwLock::new(tables_dir.clone()));
         app.register_asset_source(
             TABLES_SOURCE,
-            AssetSourceBuilder::new(AssetSource::get_default_reader(
-                tables_dir.to_string_lossy().into_owned(),
-            )),
+            crate::tables::tables_source_builder(tables_root.clone()),
         );
+        app.insert_resource(crate::tables::TablesRoot(tables_root));
         app.insert_resource(TablesDir(tables_dir));
 
         let default_plugins = DefaultPlugins
@@ -109,6 +110,45 @@ impl Plugin for AppPlugin {
                     ..default()
                 }),
             );
+        }
+
+        // Persisted user settings (bevy 0.19 App Settings). Registered after
+        // DefaultPlugins (it needs the type registry); SettingsPlugin loads the
+        // settings file immediately on add. If the tables folder was not pinned via
+        // the VPINBALL_TABLES env var or a CLI table, apply the persisted choice
+        // (the folder picker writes it). The mutable asset-source root makes this
+        // take effect without re-registering the source.
+        app.register_type::<crate::tables::TablesSettings>();
+        app.init_resource::<crate::tables::TablesSettings>();
+        app.add_plugins(bevy::settings::SettingsPlugin::new(
+            "com.francisdb.vpinball2d",
+        ));
+        let persisted = app
+            .world()
+            .resource::<crate::tables::TablesSettings>()
+            .dir
+            .clone();
+        let env_override = std::env::var_os("VPINBALL_TABLES").is_some();
+        info!(
+            "tables: read persisted folder setting = {persisted:?} (cli table: {}, VPINBALL_TABLES set: {env_override})",
+            cli_table.is_some()
+        );
+        if cli_table.is_none() && !env_override {
+            if let Some(dir) = persisted.filter(|d| !d.is_empty()) {
+                let dir = std::path::PathBuf::from(dir);
+                info!("tables: applying persisted folder {}", dir.display());
+                if let Ok(mut root) = app
+                    .world()
+                    .resource::<crate::tables::TablesRoot>()
+                    .0
+                    .write()
+                {
+                    *root = dir.clone();
+                }
+                app.insert_resource(TablesDir(dir));
+            }
+        } else {
+            info!("tables: not applying persisted folder (overridden by env/CLI)");
         }
 
         // Physics diagnostics must be enabled *before* the physics plugins build so
