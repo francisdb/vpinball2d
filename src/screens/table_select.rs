@@ -61,6 +61,12 @@ pub(super) fn plugin(app: &mut App) {
         exit_on_escape
             .run_if(in_state(Screen::TableSelect).and_then(input_just_pressed(KeyCode::Escape))),
     );
+    // Settings cog (top-right): opens the native folder picker; native only.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.add_systems(OnEnter(Screen::TableSelect), spawn_settings_cog);
+        app.add_systems(Update, cog_visibility.run_if(in_state(Screen::TableSelect)));
+    }
 }
 
 /// Reset to mouse input with a visible cursor (on entering/leaving the picker).
@@ -68,6 +74,92 @@ fn enter_mouse_mode(mut mode: ResMut<InputMode>, mut cursor: Query<&mut CursorOp
     *mode = InputMode::Mouse;
     for mut cursor in &mut cursor {
         cursor.visible = true;
+    }
+}
+
+/// The settings cog in the top-right corner. For now it just opens the tables
+/// folder picker; later it can open a full settings menu. Auto-hides when the
+/// mouse is idle (see [`cog_visibility`]).
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Component)]
+struct SettingsCog;
+
+/// Seconds of mouse inactivity after which the cog fades out.
+#[cfg(not(target_arch = "wasm32"))]
+const COG_IDLE_HIDE: f32 = 2.5;
+
+/// Spawn the settings cog as its own absolutely-positioned root (so it does not
+/// affect the centred picker column). Starts visible, then hides once idle.
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_settings_cog(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let gear = asset_server.load("images/gear.png");
+    commands
+        .spawn((
+            Name::new("Settings cog"),
+            SettingsCog,
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(12),
+                right: px(12),
+                width: px(44),
+                height: px(44),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(px(10)),
+                ..default()
+            },
+            BackgroundColor(BUTTON_BACKGROUND),
+            InteractionPalette {
+                none: BUTTON_BACKGROUND,
+                hovered: BUTTON_HOVERED_BACKGROUND,
+                pressed: BUTTON_PRESSED_BACKGROUND,
+            },
+            DespawnOnExit(Screen::TableSelect),
+            children![(
+                ImageNode::new(gear),
+                Node {
+                    width: px(26),
+                    height: px(26),
+                    ..default()
+                },
+                // Don't swallow the click meant for the cog button.
+                Pickable::IGNORE,
+            )],
+        ))
+        .observe(
+            |_: On<Pointer<Click>>,
+             mut commands: Commands,
+             tables_dir: Res<TablesDir>,
+             open: Option<Res<crate::tables::folder_picker::FolderDialogTask>>| {
+                if open.is_none() {
+                    crate::tables::folder_picker::open_folder_dialog(&mut commands, &tables_dir.0);
+                }
+            },
+        );
+}
+
+/// Show the cog while the mouse is moving (or hovering it), hide it after
+/// [`COG_IDLE_HIDE`] seconds of no movement.
+#[cfg(not(target_arch = "wasm32"))]
+fn cog_visibility(
+    mut motion: MessageReader<MouseMotion>,
+    time: Res<Time>,
+    mut idle: Local<f32>,
+    mut cog: Query<(&mut Visibility, &Interaction), With<SettingsCog>>,
+) {
+    if motion.read().count() > 0 {
+        *idle = 0.0;
+    } else {
+        *idle += time.delta_secs();
+    }
+    for (mut visibility, interaction) in &mut cog {
+        let keep = *idle < COG_IDLE_HIDE || !matches!(*interaction, Interaction::None);
+        *visibility = if keep {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
@@ -180,21 +272,6 @@ fn rebuild_content(
                 show_all.0 = !show_all.0;
                 // The two lists differ, so the saved offset no longer applies.
                 memory.scroll_y = 0.0;
-            },
-        ));
-
-        // Pick a different tables folder via the native folder dialog (native only).
-        #[cfg(not(target_arch = "wasm32"))]
-        parent.spawn(widget::table_button(
-            "Change tables folder...",
-            false,
-            |_: On<Pointer<Click>>,
-             mut commands: Commands,
-             tables_dir: Res<TablesDir>,
-             open: Option<Res<crate::tables::folder_picker::FolderDialogTask>>| {
-                if open.is_none() {
-                    crate::tables::folder_picker::open_folder_dialog(&mut commands, &tables_dir.0);
-                }
             },
         ));
 
