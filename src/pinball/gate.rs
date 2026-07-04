@@ -309,8 +309,141 @@ fn swing_gates(
 pub struct GateCollisionHooks<'w, 's> {
     gates: Query<'w, 's, &'static Gate>,
     launching: Query<'w, 's, (), With<crate::pinball::plunger::Launching>>,
-    balls: Query<'w, 's, &'static LinearVelocity, With<Ball>>,
+    balls: Query<
+        'w,
+        's,
+        (
+            &'static Position,
+            &'static LinearVelocity,
+            &'static Collider,
+        ),
+        With<Ball>,
+    >,
     falloffs: Query<'w, 's, &'static crate::pinball::physics::ElasticityFalloff>,
+    /// Static, non-sensor geometry the ball can be phantom-kicked by (walls, rubbers, posts).
+    /// The swept-path check below only prunes contacts against these: a moving collider
+    /// (flipper, spinner) would invalidate the cast, and sensors must keep skim contacts.
+    statics: Query<
+        'w,
+        's,
+        (&'static Position, &'static Rotation, &'static Collider),
+        (With<RigidBody>, Without<Ball>, Without<Sensor>),
+    >,
+    bodies: Query<'w, 's, &'static RigidBody>,
+    names: Query<'w, 's, &'static Name>,
+    time: Res<'w, Time>,
+}
+
+impl GateCollisionHooks<'_, '_> {
+    /// Prune phantom speculative contacts between the ball and static geometry; returns
+    /// whether the pair should be kept at all.
+    ///
+    /// Subdivided colliders (trimesh walls, wire guides - every curve is one) emit one
+    /// manifold per triangle near the ball, and contacts against segment-boundary vertices
+    /// carry normals rotated against the ball's travel (avian #990, still present for
+    /// subdivided colliders after avian PR #996). At speed the solver reads those as
+    /// imminent head-on hits and brakes/deflects the ball off surfaces it never touches -
+    /// a fast ball approaching a curved wall meets a fan of a dozen phantom normals
+    /// spread over its whole frame of travel (swept CCD arms a velocity-sized speculative
+    /// distance for the pair) and stops dead instead of deflecting.
+    ///
+    /// The ground truth is a shape cast: sweep the ball's circle along its velocity for
+    /// one physics step. No hit and no touching point -> the whole pair is unreachable,
+    /// drop it. Hit -> keep only manifolds that are touching or whose normal agrees with
+    /// the cast's impact normal; the fan of rotated vertex normals dies, the real surface
+    /// (which slingshots read for their inbound speed) survives.
+    fn prune_phantom_contacts(&self, contacts: &mut ContactPair) -> bool {
+        let (ball_entity, other_entity) = if self.balls.contains(contacts.collider1) {
+            (contacts.collider1, contacts.collider2)
+        } else if self.balls.contains(contacts.collider2) {
+            (contacts.collider2, contacts.collider1)
+        } else {
+            return true;
+        };
+        let Ok((ball_pos, ball_vel, ball_col)) = self.balls.get(ball_entity) else {
+            return true;
+        };
+        let Ok((other_pos, other_rot, other_col)) = self.statics.get(other_entity) else {
+            return true;
+        };
+        if self.bodies.get(other_entity) != Ok(&RigidBody::Static) {
+            return true;
+        }
+
+        let touching = contacts
+            .manifolds
+            .iter()
+            .flat_map(|m| m.points.iter())
+            .any(|p| p.penetration >= 0.0);
+
+        use avian2d::parry::math::Pose;
+        use avian2d::parry::query::{ShapeCastOptions, cast_shapes};
+        let ball_iso = Pose::new(ball_pos.0, 0.0);
+        let other_iso = Pose::new(other_pos.0, other_rot.as_radians());
+        let hit = cast_shapes(
+            &ball_iso,
+            ball_vel.0,
+            ball_col.shape_scaled().as_ref(),
+            &other_iso,
+            avian2d::math::Vector::ZERO,
+            other_col.shape_scaled().as_ref(),
+            ShapeCastOptions {
+                max_time_of_impact: self.time.delta_secs(),
+                target_distance: 0.0,
+                stop_at_penetration: true,
+                compute_impact_geometry_on_penetration: true,
+            },
+        )
+        .ok()
+        .flatten();
+
+        // The swept path misses entirely: pure pass-by, keep the pair only while actually
+        // touching (e.g. rolling along the face it skims). If the cast hits, the ball
+        // genuinely reaches this collider within the step: keep everything. (Filtering
+        // individual manifolds by cast normal was tried and stalls balls riding a curve:
+        // one physics step spans several curve segments, whose manifolds are all needed.)
+        touching || hit.is_some()
+    }
+
+    /// Diagnostics: with `VPINBALL_CONTACT_DEBUG=1`, print every ball contact manifold
+    /// (other entity, normal, penetration, normal speed, ball velocity) to stderr.
+    fn debug_log_ball_contacts(&self, contacts: &ContactPair) {
+        static ENABLED: std::sync::LazyLock<bool> =
+            std::sync::LazyLock::new(|| std::env::var("VPINBALL_CONTACT_DEBUG").is_ok());
+        if !*ENABLED {
+            return;
+        }
+        let (ball_entity, other_entity) = if self.balls.contains(contacts.collider1) {
+            (contacts.collider1, contacts.collider2)
+        } else if self.balls.contains(contacts.collider2) {
+            (contacts.collider2, contacts.collider1)
+        } else {
+            return;
+        };
+        let Ok((ball_pos, ball_vel, _)) = self.balls.get(ball_entity) else {
+            return;
+        };
+        let name = self
+            .names
+            .get(other_entity)
+            .map(|n| n.as_str().to_string())
+            .unwrap_or_else(|_| format!("{other_entity:?}"));
+        for m in &contacts.manifolds {
+            for p in &m.points {
+                eprintln!(
+                    "CONTACT {name} ball=({:.4},{:.4}) v=({:+.2},{:+.2}) n=({:+.3},{:+.3}) pen={:+.5} nspeed={:+.3}",
+                    ball_pos.0.x,
+                    ball_pos.0.y,
+                    ball_vel.0.x,
+                    ball_vel.0.y,
+                    m.normal.x,
+                    m.normal.y,
+                    p.penetration,
+                    p.normal_speed,
+                );
+            }
+        }
+    }
 }
 
 impl CollisionHooks for GateCollisionHooks<'_, '_> {
@@ -337,7 +470,7 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
                 .balls
                 .get(contacts.collider1)
                 .or(self.balls.get(contacts.collider2))
-                .map(|v| v.0)
+                .map(|(_, v, _)| v.0)
                 .unwrap_or_default();
             for manifold in &mut contacts.manifolds {
                 let approach_speed = ball_velocity.dot(manifold.normal).abs();
@@ -350,10 +483,13 @@ impl CollisionHooks for GateCollisionHooks<'_, '_> {
         } else if self.gates.contains(contacts.collider2) {
             (contacts.collider2, contacts.collider1)
         } else {
-            // Not a gate contact; keep it. Phantom speculative contacts are now curbed by the higher
-            // physics tick rate (see `main`), not filtered here - filtering dropped the speculative
-            // approach contact that slingshots read for their inbound speed, breaking the kick.
-            return true;
+            // Not a gate contact. Prune phantom speculative contacts against static geometry
+            // (ball skimming past or converging onto subdivided-wall vertices at speed);
+            // genuinely approaching contacts survive the swept-path cast, so slingshot
+            // inbound-speed reads still work (naive separation filtering broke those; see
+            // prune_phantom_contacts).
+            self.debug_log_ball_contacts(contacts);
+            return self.prune_phantom_contacts(contacts);
         };
         let Ok(gate) = self.gates.get(gate_entity) else {
             return true;
