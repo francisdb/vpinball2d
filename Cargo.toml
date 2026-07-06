@@ -35,7 +35,7 @@ serde_json = "1.0.150"
 # Table scripting: the vendored Lua C sources do not build for wasm, so web
 # builds run tables without scripts (see scripting::init_script).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-mlua = { version = "0.11.6", features = ["lua54", "vendored"] }
+mlua = { version = "0.12.0", features = ["lua54", "vendored"] }
 # Native folder picker for choosing the tables directory (no web equivalent).
 rfd = "0.17.2"
 
