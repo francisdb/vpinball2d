@@ -172,8 +172,13 @@ impl Plugin for AppPlugin {
         // Default until a table loads; spawn_level sets the table's own gravity
         // (vpinball's sin(slope) * gravity, see pinball::level).
         app.insert_resource(Gravity(Vector::NEG_Y * 9.81 * 0.12192));
-        // to improve physics stability
-        app.insert_resource(SubstepCount(50));
+        // Physics rate: a high tick rate keeps each narrow-phase frame's travel short, so a
+        // fast ball only meets the few nearby manifolds of a subdivided wall instead of a
+        // frame-long fan of speculative vertex contacts that brake it (avian #990; see
+        // pinball::gate::prune_phantom_contacts). Substeps are scaled down to keep the
+        // total solver work (ticks x substeps = 2880/s) as before.
+        app.insert_resource(Time::<Fixed>::from_hz(360.0));
+        app.insert_resource(SubstepCount(8));
 
         // #[cfg(feature = "dev")]
         // app.add_plugins((EguiPlugin::default(), WorldInspectorPlugin::new()));

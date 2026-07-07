@@ -17,7 +17,9 @@ bevy = { version = "0.19.0", features = [
     "bevy_settings",
 ] }
 #bevy-inspector-egui = "0.34.0"
-avian2d = { version = "0.7.0", features = ["diagnostic_ui"] }
+# Pinned to avian main at PR #996 (Box2D-style CCD rework, fixes avianphysics/avian#990:
+# phantom speculative contacts at real cm scale). Revert to a crates.io version once released.
+avian2d = { git = "https://github.com/avianphysics/avian", rev = "fac44bc05fd2bee721b0293f5c8ccdd86df51d7c", features = ["diagnostic_ui"] }
 vpin = "0.26.9"
 thiserror = "2.0.18"
 
