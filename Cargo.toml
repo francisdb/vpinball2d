@@ -29,7 +29,7 @@ tracing = { version = "0.1", features = [
     "release_max_level_warn",
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
-rand = "0.9.3"
+rand = "0.10.1"
 serde_json = "1.0.150"
 
 # Table scripting: the vendored Lua C sources do not build for wasm, so web
